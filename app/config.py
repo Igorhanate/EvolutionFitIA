@@ -7,10 +7,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     ANTHROPIC_API_KEY: str
+    CLAUDE_MODEL: str = "claude-sonnet-4-6"
 
     EVOLUTION_API_URL: str
     EVOLUTION_API_TOKEN: str
     EVOLUTION_API_INSTANCE: str
+
+    ADMIN_API_KEY: str
 
     HOTMART_WEBHOOK_SECRET: str
     HOTMART_OFFER_ID_TRIMESTRAL: str
@@ -18,6 +21,8 @@ class Settings(BaseSettings):
 
     PAYMENT_LINK_TRIMESTRAL: str
     PAYMENT_LINK_ANUAL: str
+
+    ALLOWED_ORIGINS: str = "https://evolutionfit-api.onrender.com"
 
 
 settings = Settings()
