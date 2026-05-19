@@ -5,6 +5,8 @@ class EvolutionMessageKey(BaseModel):
     remoteJid: str
     fromMe: bool
     id: str
+    remoteJidAlt: str | None = None
+    addressingMode: str | None = None
 
 
 class EvolutionMessageData(BaseModel):
@@ -21,10 +23,15 @@ class EvolutionWebhookPayload(BaseModel):
     data: EvolutionMessageData | None = None
 
     def get_phone(self) -> str | None:
-        if self.data and self.data.key:
-            jid = self.data.key.remoteJid
-            return "".join(filter(str.isdigit, jid.split("@")[0]))
-        return None
+        if not self.data or not self.data.key:
+            return None
+        key = self.data.key
+        # Quando o contato usa LID, usa o JID alternativo com o número real
+        if key.addressingMode == "lid" and key.remoteJidAlt:
+            jid = key.remoteJidAlt
+        else:
+            jid = key.remoteJid
+        return "".join(filter(str.isdigit, jid.split("@")[0]))
 
     def get_text(self) -> str | None:
         if not self.data or not self.data.message:
