@@ -12,6 +12,7 @@ class Conversa(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("usuarios.id"), nullable=False, unique=True)
     mensagens: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    estado_pendente: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
     atualizado_em: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )

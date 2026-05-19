@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.middleware.auth import require_admin_key
 from app.models.conversa import Conversa
 from app.models.dieta import Dieta
+from app.models.registro_exercicio import RegistroExercicio
 from app.models.treino import Treino
 from app.models.usuario import Usuario
+from app.services import exercicio_service
 from app.services.subscription_service import check_active_subscription
 
 router = APIRouter(tags=["Admin"], dependencies=[Depends(require_admin_key)])
@@ -52,6 +54,45 @@ def get_conversa(user_id: int, db: Session = Depends(get_db)):
     if not conversa:
         return {"mensagens": []}
     return {"mensagens": conversa.mensagens, "atualizado_em": conversa.atualizado_em.isoformat()}
+
+
+@router.get("/users/{user_id}/evolucao/sessao")
+def get_evolucao_sessao(user_id: int, db: Session = Depends(get_db)):
+    """Soma de 1RMs por sessão — curva de performance geral."""
+    _get_user_or_404(user_id, db)
+    return exercicio_service.get_evolucao_sessao(user_id, db)
+
+
+@router.get("/users/{user_id}/evolucao/exercicio")
+def get_evolucao_exercicio(
+    user_id: int,
+    exercicio: str = Query(..., description="Nome do exercício"),
+    posicao: int | None = Query(None, description="Filtrar por posição na sessão"),
+    db: Session = Depends(get_db),
+):
+    """
+    Série temporal de 1RM para um exercício específico.
+    Com `posicao`, compara apenas sessões onde o exercício estava nessa posição.
+    """
+    _get_user_or_404(user_id, db)
+    return exercicio_service.get_evolucao_exercicio(user_id, exercicio, posicao, db)
+
+
+@router.get("/users/{user_id}/exercicios")
+def list_exercicios(user_id: int, db: Session = Depends(get_db)):
+    """Lista todos os exercícios já registrados pelo usuário (únicos)."""
+    _get_user_or_404(user_id, db)
+    rows = (
+        db.query(
+            RegistroExercicio.exercicio,
+            RegistroExercicio.exercicio_display,
+        )
+        .filter(RegistroExercicio.user_id == user_id)
+        .distinct()
+        .order_by(RegistroExercicio.exercicio)
+        .all()
+    )
+    return [{"exercicio": r.exercicio, "exercicio_display": r.exercicio_display} for r in rows]
 
 
 def _get_user_or_404(user_id: int, db: Session) -> Usuario:

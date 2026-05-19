@@ -20,3 +20,4 @@ class Usuario(Base):
     treinos: Mapped[list["Treino"]] = relationship(back_populates="usuario")
     dietas: Mapped[list["Dieta"]] = relationship(back_populates="usuario")
     conversa: Mapped["Conversa | None"] = relationship(back_populates="usuario", uselist=False)
+    registros_exercicio: Mapped[list["RegistroExercicio"]] = relationship(back_populates="usuario")
