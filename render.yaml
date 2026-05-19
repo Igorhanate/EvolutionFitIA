@@ -11,11 +11,15 @@ services:
           property: connectionString
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-4-6
       - key: EVOLUTION_API_URL
         sync: false
       - key: EVOLUTION_API_TOKEN
         sync: false
       - key: EVOLUTION_API_INSTANCE
+        sync: false
+      - key: ADMIN_API_KEY
         sync: false
       - key: HOTMART_WEBHOOK_SECRET
         sync: false
@@ -27,6 +31,8 @@ services:
         sync: false
       - key: PAYMENT_LINK_ANUAL
         sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://evolutionfit-api.onrender.com
 
 databases:
   - name: evolutionfit-db
