@@ -39,7 +39,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
 
         # Deduplicação: ignora mensagem já processada
         if message_id and user.ultima_mensagem_id == message_id:
-            logger.info({"event": "duplicate_message", "user_id": user.id, "message_id": message_id})
+            logger.info("duplicate_message", extra={"user_id": user.id, "message_id": message_id})
             return {"status": "duplicate"}
 
         assinatura = subscription_service.check_active_subscription(user.id, db)
@@ -57,6 +57,6 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             db.commit()
 
     except Exception as e:
-        logger.error({"event": "webhook_error", "error": str(e)})
+        logger.error("webhook_error", extra={"error": str(e)}, exc_info=True)
 
     return {"status": "ok"}
