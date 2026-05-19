@@ -37,8 +37,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.ALLOWED_ORIGINS.split(",")],
-    allow_methods=["POST", "GET"],
+    allow_origins=[o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -63,7 +63,7 @@ async def health():
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.get(
-                f"{settings.EVOLUTION_API_URL}/instance/fetchInstances",
+                f"{settings.EVOLUTION_API_URL}/instance/connectionState/{settings.EVOLUTION_API_INSTANCE}",
                 headers={"apikey": settings.EVOLUTION_API_TOKEN},
             )
             details["evolution_api"] = "ok" if resp.status_code == 200 else f"http_{resp.status_code}"

@@ -48,13 +48,13 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             await whatsapp_service.send_no_subscription_message(phone)
             return {"status": "no_subscription"}
 
-        reply = await claude_service.process_message(user, text, db)
-        await whatsapp_service.send_message(phone, reply)
-
-        # Atualiza ID da última mensagem processada
+        # Persiste ID antes do envio para dedup funcionar mesmo se send falhar
         if message_id:
             user.ultima_mensagem_id = message_id
             db.commit()
+
+        reply = await claude_service.process_message(user, text, db)
+        await whatsapp_service.send_message(phone, reply)
 
     except Exception as e:
         logger.error("webhook_error", extra={"error": str(e)}, exc_info=True)
