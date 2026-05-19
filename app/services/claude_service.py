@@ -355,6 +355,161 @@ def _process_tool_registrar(
 
 
 # ---------------------------------------------------------------------------
+# Fluxo de coleta de 3 fotos para análise de composição corporal
+# ---------------------------------------------------------------------------
+
+_CANCELAR_FOTOS_KEYWORDS = {
+    "cancelar", "cancela", "para", "parar", "não quero", "nao quero",
+    "esqueça", "esqueca", "desiste", "desistir", "chega", "deixa",
+}
+
+
+def _check_cancelar_fotos(conversa: Conversa, message_text: str) -> bool:
+    """Retorna True e limpa estado se o usuário quis cancelar a coleta de fotos."""
+    estado = conversa.estado_pendente
+    if not estado or estado.get("tipo") != "coleta_fotos":
+        return False
+    lower = message_text.strip().lower()
+    if any(kw in lower for kw in _CANCELAR_FOTOS_KEYWORDS):
+        conversa.estado_pendente = None
+        return True
+    return False
+
+
+async def _analisar_tres_fotos(fotos: list[dict], user: Usuario, db: Session) -> str:
+    """Chama Claude com as 3 fotos para análise completa de composição corporal."""
+    primeiro_nome = (user.nome or "").split()[0] if user.nome else None
+
+    content: list[dict] = []
+    for foto in fotos:
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": foto["mimetype"],
+                "data": foto["b64"],
+            },
+        })
+    angulos = ", ".join(f["angulo"] for f in fotos)
+    content.append({
+        "type": "text",
+        "text": (
+            f"Analise estas 3 fotos de composição corporal ({angulos}) "
+            f"{'do(a) ' + primeiro_nome if primeiro_nome else 'do(a) usuário(a)'}. "
+            "Estime o % de gordura corporal em uma FAIXA (ex: 18-22%), nunca valor único. "
+            "Descreva distribuição de gordura e massa muscular visível de forma profissional e "
+            "respeitosa. Mencione que análise visual tem precisão limitada. "
+            "Após a análise textual, use a ferramenta 'registrar_analise_foto' para salvar o resultado."
+        ),
+    })
+
+    system_with_cache = [
+        {
+            "type": "text",
+            "text": SYSTEM_PROMPT + (f"\n\nNome do usuário: {primeiro_nome}" if primeiro_nome else ""),
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+    try:
+        response = await client.messages.create(
+            model=settings.CLAUDE_MODEL,
+            max_tokens=1500,
+            system=system_with_cache,
+            messages=[{"role": "user", "content": content}],
+            tools=TOOLS,
+        )
+
+        api_history: list[dict] = [{"role": "user", "content": content}]
+        tool_iterations = 0
+        while response.stop_reason == "tool_use" and tool_iterations < 3:
+            tool_iterations += 1
+            tool_results = []
+            for block in response.content:
+                if block.type == "tool_use" and block.name == "registrar_analise_foto":
+                    result = _process_tool_foto(block.input, user, db)
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result,
+                    })
+            api_history.append({"role": "assistant", "content": response.content})
+            api_history.append({"role": "user", "content": tool_results})
+            response = await client.messages.create(
+                model=settings.CLAUDE_MODEL,
+                max_tokens=1500,
+                system=system_with_cache,
+                messages=api_history,
+                tools=TOOLS,
+            )
+
+        return next((b.text for b in response.content if hasattr(b, "text")), "")
+
+    except anthropic.APIError as e:
+        logger.error("claude_foto_error", extra={"user_id": user.id, "error": str(e)})
+        return "Ops, tive um problema ao analisar as fotos. Pode tentar novamente?"
+
+
+async def _handle_coleta_fotos(
+    conversa: Conversa,
+    image_b64: str | None,
+    image_mimetype: str,
+    user: Usuario,
+    db: Session,
+) -> str | None:
+    """
+    Gerencia o fluxo de coleta de 3 fotos (frente, costas, lado).
+    Retorna a resposta pronta quando a foto foi tratada pelo fluxo,
+    ou None quando o fluxo não é aplicável (texto normal ou imagem fora do fluxo).
+    """
+    estado = conversa.estado_pendente
+    em_coleta = estado and estado.get("tipo") == "coleta_fotos"
+
+    # Sem imagem e sem coleta ativa → não interfere
+    if not image_b64:
+        return None
+
+    primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
+
+    if not em_coleta:
+        # Primeira foto — inicia coleta
+        conversa.estado_pendente = {
+            "tipo": "coleta_fotos",
+            "fotos": [{"b64": image_b64, "mimetype": image_mimetype, "angulo": "frente"}],
+            "angulos_restantes": ["costas", "lado"],
+        }
+        return (
+            f"Recebi a foto de frente, {primeiro_nome}! 💪\n\n"
+            "Para uma análise mais precisa preciso de mais 2 ângulos:\n\n"
+            "👉 Agora manda a foto de *costas* (vire de costas para a câmera).\n\n"
+            "_Se quiser cancelar é só dizer 'cancelar'._"
+        )
+
+    # Já em coleta — adiciona a foto atual
+    fotos: list[dict] = list(estado["fotos"])
+    angulos_restantes: list[str] = list(estado["angulos_restantes"])
+    angulo_atual = angulos_restantes.pop(0)
+    fotos.append({"b64": image_b64, "mimetype": image_mimetype, "angulo": angulo_atual})
+
+    if angulos_restantes:
+        # Ainda falta(m) foto(s)
+        conversa.estado_pendente = {
+            "tipo": "coleta_fotos",
+            "fotos": fotos,
+            "angulos_restantes": angulos_restantes,
+        }
+        proximo = angulos_restantes[0]
+        return (
+            f"Foto de {angulo_atual} recebida! ✅\n\n"
+            f"👉 Última foto: manda de *{proximo}* (perfil, braço relaxado ao lado do corpo)."
+        )
+
+    # Todas as 3 fotos coletadas — analisar
+    conversa.estado_pendente = None
+    return await _analisar_tres_fotos(fotos, user, db)
+
+
+# ---------------------------------------------------------------------------
 # Processamento de medidas e foto
 # ---------------------------------------------------------------------------
 
@@ -431,30 +586,63 @@ async def process_message(
     conversa = _get_or_create_conversa(user.id, db)
     sessao_data = date.today()
 
-    # For images with no caption, store a placeholder in history
-    stored_text = message_text if message_text else "[Foto enviada para análise corporal]"
+    stored_text = message_text if message_text else "[Foto enviada]"
     mensagens: list[dict] = list(conversa.mensagens or [])
 
-    # 1. Trata confirmação pendente antes de qualquer chamada ao Claude
+    # 1. Verifica cancelamento do fluxo de fotos (antes de qualquer outra coisa)
+    if not image_b64 and _check_cancelar_fotos(conversa, message_text):
+        stored_text = message_text
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        reply = "Tudo bem! Coleta de fotos cancelada. Pode me perguntar qualquer outra coisa. 😊"
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
+
+    # 2. Fluxo de coleta de 3 fotos — intercepta imagens antes do Claude geral
+    foto_response = await _handle_coleta_fotos(conversa, image_b64, image_mimetype, user, db)
+    if foto_response is not None:
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": foto_response, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return foto_response
+
+    # 3. Trata confirmação pendente de exercício antes de chamar o Claude
     ctx_confirmacao = _handle_confirmacao(conversa, message_text, user, sessao_data, db)
 
-    # 2. Adiciona mensagem do usuário ao histórico persistido
+    # 4. Adiciona mensagem do usuário ao histórico persistido
     mensagens.append({
         "role": "user",
         "content": stored_text,
         "timestamp": datetime.utcnow().isoformat(),
     })
 
-    # 3. Monta history para a API (sem timestamps)
+    # 5. Monta history para a API (sem timestamps)
     history = [
         {"role": m["role"], "content": m["content"]}
         for m in mensagens[-MAX_HISTORY:]
     ]
 
-    # 4. Injeta contexto de sessão e nutrição antes da última mensagem
+    # 6. Injeta contexto de sessão, nutrição e coleta pendente de fotos
     ctx_sessao = _sessao_context_str(user.id, sessao_data, db)
     ctx_nutricao = nutricao_service.build_nutricao_context(user.id, db)
-    partes_ctx = [p for p in [ctx_sessao, ctx_nutricao, ctx_confirmacao] if p]
+
+    # Se há coleta de fotos ativa e o usuário mandou texto, lembra o Claude
+    ctx_coleta = None
+    estado_atual = conversa.estado_pendente
+    if estado_atual and estado_atual.get("tipo") == "coleta_fotos":
+        restantes = estado_atual.get("angulos_restantes", [])
+        if restantes:
+            ctx_coleta = (
+                f"[SISTEMA] Usuário está em processo de envio de fotos para análise de composição "
+                f"corporal. Ainda aguardando: {', '.join(restantes)}. "
+                "Responda a mensagem de texto normalmente, mas ao final lembre de aguardar a próxima foto."
+            )
+
+    partes_ctx = [p for p in [ctx_sessao, ctx_nutricao, ctx_confirmacao, ctx_coleta] if p]
     if partes_ctx:
         injecao = "\n\n".join(partes_ctx)
         history = [
@@ -462,7 +650,7 @@ async def process_message(
             {"role": "assistant", "content": "Entendido, tenho esses dados em consideração."},
         ] + history
 
-    # 5. Se for mensagem com imagem, substitui o conteúdo da última mensagem no histórico de API
+    # 7. Se for imagem não capturada pelo fluxo de coleta (não deveria acontecer), passa para Claude
     if image_b64:
         for i in range(len(history) - 1, -1, -1):
             if history[i]["role"] == "user":
@@ -477,12 +665,12 @@ async def process_message(
                     },
                     {
                         "type": "text",
-                        "text": message_text or "Analise esta foto de composição corporal.",
+                        "text": message_text or "Analise esta imagem.",
                     },
                 ]
                 break
 
-    # 6. System prompt com cache
+    # 8. System prompt com cache
     primeiro_nome = (user.nome or "").split()[0] if user.nome else None
     system_with_cache = [
         {
@@ -492,7 +680,7 @@ async def process_message(
         }
     ]
 
-    # 7. Chama Claude (com tool use)
+    # 9. Chama Claude (com tool use)
     try:
         response = await client.messages.create(
             model=settings.CLAUDE_MODEL,
@@ -502,7 +690,7 @@ async def process_message(
             tools=TOOLS,
         )
 
-        # 8. Loop de tool use (máximo 5 ferramentas por mensagem)
+        # 10. Loop de tool use (máximo 5 ferramentas por mensagem)
         tool_iterations = 0
         while response.stop_reason == "tool_use" and tool_iterations < 5:
             tool_iterations += 1
@@ -542,7 +730,7 @@ async def process_message(
         logger.error("claude_error", extra={"user_id": user.id, "error": str(e)})
         reply = "Ops, tive um problema técnico agora. Pode repetir sua mensagem?"
 
-    # 8. Persiste histórico e registros secundários
+    # 11. Persiste histórico e registros secundários
     mensagens.append({
         "role": "assistant",
         "content": reply,
