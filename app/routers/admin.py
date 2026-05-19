@@ -2,29 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.middleware.auth import require_admin_key
 from app.models.conversa import Conversa
 from app.models.dieta import Dieta
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.schemas.assinatura import AssinaturaRead
-from app.schemas.usuario import UsuarioRead
-from app.services.subscription_service import activate_subscription, check_active_subscription
+from app.services.subscription_service import check_active_subscription
 
-router = APIRouter(tags=["Admin"])
-
-
-@router.post("/activate-test")
-def activate_test_subscription(phone: str, plano: str = "anual", db: Session = Depends(get_db)):
-    """Ativa assinatura de teste para um número de telefone (apenas para desenvolvimento)."""
-    user = activate_subscription(
-        phone=phone,
-        nome="Teste",
-        email=None,
-        plano=plano,
-        transaction_id=f"TEST-{phone}",
-        db=db,
-    )
-    return {"status": "ok", "user_id": user.id, "telefone": user.telefone, "plano": plano}
+router = APIRouter(tags=["Admin"], dependencies=[Depends(require_admin_key)])
 
 
 @router.get("/users", response_model=list[dict])
