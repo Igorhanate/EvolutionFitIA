@@ -39,11 +39,11 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             user.nome = payload.data.pushName
             db.commit()
 
-        assinatura = subscription_service.check_active_subscription(user.id, db)
-
-        if not assinatura:
-            await whatsapp_service.send_no_subscription_message(phone)
-            return {"status": "no_subscription"}
+        # TODO: reativar checagem de assinatura após testes
+        # assinatura = subscription_service.check_active_subscription(user.id, db)
+        # if not assinatura:
+        #     await whatsapp_service.send_no_subscription_message(phone)
+        #     return {"status": "no_subscription"}
 
         reply = await claude_service.process_message(user, text, db)
         await whatsapp_service.send_message(phone, reply)
