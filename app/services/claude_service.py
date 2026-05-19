@@ -38,12 +38,34 @@ MEDIDAS CORPORAIS:
 - Ao registrar, compare com a medição anterior quando disponível e destaque a evolução
 - Argumento motivacional: "O que não é medido não é gerenciado — acompanhar suas medidas é parte essencial do progresso"
 
-ANÁLISE DE COMPOSIÇÃO CORPORAL (FOTOS):
-- Quando o usuário enviar uma foto para análise corporal, analise visualmente a composição com profissionalismo
-- Estime o % de gordura corporal em uma FAIXA (ex: "entre 18-22%"), nunca como valor único absoluto
-- Descreva distribuição de gordura e massa muscular visível de forma respeitosa e encorajadora
-- SEMPRE mencione que análise visual tem precisão limitada e recomende medições físicas para maior exatidão
-- Após a análise, use a ferramenta 'registrar_analise_foto' para persistir o resultado
+CLASSIFICAÇÃO DE FOTOS RECEBIDAS — siga rigorosamente:
+- Foto de ALIMENTOS (prato, lanche, marmita, sorvete, bebida, embalagem de comida) → use 'analisar_refeicao'
+- Foto de CORPO HUMANO para avaliação física (torso, perfil, foto de frente/costas/lado) → use 'iniciar_coleta_fotos_corpo'
+- Foto ambígua ou que não seja comida nem corpo → pergunte ao usuário a intenção antes de usar qualquer ferramenta
+
+ANÁLISE DE REFEIÇÕES POR FOTO:
+- Use 'analisar_refeicao' para registrar os macros estimados visualmente
+- Após receber o resultado da ferramenta, exiba SEMPRE no formato abaixo:
+
+🍽️ *Análise Nutricional*
+━━━━━━━━━━━━━━━━
+📋 *Alimentos identificados:* [lista do que viu]
+━━━━━━━━━━━━━━━━
+🔥 Calorias: ~XXX kcal
+🥩 Proteínas: ~Xg
+🌾 Carboidratos: ~Xg
+🥑 Gorduras: ~Xg
+━━━━━━━━━━━━━━━━
+⚠️ _Estimativas baseadas em análise visual. Variam conforme preparo e porção exata._
+
+Em seguida, pergunte: "Quer que eu registre essa refeição no seu histórico do dia? (sim/não)"
+
+ANÁLISE DE COMPOSIÇÃO CORPORAL (FOTOS DE CORPO):
+- Use 'iniciar_coleta_fotos_corpo' quando identificar foto do corpo para avaliação física
+- Após o registro, estime % de gordura em FAIXA (ex: "entre 18-22%"), nunca valor único
+- Descreva distribuição de gordura e massa muscular de forma respeitosa e encorajadora
+- SEMPRE mencione que análise visual tem precisão limitada
+- Após a análise das 3 fotos, use 'registrar_analise_foto' para persistir o resultado
 
 PERFIL COMPARATIVO:
 - Use o histórico de medidas e análises de foto injetado no contexto para construir uma narrativa de evolução
@@ -168,7 +190,57 @@ TOOLS = [
             "required": ["analise_texto"],
         },
     },
+    {
+        "name": "analisar_refeicao",
+        "description": (
+            "Analisa os macronutrientes de alimentos visíveis em uma foto de refeição. "
+            "Use SEMPRE que o usuário enviar foto de alimentos, prato, lanche, marmita, sorvete, etc."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "descricao_alimentos": {
+                    "type": "string",
+                    "description": "Lista dos alimentos identificados na foto com estimativa de porção",
+                },
+                "calorias_estimadas": {
+                    "type": "integer",
+                    "description": "Estimativa de calorias totais em kcal",
+                },
+                "proteinas_g": {
+                    "type": "number",
+                    "description": "Estimativa de proteínas em gramas",
+                },
+                "carboidratos_g": {
+                    "type": "number",
+                    "description": "Estimativa de carboidratos em gramas",
+                },
+                "gorduras_g": {
+                    "type": "number",
+                    "description": "Estimativa de gorduras em gramas",
+                },
+            },
+            "required": [
+                "descricao_alimentos",
+                "calorias_estimadas",
+                "proteinas_g",
+                "carboidratos_g",
+                "gorduras_g",
+            ],
+        },
+    },
+    {
+        "name": "iniciar_coleta_fotos_corpo",
+        "description": (
+            "Inicia o processo de análise de composição corporal que requer 3 fotos (frente, costas, lado). "
+            "Use quando identificar que o usuário enviou uma foto do próprio corpo para avaliação de % de gordura."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]
+
+# Subset de tools para a chamada de análise das 3 fotos (exclui ferramentas de roteamento)
+TOOLS_ANALISE_CORPO = [t for t in TOOLS if t["name"] == "registrar_analise_foto"]
 
 
 # ---------------------------------------------------------------------------
@@ -279,6 +351,54 @@ def _handle_confirmacao(
             f"[SISTEMA] Ainda aguardando confirmação para registrar '{exercicio}': "
             f"{series}x{reps} @ {carga}kg (variação {variacao_pct:+.0f}% vs último: {ultima_carga}kg). "
             f"Peça ao usuário para confirmar com 'sim' ou cancelar com 'não'."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Confirmação de refeição pendente
+# ---------------------------------------------------------------------------
+
+def _handle_confirmacao_refeicao(
+    conversa: Conversa,
+    message_text: str,
+    user: Usuario,
+    db: Session,
+) -> str | None:
+    """Processa confirmação de registro de refeição. Retorna contexto para injetar ou None."""
+    from app.models.registro_refeicao import RegistroRefeicao
+
+    estado = conversa.estado_pendente
+    if not estado or estado.get("tipo") != "confirmar_refeicao":
+        return None
+
+    resposta = _normalizar_confirmacao(message_text)
+    analise = estado["analise"]
+    conversa.estado_pendente = None
+
+    if resposta == "sim":
+        db.add(RegistroRefeicao(
+            user_id=user.id,
+            data_refeicao=date.today(),
+            descricao=analise.get("descricao_alimentos", ""),
+            calorias_kcal=analise.get("calorias_estimadas"),
+            proteinas_g=analise.get("proteinas_g"),
+            carboidratos_g=analise.get("carboidratos_g"),
+            gorduras_g=analise.get("gorduras_g"),
+        ))
+        db.flush()
+        return (
+            f"[SISTEMA] Refeição registrada no histórico: {analise.get('descricao_alimentos', '')} — "
+            f"{analise.get('calorias_estimadas')} kcal, "
+            f"P:{analise.get('proteinas_g')}g C:{analise.get('carboidratos_g')}g G:{analise.get('gorduras_g')}g. "
+            "Confirme o registro de forma motivadora e mostre o total do dia se possível."
+        )
+    elif resposta == "nao":
+        return "[SISTEMA] Usuário não quis registrar a refeição. Confirme brevemente e siga em frente."
+    else:
+        conversa.estado_pendente = estado
+        return (
+            f"[SISTEMA] Aguardando confirmação para registrar: {analise.get('descricao_alimentos', '')}. "
+            "Peça ao usuário 'sim' para registrar ou 'não' para ignorar."
         )
 
 
@@ -417,7 +537,7 @@ async def _analisar_tres_fotos(fotos: list[dict], user: Usuario, db: Session) ->
             max_tokens=1500,
             system=system_with_cache,
             messages=[{"role": "user", "content": content}],
-            tools=TOOLS,
+            tools=TOOLS_ANALISE_CORPO,
         )
 
         api_history: list[dict] = [{"role": "user", "content": content}]
@@ -440,7 +560,7 @@ async def _analisar_tres_fotos(fotos: list[dict], user: Usuario, db: Session) ->
                 max_tokens=1500,
                 system=system_with_cache,
                 messages=api_history,
-                tools=TOOLS,
+                tools=TOOLS_ANALISE_CORPO,
             )
 
         return next((b.text for b in response.content if hasattr(b, "text")), "")
@@ -458,41 +578,19 @@ async def _handle_coleta_fotos(
     db: Session,
 ) -> str | None:
     """
-    Gerencia o fluxo de coleta de 3 fotos (frente, costas, lado).
-    Retorna a resposta pronta quando a foto foi tratada pelo fluxo,
-    ou None quando o fluxo não é aplicável (texto normal ou imagem fora do fluxo).
+    Gerencia a coleta da 2ª e 3ª fotos (frente já foi registrada via tool).
+    Retorna a resposta pronta ou None se não há coleta ativa.
     """
     estado = conversa.estado_pendente
-    em_coleta = estado and estado.get("tipo") == "coleta_fotos"
-
-    # Sem imagem e sem coleta ativa → não interfere
-    if not image_b64:
+    if not image_b64 or not estado or estado.get("tipo") != "coleta_fotos":
         return None
 
-    primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
-
-    if not em_coleta:
-        # Primeira foto — inicia coleta
-        conversa.estado_pendente = {
-            "tipo": "coleta_fotos",
-            "fotos": [{"b64": image_b64, "mimetype": image_mimetype, "angulo": "frente"}],
-            "angulos_restantes": ["costas", "lado"],
-        }
-        return (
-            f"Recebi a foto de frente, {primeiro_nome}! 💪\n\n"
-            "Para uma análise mais precisa preciso de mais 2 ângulos:\n\n"
-            "👉 Agora manda a foto de *costas* (vire de costas para a câmera).\n\n"
-            "_Se quiser cancelar é só dizer 'cancelar'._"
-        )
-
-    # Já em coleta — adiciona a foto atual
     fotos: list[dict] = list(estado["fotos"])
     angulos_restantes: list[str] = list(estado["angulos_restantes"])
     angulo_atual = angulos_restantes.pop(0)
     fotos.append({"b64": image_b64, "mimetype": image_mimetype, "angulo": angulo_atual})
 
     if angulos_restantes:
-        # Ainda falta(m) foto(s)
         conversa.estado_pendente = {
             "tipo": "coleta_fotos",
             "fotos": fotos,
@@ -504,7 +602,6 @@ async def _handle_coleta_fotos(
             f"👉 Última foto: manda de *{proximo}* (perfil, braço relaxado ao lado do corpo)."
         )
 
-    # Todas as 3 fotos coletadas — analisar
     conversa.estado_pendente = None
     return await _analisar_tres_fotos(fotos, user, db)
 
@@ -555,6 +652,40 @@ def _process_tool_medidas(tool_input: dict, user: Usuario, db: Session) -> str:
         f"REGISTRADO: Medidas corporais em {date.today().strftime('%d/%m/%Y')}: "
         f"{', '.join(partes)}.{evolucao}"
     )
+
+
+def _process_tool_refeicao(tool_input: dict, conversa: Conversa) -> str:
+    """Armazena a análise de refeição no estado pendente e retorna instrução para Claude."""
+    conversa.estado_pendente = {
+        "tipo": "confirmar_refeicao",
+        "analise": {
+            "descricao_alimentos": tool_input.get("descricao_alimentos", ""),
+            "calorias_estimadas": tool_input.get("calorias_estimadas"),
+            "proteinas_g": tool_input.get("proteinas_g"),
+            "carboidratos_g": tool_input.get("carboidratos_g"),
+            "gorduras_g": tool_input.get("gorduras_g"),
+        },
+    }
+    return (
+        "ANALISE_SALVA: valores nutricionais salvos temporariamente. "
+        "Exiba a tabela nutricional formatada e pergunte se o usuário quer registrar no histórico do dia."
+    )
+
+
+def _process_tool_iniciar_coleta(
+    image_b64: str,
+    image_mimetype: str,
+    conversa: Conversa,
+    user: Usuario,
+) -> str:
+    """Inicia a coleta de 3 fotos armazenando a primeira no estado pendente."""
+    conversa.estado_pendente = {
+        "tipo": "coleta_fotos",
+        "fotos": [{"b64": image_b64, "mimetype": image_mimetype, "angulo": "frente"}],
+        "angulos_restantes": ["costas", "lado"],
+    }
+    primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
+    return primeiro_nome  # usado para montar a mensagem de resposta no caller
 
 
 def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
@@ -610,8 +741,11 @@ async def process_message(
         db.commit()
         return foto_response
 
-    # 3. Trata confirmação pendente de exercício antes de chamar o Claude
-    ctx_confirmacao = _handle_confirmacao(conversa, message_text, user, sessao_data, db)
+    # 3. Trata confirmações pendentes (exercício e refeição)
+    ctx_confirmacao = (
+        _handle_confirmacao(conversa, message_text, user, sessao_data, db)
+        or _handle_confirmacao_refeicao(conversa, message_text, user, db)
+    )
 
     # 4. Adiciona mensagem do usuário ao histórico persistido
     mensagens.append({
@@ -692,9 +826,11 @@ async def process_message(
 
         # 10. Loop de tool use (máximo 5 ferramentas por mensagem)
         tool_iterations = 0
+        coleta_iniciada_msg: str | None = None
         while response.stop_reason == "tool_use" and tool_iterations < 5:
             tool_iterations += 1
             tool_results = []
+            coleta_iniciada_msg = None
 
             for block in response.content:
                 if block.type != "tool_use":
@@ -705,6 +841,22 @@ async def process_message(
                     result = _process_tool_medidas(block.input, user, db)
                 elif block.name == "registrar_analise_foto":
                     result = _process_tool_foto(block.input, user, db)
+                elif block.name == "analisar_refeicao":
+                    result = _process_tool_refeicao(block.input, conversa)
+                elif block.name == "iniciar_coleta_fotos_corpo":
+                    if image_b64:
+                        primeiro_nome = _process_tool_iniciar_coleta(
+                            image_b64, image_mimetype, conversa, user
+                        )
+                        coleta_iniciada_msg = (
+                            f"Recebi a foto de frente, {primeiro_nome}! 💪\n\n"
+                            "Para análise de composição corporal preciso de mais 2 ângulos:\n\n"
+                            "👉 Manda agora a foto de *costas* (vire de costas para a câmera).\n\n"
+                            "_Diga 'cancelar' a qualquer momento para cancelar._"
+                        )
+                        result = "COLETA_INICIADA"
+                    else:
+                        result = "Nenhuma imagem recebida para iniciar a coleta."
                 else:
                     result = "Ferramenta desconhecida."
                 tool_results.append({
@@ -712,6 +864,11 @@ async def process_message(
                     "tool_use_id": block.id,
                     "content": result,
                 })
+
+            # Se a coleta foi iniciada, usa a mensagem pré-formatada sem chamar Claude novamente
+            if coleta_iniciada_msg:
+                reply = coleta_iniciada_msg
+                break
 
             history.append({"role": "assistant", "content": response.content})
             history.append({"role": "user", "content": tool_results})
@@ -724,7 +881,8 @@ async def process_message(
                 tools=TOOLS,
             )
 
-        reply = next((b.text for b in response.content if hasattr(b, "text")), "")
+        if not coleta_iniciada_msg:
+            reply = next((b.text for b in response.content if hasattr(b, "text")), "")
 
     except anthropic.APIError as e:
         logger.error("claude_error", extra={"user_id": user.id, "error": str(e)})

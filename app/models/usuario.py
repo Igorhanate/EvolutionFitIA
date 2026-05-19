@@ -23,3 +23,4 @@ class Usuario(Base):
     registros_exercicio: Mapped[list["RegistroExercicio"]] = relationship(back_populates="usuario")
     medidas_corporais: Mapped[list["MedidaCorporal"]] = relationship(back_populates="usuario")
     fotos_composicao: Mapped[list["FotoComposicao"]] = relationship(back_populates="usuario")
+    registros_refeicao: Mapped[list["RegistroRefeicao"]] = relationship(back_populates="usuario")

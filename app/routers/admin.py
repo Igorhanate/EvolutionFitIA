@@ -8,6 +8,7 @@ from app.models.dieta import Dieta
 from app.models.foto_composicao import FotoComposicao
 from app.models.medida_corporal import MedidaCorporal
 from app.models.registro_exercicio import RegistroExercicio
+from app.models.registro_refeicao import RegistroRefeicao
 from app.models.treino import Treino
 from app.models.usuario import Usuario
 from app.services import exercicio_service, nutricao_service
@@ -116,6 +117,34 @@ def get_medidas(user_id: int, db: Session = Depends(get_db)):
             "criado_em": m.criado_em.isoformat(),
         }
         for m in medidas
+    ]
+
+
+@router.get("/users/{user_id}/refeicoes")
+def get_refeicoes(
+    user_id: int,
+    data: str | None = Query(None, description="Filtrar por data (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+):
+    """Histórico de refeições registradas pelo usuário."""
+    _get_user_or_404(user_id, db)
+    q = db.query(RegistroRefeicao).filter(RegistroRefeicao.user_id == user_id)
+    if data:
+        from datetime import date as date_type
+        q = q.filter(RegistroRefeicao.data_refeicao == date_type.fromisoformat(data))
+    refeicoes = q.order_by(RegistroRefeicao.criado_em.desc()).all()
+    return [
+        {
+            "id": r.id,
+            "data_refeicao": r.data_refeicao.isoformat(),
+            "descricao": r.descricao,
+            "calorias_kcal": r.calorias_kcal,
+            "proteinas_g": r.proteinas_g,
+            "carboidratos_g": r.carboidratos_g,
+            "gorduras_g": r.gorduras_g,
+            "criado_em": r.criado_em.isoformat(),
+        }
+        for r in refeicoes
     ]
 
 
