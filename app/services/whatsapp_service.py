@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import httpx
@@ -6,26 +7,50 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = settings.EVOLUTION_API_URL.rstrip("/")
-HEADERS = {
-    "apikey": settings.EVOLUTION_API_TOKEN,
-    "Content-Type": "application/json",
-}
 INSTANCE = settings.EVOLUTION_API_INSTANCE
+_MAX_RETRIES = 3
+_RETRY_DELAYS = [1, 2, 4]  # segundos
+
+
+def _base_url() -> str:
+    return settings.EVOLUTION_API_URL.rstrip("/")
+
+
+def _headers() -> dict:
+    return {
+        "apikey": settings.EVOLUTION_API_TOKEN,
+        "Content-Type": "application/json",
+    }
 
 
 async def send_message(phone: str, text: str) -> None:
-    url = f"{BASE_URL}/message/sendText/{INSTANCE}"
-    payload = {
-        "number": phone,
-        "text": text,
-    }
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.post(url, json=payload, headers=HEADERS)
-            response.raise_for_status()
-    except httpx.HTTPError as e:
-        logger.error("Erro ao enviar mensagem WhatsApp para %s: %s", phone, e)
+    url = f"{_base_url()}/message/sendText/{INSTANCE}"
+    payload = {"number": phone, "text": text}
+    last_error: Exception | None = None
+
+    for attempt, delay in enumerate(_RETRY_DELAYS, start=1):
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.post(url, json=payload, headers=_headers())
+                response.raise_for_status()
+                return
+        except httpx.HTTPError as e:
+            last_error = e
+            logger.warning("send_retry", extra={
+                "attempt": attempt,
+                "max": _MAX_RETRIES,
+                "phone": phone,
+                "error": str(e),
+            })
+            if attempt < _MAX_RETRIES:
+                await asyncio.sleep(delay)
+
+    logger.error("send_failed", extra={
+        "phone": phone,
+        "text_preview": text[:50],
+        "error": str(last_error),
+    })
+    raise last_error
 
 
 async def send_no_subscription_message(phone: str) -> None:
