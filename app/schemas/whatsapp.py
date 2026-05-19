@@ -43,5 +43,10 @@ class EvolutionWebhookPayload(BaseModel):
             or msg.get("imageMessage", {}).get("caption")
         )
 
+    def get_message_id(self) -> str | None:
+        if self.data and self.data.key:
+            return self.data.key.id
+        return None
+
     def is_from_me(self) -> bool:
         return bool(self.data and self.data.key and self.data.key.fromMe)
