@@ -13,6 +13,7 @@ class Usuario(Base):
     telefone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
     nome: Mapped[str | None] = mapped_column(String(150), nullable=True)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    ultima_mensagem_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     assinaturas: Mapped[list["Assinatura"]] = relationship(back_populates="usuario")
