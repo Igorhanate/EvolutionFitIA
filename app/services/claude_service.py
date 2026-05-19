@@ -41,8 +41,7 @@ def _get_or_create_conversa(user_id: int, db: Session) -> Conversa:
 
 
 def _contains_keywords(text: str, keywords: set[str]) -> bool:
-    text_lower = text.lower()
-    return any(kw in text_lower for kw in keywords)
+    return any(kw in text.lower() for kw in keywords)
 
 
 async def process_message(user: Usuario, message_text: str, db: Session) -> str:
@@ -55,26 +54,31 @@ async def process_message(user: Usuario, message_text: str, db: Session) -> str:
         "timestamp": datetime.utcnow().isoformat(),
     })
 
-    # Monta histórico para a Claude (sem timestamps)
-    api_messages = [
+    # Monta histórico para a API (sem timestamps)
+    history = [
         {"role": m["role"], "content": m["content"]}
         for m in mensagens[-MAX_HISTORY:]
     ]
 
-    system = SYSTEM_PROMPT
-    if user.nome:
-        system += f"\n\nNome do usuário: {user.nome.split()[0]}"
+    # Prompt caching: system prompt com cache_control
+    system_with_cache = [
+        {
+            "type": "text",
+            "text": SYSTEM_PROMPT + (f"\n\nNome do usuário: {user.nome.split()[0]}" if user.nome else ""),
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
 
     try:
         response = await client.messages.create(
-            model="claude-sonnet-4-6",
+            model=settings.CLAUDE_MODEL,
             max_tokens=1500,
-            system=system,
-            messages=api_messages,
+            system=system_with_cache,
+            messages=history,
         )
         reply = response.content[0].text
     except anthropic.APIError as e:
-        logger.error("Erro Claude API: %s", e)
+        logger.error("claude_error", extra={"user_id": user.id, "error": str(e)})
         reply = "Ops, tive um problema técnico agora. Pode repetir sua mensagem?"
 
     mensagens.append({
