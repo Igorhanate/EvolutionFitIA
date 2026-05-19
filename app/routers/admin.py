@@ -8,6 +8,7 @@ from app.models.dieta import Dieta
 from app.models.foto_composicao import FotoComposicao
 from app.models.medida_corporal import MedidaCorporal
 from app.models.registro_exercicio import RegistroExercicio
+from app.models.meta_nutricional import MetaNutricional
 from app.models.registro_refeicao import RegistroRefeicao
 from app.models.treino import Treino
 from app.models.usuario import Usuario
@@ -96,6 +97,31 @@ def list_exercicios(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return [{"exercicio": r.exercicio, "exercicio_display": r.exercicio_display} for r in rows]
+
+
+@router.get("/users/{user_id}/meta-nutricional")
+def get_meta_nutricional(user_id: int, db: Session = Depends(get_db)):
+    """Meta nutricional ativa e histórico de metas do usuário."""
+    _get_user_or_404(user_id, db)
+    metas = (
+        db.query(MetaNutricional)
+        .filter(MetaNutricional.user_id == user_id)
+        .order_by(MetaNutricional.criado_em.desc())
+        .all()
+    )
+    return [
+        {
+            "id": m.id,
+            "nome": m.nome,
+            "calorias_alvo": m.calorias_alvo,
+            "proteinas_alvo_g": m.proteinas_alvo_g,
+            "carboidratos_alvo_g": m.carboidratos_alvo_g,
+            "gorduras_alvo_g": m.gorduras_alvo_g,
+            "ativa": m.ativa,
+            "criado_em": m.criado_em.isoformat(),
+        }
+        for m in metas
+    ]
 
 
 @router.get("/users/{user_id}/medidas")

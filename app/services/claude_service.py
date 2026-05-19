@@ -45,7 +45,8 @@ CLASSIFICAÇÃO DE FOTOS RECEBIDAS — siga rigorosamente:
 
 ANÁLISE DE REFEIÇÕES POR FOTO:
 - Use 'analisar_refeicao' para registrar os macros estimados visualmente
-- Após receber o resultado da ferramenta, exiba SEMPRE no formato abaixo:
+- Se o resultado indicar LIMITE_ATINGIDO, informe que o limite de 6 análises por dia foi atingido e não exiba tabela
+- Caso contrário, exiba SEMPRE no formato:
 
 🍽️ *Análise Nutricional*
 ━━━━━━━━━━━━━━━━
@@ -58,7 +59,26 @@ ANÁLISE DE REFEIÇÕES POR FOTO:
 ━━━━━━━━━━━━━━━━
 ⚠️ _Estimativas baseadas em análise visual. Variam conforme preparo e porção exata._
 
-Em seguida, pergunte: "Quer que eu registre essa refeição no seu histórico do dia? (sim/não)"
+📊 *Balanço do Dia* (use os valores que vieram no resultado da ferramenta)
+━━━━━━━━━━━━━━━━
+Consumido hoje: XXX kcal | P:Xg C:Xg G:Xg
+[Se tiver meta] Meta: XXX kcal | Saldo: +XXX ou -XXX kcal
+[Sem meta] _(Sem meta cadastrada — apenas acumulado)_
+━━━━━━━━━━━━━━━━
+
+Em seguida, pergunte: "Quer registrar essa refeição no histórico do dia? (sim/não)"
+
+CADASTRO DE DIETA PRÓPRIA:
+- Quando o usuário quiser cadastrar uma dieta de outro profissional/nutricionista, use 'cadastrar_dieta_propria'
+- Reconheça frases como: "esse é meu plano alimentar", "minha nutricionista me passou essa dieta", "quero cadastrar minha dieta"
+- Extraia do texto as metas diárias totais de calorias e macros; se não estiverem explícitas, estime somando as refeições do plano
+- Após cadastrar, confirme e informe que o balanço diário aparecerá nas próximas análises de foto
+
+CADASTRO DE TREINO PRÓPRIO:
+- Quando o usuário enviar um treino criado por outro profissional para cadastro, use 'cadastrar_treino_proprio'
+- Reconheça frases como: "esse é meu treino", "meu personal me passou esse treino", "quero registrar meu treino"
+- Extraia o nome do treino e liste os exercícios identificados
+- Após cadastrar, informe que o registro de cargas e acompanhamento de 1RM funcionarão normalmente para todos os exercícios do treino
 
 ANÁLISE DE COMPOSIÇÃO CORPORAL (FOTOS DE CORPO):
 - Use 'iniciar_coleta_fotos_corpo' quando identificar foto do corpo para avaliação física
@@ -230,6 +250,69 @@ TOOLS = [
         },
     },
     {
+        "name": "cadastrar_dieta_propria",
+        "description": (
+            "Cadastra uma dieta personalizada enviada pelo usuário (criada por nutricionista ou outro profissional). "
+            "Extrai e salva as metas diárias de calorias e macros. "
+            "Use quando o usuário quiser registrar uma dieta externa."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nome_dieta": {
+                    "type": "string",
+                    "description": "Nome ou descrição da dieta (ex: 'Dieta da Dra. Ana', 'Plano de cutting')",
+                },
+                "texto_original": {
+                    "type": "string",
+                    "description": "Texto completo da dieta como enviado pelo usuário",
+                },
+                "calorias_alvo": {
+                    "type": "integer",
+                    "description": "Meta diária total de calorias em kcal (extraída ou calculada do plano)",
+                },
+                "proteinas_alvo_g": {
+                    "type": "number",
+                    "description": "Meta diária de proteínas em gramas",
+                },
+                "carboidratos_alvo_g": {
+                    "type": "number",
+                    "description": "Meta diária de carboidratos em gramas",
+                },
+                "gorduras_alvo_g": {
+                    "type": "number",
+                    "description": "Meta diária de gorduras em gramas",
+                },
+            },
+            "required": ["nome_dieta", "texto_original", "calorias_alvo"],
+        },
+    },
+    {
+        "name": "cadastrar_treino_proprio",
+        "description": (
+            "Cadastra um treino enviado pelo usuário criado por outro profissional. "
+            "Use quando o usuário enviar um plano de treino externo para registrar no sistema."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nome_treino": {
+                    "type": "string",
+                    "description": "Nome ou identificador do treino (ex: 'Treino A', 'PPL do Personal João')",
+                },
+                "texto_original": {
+                    "type": "string",
+                    "description": "Texto completo do treino como enviado pelo usuário",
+                },
+                "exercicios_extraidos": {
+                    "type": "string",
+                    "description": "Lista resumida dos exercícios identificados no treino",
+                },
+            },
+            "required": ["nome_treino", "texto_original"],
+        },
+    },
+    {
         "name": "iniciar_coleta_fotos_corpo",
         "description": (
             "Inicia o processo de análise de composição corporal que requer 3 fotos (frente, costas, lado). "
@@ -386,11 +469,20 @@ def _handle_confirmacao_refeicao(
             gorduras_g=analise.get("gorduras_g"),
         ))
         db.flush()
+        totais = nutricao_service.get_totais_refeicoes_dia(user.id, date.today(), db)
+        meta = nutricao_service.get_meta_ativa(user.id, db)
+        balanco = (
+            f"Total do dia: {totais['calorias']} kcal | "
+            f"P:{totais['proteinas']}g C:{totais['carboidratos']}g G:{totais['gorduras']}g"
+        )
+        if meta:
+            saldo = meta.calorias_alvo - totais["calorias"]
+            balanco += f" | Saldo: {saldo:+d} kcal (meta {meta.calorias_alvo} kcal)"
         return (
-            f"[SISTEMA] Refeição registrada no histórico: {analise.get('descricao_alimentos', '')} — "
-            f"{analise.get('calorias_estimadas')} kcal, "
-            f"P:{analise.get('proteinas_g')}g C:{analise.get('carboidratos_g')}g G:{analise.get('gorduras_g')}g. "
-            "Confirme o registro de forma motivadora e mostre o total do dia se possível."
+            f"[SISTEMA] Refeição registrada: {analise.get('descricao_alimentos', '')} — "
+            f"{analise.get('calorias_estimadas')} kcal. "
+            f"Balanço atualizado: {balanco}. "
+            "Confirme de forma motivadora e exiba o balanço do dia."
         )
     elif resposta == "nao":
         return "[SISTEMA] Usuário não quis registrar a refeição. Confirme brevemente e siga em frente."
@@ -654,8 +746,19 @@ def _process_tool_medidas(tool_input: dict, user: Usuario, db: Session) -> str:
     )
 
 
-def _process_tool_refeicao(tool_input: dict, conversa: Conversa) -> str:
-    """Armazena a análise de refeição no estado pendente e retorna instrução para Claude."""
+def _process_tool_refeicao(
+    tool_input: dict, conversa: Conversa, user: Usuario, db: Session
+) -> str:
+    """Verifica limite diário, armazena análise pendente e retorna contexto com balanço para Claude."""
+    today = date.today()
+    count = nutricao_service.get_count_refeicoes_dia(user.id, today, db)
+
+    if count >= nutricao_service.LIMITE_FOTOS_DIA:
+        return (
+            f"LIMITE_ATINGIDO: usuário já registrou {nutricao_service.LIMITE_FOTOS_DIA} refeições hoje. "
+            "Informe que o limite diário de análises foi atingido."
+        )
+
     conversa.estado_pendente = {
         "tipo": "confirmar_refeicao",
         "analise": {
@@ -666,9 +769,42 @@ def _process_tool_refeicao(tool_input: dict, conversa: Conversa) -> str:
             "gorduras_g": tool_input.get("gorduras_g"),
         },
     }
+
+    # Totais confirmados do dia (sem incluir a refeição atual ainda)
+    totais = nutricao_service.get_totais_refeicoes_dia(user.id, today, db)
+    meta = nutricao_service.get_meta_ativa(user.id, db)
+
+    cal_atual = tool_input.get("calorias_estimadas") or 0
+    prot_atual = tool_input.get("proteinas_g") or 0
+    carb_atual = tool_input.get("carboidratos_g") or 0
+    gord_atual = tool_input.get("gorduras_g") or 0
+
+    cal_total = totais["calorias"] + cal_atual
+    prot_total = round(totais["proteinas"] + prot_atual, 1)
+    carb_total = round(totais["carboidratos"] + carb_atual, 1)
+    gord_total = round(totais["gorduras"] + gord_atual, 1)
+
+    balanco = (
+        f"Consumido hoje (incluindo esta refeição): "
+        f"{cal_total} kcal | P:{prot_total}g C:{carb_total}g G:{gord_total}g"
+    )
+    if meta:
+        saldo = meta.calorias_alvo - cal_total
+        balanco += f" | Meta: {meta.calorias_alvo} kcal | Saldo: {saldo:+d} kcal"
+        if meta.proteinas_alvo_g:
+            balanco += (
+                f" | Macros restantes: "
+                f"P:{round(meta.proteinas_alvo_g - prot_total, 1)}g "
+                f"C:{round((meta.carboidratos_alvo_g or 0) - carb_total, 1)}g "
+                f"G:{round((meta.gorduras_alvo_g or 0) - gord_total, 1)}g"
+            )
+    else:
+        balanco += " | (Sem meta cadastrada — apenas acumulado)"
+
     return (
-        "ANALISE_SALVA: valores nutricionais salvos temporariamente. "
-        "Exiba a tabela nutricional formatada e pergunte se o usuário quer registrar no histórico do dia."
+        f"ANALISE_SALVA: {count + 1}ª refeição do dia. "
+        f"Balanço: {balanco}. "
+        "Exiba a tabela nutricional, o balanço do dia e pergunte se o usuário quer registrar no histórico."
     )
 
 
@@ -686,6 +822,50 @@ def _process_tool_iniciar_coleta(
     }
     primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
     return primeiro_nome  # usado para montar a mensagem de resposta no caller
+
+
+def _process_tool_cadastrar_dieta(tool_input: dict, user: Usuario, db: Session) -> str:
+    meta = nutricao_service.cadastrar_meta(
+        user_id=user.id,
+        nome=tool_input["nome_dieta"],
+        texto=tool_input.get("texto_original"),
+        calorias=tool_input["calorias_alvo"],
+        proteinas=tool_input.get("proteinas_alvo_g"),
+        carboidratos=tool_input.get("carboidratos_alvo_g"),
+        gorduras=tool_input.get("gorduras_alvo_g"),
+        db=db,
+    )
+    macros = []
+    if meta.proteinas_alvo_g:
+        macros.append(f"P:{meta.proteinas_alvo_g}g")
+    if meta.carboidratos_alvo_g:
+        macros.append(f"C:{meta.carboidratos_alvo_g}g")
+    if meta.gorduras_alvo_g:
+        macros.append(f"G:{meta.gorduras_alvo_g}g")
+    return (
+        f"DIETA_CADASTRADA: '{meta.nome}' com meta de {meta.calorias_alvo} kcal/dia"
+        + (f" | {' '.join(macros)}" if macros else "")
+        + ". Confirme o cadastro e informe que o balanço diário aparecerá nas análises de foto."
+    )
+
+
+def _process_tool_cadastrar_treino(tool_input: dict, user: Usuario, db: Session) -> str:
+    from datetime import datetime as dt
+    db.add(Treino(
+        user_id=user.id,
+        conteudo={
+            "texto": tool_input["texto_original"],
+            "nome": tool_input["nome_treino"],
+            "exercicios": tool_input.get("exercicios_extraidos", ""),
+            "origem": "proprio",
+            "gerado_em": dt.utcnow().isoformat(),
+        },
+    ))
+    db.flush()
+    return (
+        f"TREINO_CADASTRADO: '{tool_input['nome_treino']}' registrado com sucesso. "
+        "Confirme e informe que pode reportar cargas normalmente para acompanhar evolução e 1RM."
+    )
 
 
 def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
@@ -842,7 +1022,11 @@ async def process_message(
                 elif block.name == "registrar_analise_foto":
                     result = _process_tool_foto(block.input, user, db)
                 elif block.name == "analisar_refeicao":
-                    result = _process_tool_refeicao(block.input, conversa)
+                    result = _process_tool_refeicao(block.input, conversa, user, db)
+                elif block.name == "cadastrar_dieta_propria":
+                    result = _process_tool_cadastrar_dieta(block.input, user, db)
+                elif block.name == "cadastrar_treino_proprio":
+                    result = _process_tool_cadastrar_treino(block.input, user, db)
                 elif block.name == "iniciar_coleta_fotos_corpo":
                     if image_b64:
                         primeiro_nome = _process_tool_iniciar_coleta(
