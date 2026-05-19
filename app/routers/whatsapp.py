@@ -1,3 +1,4 @@
+import base64
 import logging
 
 from fastapi import APIRouter, Depends, Request
@@ -5,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas.whatsapp import EvolutionWebhookPayload
-from app.services import claude_service, subscription_service, whatsapp_service
+from app.services import claude_service, media_service, subscription_service, whatsapp_service
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,23 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
         text = payload.get_text()
         message_id = payload.get_message_id()
 
-        if not phone or not text:
+        if not phone:
+            return {"status": "ignored"}
+
+        image_b64: str | None = None
+        image_mimetype: str = "image/jpeg"
+
+        if payload.is_image() and payload.data and payload.data.message:
+            message_data: dict = {}
+            if payload.data.key:
+                message_data["key"] = payload.data.key.model_dump()
+            message_data["message"] = payload.data.message
+            result = await media_service.get_media_bytes(message_data)
+            if result:
+                raw_bytes, image_mimetype = result
+                image_b64 = base64.b64encode(raw_bytes).decode()
+
+        if not text and not image_b64:
             return {"status": "ignored"}
 
         user = subscription_service.get_or_create_user(phone, db)
@@ -53,7 +70,9 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             user.ultima_mensagem_id = message_id
             db.commit()
 
-        reply = await claude_service.process_message(user, text, db)
+        reply = await claude_service.process_message(
+            user, text or "", db, image_b64=image_b64, image_mimetype=image_mimetype
+        )
         await whatsapp_service.send_message(phone, reply)
 
     except Exception as e:

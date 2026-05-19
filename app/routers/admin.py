@@ -5,10 +5,12 @@ from app.database import get_db
 from app.middleware.auth import require_admin_key
 from app.models.conversa import Conversa
 from app.models.dieta import Dieta
+from app.models.foto_composicao import FotoComposicao
+from app.models.medida_corporal import MedidaCorporal
 from app.models.registro_exercicio import RegistroExercicio
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service
+from app.services import exercicio_service, nutricao_service
 from app.services.subscription_service import check_active_subscription
 
 router = APIRouter(tags=["Admin"], dependencies=[Depends(require_admin_key)])
@@ -93,6 +95,49 @@ def list_exercicios(user_id: int, db: Session = Depends(get_db)):
         .all()
     )
     return [{"exercicio": r.exercicio, "exercicio_display": r.exercicio_display} for r in rows]
+
+
+@router.get("/users/{user_id}/medidas")
+def get_medidas(user_id: int, db: Session = Depends(get_db)):
+    """Histórico de medidas corporais do usuário."""
+    _get_user_or_404(user_id, db)
+    medidas = nutricao_service.get_historico_medidas(user_id, db, limite=50)
+    return [
+        {
+            "id": m.id,
+            "data_medicao": m.data_medicao.isoformat(),
+            "peso_kg": m.peso_kg,
+            "cintura_cm": m.cintura_cm,
+            "quadril_cm": m.quadril_cm,
+            "pescoco_cm": m.pescoco_cm,
+            "braco_cm": m.braco_cm,
+            "coxa_cm": m.coxa_cm,
+            "panturrilha_cm": m.panturrilha_cm,
+            "criado_em": m.criado_em.isoformat(),
+        }
+        for m in medidas
+    ]
+
+
+@router.get("/users/{user_id}/fotos")
+def get_fotos(user_id: int, db: Session = Depends(get_db)):
+    """Histórico de análises de composição corporal por foto."""
+    _get_user_or_404(user_id, db)
+    fotos = (
+        db.query(FotoComposicao)
+        .filter(FotoComposicao.user_id == user_id)
+        .order_by(FotoComposicao.criado_em.desc())
+        .all()
+    )
+    return [
+        {
+            "id": f.id,
+            "gordura_estimada_pct": f.gordura_estimada_pct,
+            "analise_texto": f.analise_texto,
+            "criado_em": f.criado_em.isoformat(),
+        }
+        for f in fotos
+    ]
 
 
 def _get_user_or_404(user_id: int, db: Session) -> Usuario:

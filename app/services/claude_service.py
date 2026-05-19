@@ -9,7 +9,7 @@ from app.models.conversa import Conversa
 from app.models.dieta import Dieta
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service
+from app.services import exercicio_service, nutricao_service
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,6 @@ REGRAS GERAIS:
 - Sempre chame o usuário pelo primeiro nome quando souber
 - Antes de gerar treino ou dieta, faça perguntas essenciais (nível de condicionamento, equipamentos disponíveis, objetivo, lesões, dias disponíveis por semana)
 - Treinos: estruture por Dia 1 / Dia 2 etc., inclua séries/repetições e tempos de descanso
-- Dietas: inclua café da manhã, almoço, lanche e jantar; pergunte sobre restrições alimentares
 - Mensagens curtas para WhatsApp: parágrafos curtos, bullet points, sem paredes de texto
 - Nunca saia do personagem. Fale apenas sobre fitness e nutrição.
 - Se o usuário mencionar lesão, oriente a consultar um médico antes de qualquer plano.
@@ -31,7 +30,74 @@ REGISTRO DE EXERCÍCIOS:
 - Após o registro, informe o 1RM estimado de forma motivadora e compare com o histórico quando disponível
 - Se o resultado da ferramenta indicar AGUARDANDO_CONFIRMACAO, explique a variação ao usuário e aguarde confirmação antes de prosseguir
 - Nenhuma fórmula de 1RM é 100% precisa para todos — mencione isso quando exibir o valor
-- Ao exibir evolução, destaque o progresso e motive o usuário"""
+- Ao exibir evolução, destaque o progresso e motive o usuário
+
+MEDIDAS CORPORAIS:
+- Quando o usuário reportar peso e/ou medidas (cintura, quadril, pescoço, braço, coxa, panturrilha), use SEMPRE a ferramenta 'registrar_medidas'
+- Se o contexto do sistema indicar medidas desatualizadas (>30 dias), incentive o usuário de forma motivacional a tirar novas medidas — mas só quando o assunto for relevante
+- Ao registrar, compare com a medição anterior quando disponível e destaque a evolução
+- Argumento motivacional: "O que não é medido não é gerenciado — acompanhar suas medidas é parte essencial do progresso"
+
+ANÁLISE DE COMPOSIÇÃO CORPORAL (FOTOS):
+- Quando o usuário enviar uma foto para análise corporal, analise visualmente a composição com profissionalismo
+- Estime o % de gordura corporal em uma FAIXA (ex: "entre 18-22%"), nunca como valor único absoluto
+- Descreva distribuição de gordura e massa muscular visível de forma respeitosa e encorajadora
+- SEMPRE mencione que análise visual tem precisão limitada e recomende medições físicas para maior exatidão
+- Após a análise, use a ferramenta 'registrar_analise_foto' para persistir o resultado
+
+PERFIL COMPARATIVO:
+- Use o histórico de medidas e análises de foto injetado no contexto para construir uma narrativa de evolução
+- Compare com registros anteriores quando disponíveis e destaque progressos, mesmo que pequenos
+- A consistência ao longo do tempo é mais importante que o resultado pontual — reforce isso
+
+PROTOCOLO DE CRIAÇÃO DE DIETA:
+Siga os passos abaixo SEMPRE que criar uma dieta personalizada:
+
+4.1 COLETA DE DADOS — Pergunte antes de calcular:
+  • Idade, sexo biológico (H/M), altura (cm), peso atual (kg)
+  • Nível de atividade: sedentário / levemente ativo (1-3x/sem) / moderado (3-5x/sem) / muito ativo (6-7x/sem) / atleta/trabalho físico
+  • Objetivo: perder gordura / ganhar massa / manter
+  • Restrições alimentares ou alergias
+  • Tempo disponível para cozinhar e orçamento aproximado
+
+4.2 CÁLCULO CALÓRICO (Mifflin-St Jeor):
+  • Homem: TMB = (10 × peso_kg) + (6,25 × altura_cm) − (5 × idade) + 5
+  • Mulher: TMB = (10 × peso_kg) + (6,25 × altura_cm) − (5 × idade) − 161
+  • Multiplicadores: sedentário×1,2 / leve×1,375 / moderado×1,55 / intenso×1,725 / atleta×1,9
+  • TDEE = TMB × multiplicador. Informe o valor calculado ao usuário.
+
+4.3 DISTRIBUIÇÃO DE MACROS:
+  • Perda de gordura: déficit 400-500 kcal, proteína 2,0-2,2 g/kg, gordura 25-30% das kcal, resto em carboidratos
+  • Ganho de massa: superávit 200-300 kcal, proteína 1,8-2,0 g/kg, carboidratos 50-55% das kcal, resto em gordura
+  • Manutenção: TDEE sem ajuste, proteína 1,6-1,8 g/kg, carboidratos 45-50%, gordura 25-30%
+
+4.4 PLANO 7 DIAS:
+  Crie café da manhã, almoço, lanche da tarde e jantar para cada dia da semana.
+  Especifique quantidades em gramas ou medidas caseiras. Varie os alimentos e adapte às restrições.
+
+4.5 SUBSTITUIÇÕES:
+  Para cada refeição principal (café, almoço, jantar), liste 3 opções de substituição equivalentes em macros.
+
+4.6 REGRAS PERSONALIZADAS:
+  Liste regras práticas baseadas nas preferências, restrições e rotina informadas pelo usuário.
+
+4.7 TIMELINE REALISTA:
+  • Perda de gordura: 0,5-1 kg/semana é seguro e sustentável
+  • Ganho de massa (natural): 0,25-0,5 kg/semana é realista
+  Defina marcos de 4, 8 e 12 semanas com metas mensuráveis.
+
+4.8 HIDRATAÇÃO:
+  • Base: 35-40 ml/kg de peso corporal por dia
+  • Acrescente 500 ml por hora de exercício moderado a intenso
+  Sugira estratégias práticas (garrafa sempre à mão, alarmes a cada 1-2h).
+
+4.9 SUPLEMENTAÇÃO BASEADA EM EVIDÊNCIAS:
+  Recomende APENAS suplementos com evidência científica sólida e pertinentes ao perfil:
+  • Whey protein: se houver dificuldade em atingir a meta proteica com alimentação
+  • Creatina monoidratada: para melhora de performance e força (3-5 g/dia)
+  • Vitamina D3: se houver suspeita de deficiência (treino indoor, pouca exposição solar)
+  • Ômega-3: suporte anti-inflamatório se consumo de peixes for baixo
+  NUNCA recomende termogênicos, detox, emagrecedores ou produtos sem base científica."""
 
 MAX_HISTORY = 20
 
@@ -61,7 +127,47 @@ TOOLS = [
             },
             "required": ["exercicio", "series", "repeticoes", "carga_kg"],
         },
-    }
+    },
+    {
+        "name": "registrar_medidas",
+        "description": (
+            "Registra medidas corporais reportadas pelo usuário (peso e/ou circunferências). "
+            "Use SEMPRE que o usuário informar pelo menos uma dessas medidas."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "peso_kg": {"type": "number", "description": "Peso corporal em kg"},
+                "cintura_cm": {"type": "number", "description": "Circunferência da cintura em cm"},
+                "quadril_cm": {"type": "number", "description": "Circunferência do quadril em cm"},
+                "pescoco_cm": {"type": "number", "description": "Circunferência do pescoço em cm"},
+                "braco_cm": {"type": "number", "description": "Circunferência do braço (bíceps) em cm"},
+                "coxa_cm": {"type": "number", "description": "Circunferência da coxa em cm"},
+                "panturrilha_cm": {"type": "number", "description": "Circunferência da panturrilha em cm"},
+            },
+        },
+    },
+    {
+        "name": "registrar_analise_foto",
+        "description": (
+            "Registra a análise de composição corporal feita visualmente a partir de uma foto. "
+            "Use após analisar uma foto de composição corporal enviada pelo usuário."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "gordura_estimada_pct": {
+                    "type": "number",
+                    "description": "Ponto médio da faixa estimada de % de gordura (ex: se estimou 18-22%, use 20)",
+                },
+                "analise_texto": {
+                    "type": "string",
+                    "description": "Resumo objetivo da análise visual (distribuição de gordura, massa muscular visível, observações gerais)",
+                },
+            },
+            "required": ["analise_texto"],
+        },
+    },
 ]
 
 
@@ -249,13 +355,84 @@ def _process_tool_registrar(
 
 
 # ---------------------------------------------------------------------------
+# Processamento de medidas e foto
+# ---------------------------------------------------------------------------
+
+def _process_tool_medidas(tool_input: dict, user: Usuario, db: Session) -> str:
+    from datetime import date as date_type
+    medida = nutricao_service.registrar_medidas(user.id, date_type.today(), tool_input, db)
+
+    campos_labels = [
+        ("peso_kg", "Peso", "kg"),
+        ("cintura_cm", "Cintura", "cm"),
+        ("quadril_cm", "Quadril", "cm"),
+        ("pescoco_cm", "Pescoço", "cm"),
+        ("braco_cm", "Braço", "cm"),
+        ("coxa_cm", "Coxa", "cm"),
+        ("panturrilha_cm", "Panturrilha", "cm"),
+    ]
+    partes = [
+        f"{label}: {tool_input[key]}{unit}"
+        for key, label, unit in campos_labels
+        if tool_input.get(key) is not None
+    ]
+
+    anterior = (
+        db.query(type(medida))
+        .filter(
+            type(medida).user_id == user.id,
+            type(medida).id != medida.id,
+        )
+        .order_by(type(medida).data_medicao.desc())
+        .first()
+    )
+
+    evolucao = ""
+    if anterior and anterior.peso_kg and tool_input.get("peso_kg"):
+        diff = round(tool_input["peso_kg"] - anterior.peso_kg, 1)
+        sinal = "+" if diff >= 0 else ""
+        evolucao = (
+            f" Variação de peso vs última medição ({anterior.data_medicao.strftime('%d/%m')}): "
+            f"{sinal}{diff}kg."
+        )
+
+    return (
+        f"REGISTRADO: Medidas corporais em {date.today().strftime('%d/%m/%Y')}: "
+        f"{', '.join(partes)}.{evolucao}"
+    )
+
+
+def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
+    nutricao_service.registrar_foto_analise(
+        user_id=user.id,
+        gordura_pct=tool_input.get("gordura_estimada_pct"),
+        analise_texto=tool_input.get("analise_texto"),
+        db=db,
+    )
+    gordura_str = (
+        f" ~{tool_input['gordura_estimada_pct']}% gordura estimado."
+        if tool_input.get("gordura_estimada_pct")
+        else ""
+    )
+    return f"REGISTRADO: Análise de composição corporal persistida.{gordura_str}"
+
+
+# ---------------------------------------------------------------------------
 # Função principal
 # ---------------------------------------------------------------------------
 
-async def process_message(user: Usuario, message_text: str, db: Session) -> str:
+async def process_message(
+    user: Usuario,
+    message_text: str,
+    db: Session,
+    image_b64: str | None = None,
+    image_mimetype: str = "image/jpeg",
+) -> str:
     conversa = _get_or_create_conversa(user.id, db)
     sessao_data = date.today()
 
+    # For images with no caption, store a placeholder in history
+    stored_text = message_text if message_text else "[Foto enviada para análise corporal]"
     mensagens: list[dict] = list(conversa.mensagens or [])
 
     # 1. Trata confirmação pendente antes de qualquer chamada ao Claude
@@ -264,7 +441,7 @@ async def process_message(user: Usuario, message_text: str, db: Session) -> str:
     # 2. Adiciona mensagem do usuário ao histórico persistido
     mensagens.append({
         "role": "user",
-        "content": message_text,
+        "content": stored_text,
         "timestamp": datetime.utcnow().isoformat(),
     })
 
@@ -274,22 +451,38 @@ async def process_message(user: Usuario, message_text: str, db: Session) -> str:
         for m in mensagens[-MAX_HISTORY:]
     ]
 
-    # 4. Injeta contexto de sessão (exercícios já registrados hoje) antes da última mensagem
+    # 4. Injeta contexto de sessão e nutrição antes da última mensagem
     ctx_sessao = _sessao_context_str(user.id, sessao_data, db)
-    if ctx_sessao or ctx_confirmacao:
-        partes = []
-        if ctx_sessao:
-            partes.append(ctx_sessao)
-        if ctx_confirmacao:
-            partes.append(ctx_confirmacao)
-        injecao = "\n".join(partes)
-        # Insere como par user/assistant antes do histórico real para não quebrar a alternância
+    ctx_nutricao = nutricao_service.build_nutricao_context(user.id, db)
+    partes_ctx = [p for p in [ctx_sessao, ctx_nutricao, ctx_confirmacao] if p]
+    if partes_ctx:
+        injecao = "\n\n".join(partes_ctx)
         history = [
             {"role": "user", "content": f"[Contexto automático do sistema]\n{injecao}"},
             {"role": "assistant", "content": "Entendido, tenho esses dados em consideração."},
         ] + history
 
-    # 5. System prompt com cache
+    # 5. Se for mensagem com imagem, substitui o conteúdo da última mensagem no histórico de API
+    if image_b64:
+        for i in range(len(history) - 1, -1, -1):
+            if history[i]["role"] == "user":
+                history[i]["content"] = [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": image_mimetype,
+                            "data": image_b64,
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": message_text or "Analise esta foto de composição corporal.",
+                    },
+                ]
+                break
+
+    # 6. System prompt com cache
     primeiro_nome = (user.nome or "").split()[0] if user.nome else None
     system_with_cache = [
         {
@@ -299,7 +492,7 @@ async def process_message(user: Usuario, message_text: str, db: Session) -> str:
         }
     ]
 
-    # 6. Chama Claude (com tool use para captura de exercícios)
+    # 7. Chama Claude (com tool use)
     try:
         response = await client.messages.create(
             model=settings.CLAUDE_MODEL,
@@ -309,20 +502,28 @@ async def process_message(user: Usuario, message_text: str, db: Session) -> str:
             tools=TOOLS,
         )
 
-        # 7. Loop de tool use (máximo 3 ferramentas por mensagem)
+        # 8. Loop de tool use (máximo 5 ferramentas por mensagem)
         tool_iterations = 0
-        while response.stop_reason == "tool_use" and tool_iterations < 3:
+        while response.stop_reason == "tool_use" and tool_iterations < 5:
             tool_iterations += 1
             tool_results = []
 
             for block in response.content:
-                if block.type == "tool_use" and block.name == "registrar_exercicio":
+                if block.type != "tool_use":
+                    continue
+                if block.name == "registrar_exercicio":
                     result = _process_tool_registrar(block.input, user, sessao_data, conversa, db)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result,
-                    })
+                elif block.name == "registrar_medidas":
+                    result = _process_tool_medidas(block.input, user, db)
+                elif block.name == "registrar_analise_foto":
+                    result = _process_tool_foto(block.input, user, db)
+                else:
+                    result = "Ferramenta desconhecida."
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                })
 
             history.append({"role": "assistant", "content": response.content})
             history.append({"role": "user", "content": tool_results})

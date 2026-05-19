@@ -10,7 +10,7 @@ class EvolutionMessageKey(BaseModel):
 
 
 class EvolutionMessageData(BaseModel):
-    key: EvolutionMessageKey
+    key: EvolutionMessageKey | None = None
     message: dict | None = None
     messageType: str | None = None
     messageTimestamp: int | None = None
@@ -50,3 +50,15 @@ class EvolutionWebhookPayload(BaseModel):
 
     def is_from_me(self) -> bool:
         return bool(self.data and self.data.key and self.data.key.fromMe)
+
+    def is_image(self) -> bool:
+        return bool(
+            self.data
+            and self.data.message
+            and self.data.message.get("imageMessage")
+        )
+
+    def get_image_mimetype(self) -> str:
+        if not self.data or not self.data.message:
+            return "image/jpeg"
+        return self.data.message.get("imageMessage", {}).get("mimetype", "image/jpeg")

@@ -21,3 +21,5 @@ class Usuario(Base):
     dietas: Mapped[list["Dieta"]] = relationship(back_populates="usuario")
     conversa: Mapped["Conversa | None"] = relationship(back_populates="usuario", uselist=False)
     registros_exercicio: Mapped[list["RegistroExercicio"]] = relationship(back_populates="usuario")
+    medidas_corporais: Mapped[list["MedidaCorporal"]] = relationship(back_populates="usuario")
+    fotos_composicao: Mapped[list["FotoComposicao"]] = relationship(back_populates="usuario")
