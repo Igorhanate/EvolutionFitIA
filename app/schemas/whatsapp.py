@@ -62,3 +62,23 @@ class EvolutionWebhookPayload(BaseModel):
         if not self.data or not self.data.message:
             return "image/jpeg"
         return self.data.message.get("imageMessage", {}).get("mimetype", "image/jpeg")
+
+    def is_audio(self) -> bool:
+        return bool(
+            self.data
+            and self.data.message
+            and (
+                self.data.message.get("audioMessage")
+                or self.data.message.get("pttMessage")
+            )
+        )
+
+    def get_audio_mimetype(self) -> str:
+        if not self.data or not self.data.message:
+            return "audio/ogg"
+        audio = (
+            self.data.message.get("audioMessage")
+            or self.data.message.get("pttMessage")
+            or {}
+        )
+        return audio.get("mimetype", "audio/ogg; codecs=opus")

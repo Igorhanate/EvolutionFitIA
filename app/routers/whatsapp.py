@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas.whatsapp import EvolutionWebhookPayload
-from app.services import claude_service, media_service, subscription_service, whatsapp_service
+from app.services import audio_service, claude_service, media_service, subscription_service, whatsapp_service
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
 
         image_b64: str | None = None
         image_mimetype: str = "image/jpeg"
+        audio_transcricao: str | None = None
 
         if payload.is_image() and payload.data and payload.data.message:
             message_data: dict = {}
@@ -44,6 +45,21 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             if result:
                 raw_bytes, image_mimetype = result
                 image_b64 = base64.b64encode(raw_bytes).decode()
+
+        elif payload.is_audio() and payload.data and payload.data.message:
+            message_data = {}
+            if payload.data.key:
+                message_data["key"] = payload.data.key.model_dump()
+            message_data["message"] = payload.data.message
+            audio_mimetype = payload.get_audio_mimetype()
+            result = await media_service.get_media_bytes(message_data)
+            if result:
+                raw_bytes, _ = result
+                audio_transcricao = await audio_service.transcrever_audio(raw_bytes, audio_mimetype)
+            if audio_transcricao:
+                text = audio_transcricao
+            else:
+                logger.warning("audio_transcription_failed", extra={"phone": phone})
 
         if not text and not image_b64:
             return {"status": "ignored"}
@@ -69,6 +85,10 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
         if message_id:
             user.ultima_mensagem_id = message_id
             db.commit()
+
+        if audio_transcricao:
+            aviso = f"🎤 _Áudio transcrito:_\n\n_{audio_transcricao}_"
+            await whatsapp_service.send_message(phone, aviso)
 
         reply = await claude_service.process_message(
             user, text or "", db, image_b64=image_b64, image_mimetype=image_mimetype, phone=phone

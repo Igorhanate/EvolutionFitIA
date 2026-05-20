@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str
     CLAUDE_MODEL: str = "claude-sonnet-4-6"
 
+    OPENAI_API_KEY: str = ""
+
     EVOLUTION_API_URL: str
     EVOLUTION_API_TOKEN: str
     EVOLUTION_API_INSTANCE: str
