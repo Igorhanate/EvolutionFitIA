@@ -125,13 +125,17 @@ def gerar_card_evolucao(
         ax.set_xticklabels([labels[i] for i in xs[::step]], fontsize=7.5, color=_GRAY)
         ax.set_xlim(-0.5, len(xs) - 0.5)
 
+        # Y-axis: zoom na faixa dos dados com margem de 15%
+        y_range = max(ys) - min(ys) if len(ys) > 1 else 20
+        y_pad = max(y_range * 0.25, 15)
+        ax.set_ylim(max(0, min(ys) - y_pad), max(ys) + y_pad * 1.6)
+
         # Marca o último ponto
         ax.plot(xs[-1], ys[-1], "o", color=_WHITE, markersize=7, zorder=5)
-        y_range = max(ys) - min(ys) if len(ys) > 1 else 20
         ax.annotate(
             f"  {ys[-1]:.0f} kg",
             xy=(xs[-1], ys[-1]),
-            xytext=(xs[-1], ys[-1] + y_range * 0.14 + 3),
+            xytext=(xs[-1], ys[-1] + y_pad * 0.5),
             fontsize=8.5, color=_WHITE, fontweight="bold",
         )
     else:
@@ -164,8 +168,8 @@ def gerar_card_evolucao(
                   fontweight="bold")
 
     # Divisor vertical antes do logo
-    ax_f.axvline(x=0.66, ymin=0.1, ymax=0.9, color=_GRID, linewidth=0.8,
-                 transform=ax_f.transAxes)
+    ax_f.plot([0.66, 0.66], [0.1, 0.9], color=_GRID, linewidth=0.8,
+              transform=ax_f.transAxes)
 
     # Logo (lado direito do footer)
     try:
