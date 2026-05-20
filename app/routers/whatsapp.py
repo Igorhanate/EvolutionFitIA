@@ -71,7 +71,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             db.commit()
 
         reply = await claude_service.process_message(
-            user, text or "", db, image_b64=image_b64, image_mimetype=image_mimetype
+            user, text or "", db, image_b64=image_b64, image_mimetype=image_mimetype, phone=phone
         )
         await whatsapp_service.send_message(phone, reply)
 

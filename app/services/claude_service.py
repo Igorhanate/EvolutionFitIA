@@ -149,6 +149,23 @@ DIETA_KEYWORDS = {"dieta", "alimentação", "alimentacao", "nutrição", "nutric
 CONFIRMACAO_SIM = {"sim", "s", "yes", "confirmo", "pode", "ok", "isso", "certeza", "certo", "salva", "salvar", "confirmar"}
 CONFIRMACAO_NAO = {"não", "nao", "n", "no", "cancela", "cancelar", "errei", "errado", "errada", "equivocado"}
 
+MENU_TEXT = (
+    "🏋️ *EVOLUTION FIT IA — Menu Principal*\n\n"
+    "O que você quer fazer hoje?\n\n"
+    "*1.* Criar treino personalizado\n"
+    "*2.* Criar dieta personalizada\n"
+    "*3.* Registrar carga de exercício\n"
+    "*4.* Registrar medidas corporais\n"
+    "*5.* Analisar refeição por foto\n"
+    "*6.* Ver minha evolução 📊\n"
+    "*7.* Análise de composição corporal\n"
+    "*8.* Cadastrar treino (do personal)\n"
+    "*9.* Cadastrar dieta (da nutricionista)\n"
+    "*10.* Histórico de exercício\n"
+    "*11.* Chat livre com o Evo\n\n"
+    "Responda com o número da opção."
+)
+
 TOOLS = [
     {
         "name": "registrar_exercicio",
@@ -884,6 +901,117 @@ def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Menu principal
+# ---------------------------------------------------------------------------
+
+async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session) -> str:
+    from app.services import card_service
+    from app.services import whatsapp_service as ws
+
+    primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
+
+    if item == 1:
+        return (
+            f"Vamos criar seu treino personalizado, {primeiro_nome}! 💪\n\n"
+            "Me conta:\n"
+            "• Qual é seu *objetivo principal*? (ganhar massa / perder gordura / condicionamento)\n"
+            "• Quantos *dias por semana* você pode treinar?\n"
+            "• Tem *equipamentos disponíveis*? (academia / halteres em casa / sem equipamento)\n"
+            "• Tem alguma *lesão ou restrição* que devo considerar?"
+        )
+
+    if item == 2:
+        return (
+            f"Vamos criar sua dieta personalizada, {primeiro_nome}! 🥗\n\n"
+            "Preciso de alguns dados:\n"
+            "• *Idade*, *sexo* (H/M), *altura* (cm), *peso* (kg)\n"
+            "• *Nível de atividade*: sedentário / leve (1-3x/sem) / moderado (3-5x/sem) / intenso (6-7x/sem)\n"
+            "• *Objetivo*: perder gordura / ganhar massa / manter\n"
+            "• *Restrições alimentares* ou alergias?"
+        )
+
+    if item == 3:
+        return (
+            "Para registrar sua carga, me manda o exercício com séries, repetições e peso. 📝\n\n"
+            "Exemplo: *Supino reto 4x8 100kg*\n\n"
+            "Posso registrar vários exercícios em sequência!"
+        )
+
+    if item == 4:
+        return (
+            "Me manda suas medidas corporais para eu registrar! 📏\n\n"
+            "Formato (manda só as que tiver):\n"
+            "*Peso:* 80kg\n"
+            "*Cintura:* 85cm\n"
+            "*Quadril:* 95cm\n"
+            "*Braço:* 35cm"
+        )
+
+    if item == 5:
+        return (
+            "Manda uma *foto da sua refeição* e eu analiso as calorias e macros! 📸🍽️\n\n"
+            "Funciona com: pratos, marmitas, lanches, bebidas, embalagens...\n\n"
+            "_Limite: 6 análises por dia._"
+        )
+
+    if item == 6:
+        evolucao = exercicio_service.get_evolucao_sessao(user.id, db)
+        stats = card_service.get_last_session_stats(user.id, db)
+        try:
+            png_bytes = card_service.gerar_card_evolucao(user.nome, evolucao, stats)
+            if phone:
+                await ws.send_image(phone, png_bytes)
+            return (
+                f"Aqui está seu *card de evolução*, {primeiro_nome}! 📊\n\n"
+                f"Sessões registradas: *{stats['sessoes']}*\n"
+                f"Última sessão: *{stats['exercicios']} exercícios* ({stats['duracao']})"
+            )
+        except Exception as e:
+            logger.error("card_generation_error", extra={"user_id": user.id, "error": str(e)})
+            return "Ops, tive um problema ao gerar seu card. Tente novamente em instantes."
+
+    if item == 7:
+        return (
+            f"Vou analisar sua composição corporal, {primeiro_nome}! 📸\n\n"
+            "Preciso de *3 fotos* suas:\n"
+            "1. *Frente* — de frente para a câmera\n"
+            "2. *Costas* — de costas para a câmera\n"
+            "3. *Lado* — perfil, braço relaxado ao lado do corpo\n\n"
+            "Pode mandar a primeira foto de *frente* agora!"
+        )
+
+    if item == 8:
+        return (
+            "Me manda o *treino do seu personal* e eu cadastro no sistema! 💪\n\n"
+            "Pode ser em qualquer formato: texto, lista de exercícios, planilha copiada...\n\n"
+            "Após cadastrar, você registra suas cargas normalmente e acompanha a evolução de 1RM."
+        )
+
+    if item == 9:
+        return (
+            "Me manda a *dieta da sua nutricionista* e eu cadastro no sistema! 🥗\n\n"
+            "Pode ser em qualquer formato: texto, cardápio semanal, metas de macros...\n\n"
+            "Após cadastrar, o balanço diário aparecerá nas análises de refeição por foto."
+        )
+
+    if item == 10:
+        return (
+            "Qual exercício você quer ver a evolução? 📈\n\n"
+            "Me manda o nome do exercício e mostro o histórico de 1RM ao longo do tempo!\n\n"
+            "Exemplo: *supino reto*, *agachamento*, *remada curvada*..."
+        )
+
+    if item == 11:
+        return (
+            f"Olá, {primeiro_nome}! Pode me perguntar qualquer coisa sobre *treino*, "
+            f"*nutrição*, *recuperação* ou qualquer assunto fitness. 💪\n\n"
+            "Estou aqui para ajudar!"
+        )
+
+    return "Opção inválida. Digite */menu* para ver as opções disponíveis."
+
+
+# ---------------------------------------------------------------------------
 # Função principal
 # ---------------------------------------------------------------------------
 
@@ -893,9 +1021,27 @@ async def process_message(
     db: Session,
     image_b64: str | None = None,
     image_mimetype: str = "image/jpeg",
+    phone: str = "",
 ) -> str:
     conversa = _get_or_create_conversa(user.id, db)
     sessao_data = date.today()
+
+    # 0. /menu command and menu item selection (intercept before everything else)
+    stripped = message_text.strip()
+    if stripped.lower() == "/menu":
+        conversa.estado_pendente = {"tipo": "aguardando_menu"}
+        db.add(conversa)
+        db.commit()
+        return MENU_TEXT
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_menu":
+        if stripped.isdigit() and 1 <= int(stripped) <= 11:
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+            return await _handle_menu_item(int(stripped), user, phone, db)
+        else:
+            conversa.estado_pendente = None
 
     stored_text = message_text if message_text else "[Foto enviada]"
     mensagens: list[dict] = list(conversa.mensagens or [])

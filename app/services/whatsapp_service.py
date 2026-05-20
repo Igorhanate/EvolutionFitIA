@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 
 import httpx
@@ -51,6 +52,21 @@ async def send_message(phone: str, text: str) -> None:
         "error": str(last_error),
     })
     raise last_error
+
+
+async def send_image(phone: str, image_bytes: bytes, caption: str = "") -> None:
+    url = f"{_base_url()}/message/sendMedia/{INSTANCE}"
+    payload = {
+        "number": phone,
+        "mediatype": "image",
+        "mimetype": "image/png",
+        "caption": caption,
+        "media": base64.b64encode(image_bytes).decode(),
+        "fileName": "evolucao.png",
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(url, json=payload, headers=_headers())
+        response.raise_for_status()
 
 
 async def send_no_subscription_message(phone: str) -> None:
