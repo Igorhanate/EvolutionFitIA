@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     META_PHONE_NUMBER_ID: str
     META_ACCESS_TOKEN: str
     META_WEBHOOK_VERIFY_TOKEN: str
-    META_APP_SECRET: str = ""
+    META_APP_SECRET: str
 
     ADMIN_API_KEY: str
 

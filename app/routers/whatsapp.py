@@ -41,13 +41,13 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
         ).hexdigest()
         if not hmac.compare_digest(expected, sig_header):
             logger.warning("invalid_webhook_signature")
-            return Response(status_code=403)
+            return {"status": "rejected"}
 
     try:
         body = json.loads(raw_body)
     except json.JSONDecodeError:
         logger.warning("invalid_webhook_json")
-        return Response(status_code=400)
+        return {"status": "rejected"}
 
     try:
         payload = MetaWebhookPayload(**body)
