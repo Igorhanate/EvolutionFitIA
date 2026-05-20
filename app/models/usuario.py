@@ -25,3 +25,5 @@ class Usuario(Base):
     fotos_composicao: Mapped[list["FotoComposicao"]] = relationship(back_populates="usuario")
     registros_refeicao: Mapped[list["RegistroRefeicao"]] = relationship(back_populates="usuario")
     metas_nutricionais: Mapped[list["MetaNutricional"]] = relationship(back_populates="usuario")
+    habitos_dia: Mapped[list["HabitoDia"]] = relationship(back_populates="usuario")
+    perfil_habitos: Mapped["PerfilHabitos | None"] = relationship(back_populates="usuario", uselist=False)

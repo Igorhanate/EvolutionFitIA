@@ -25,7 +25,10 @@ async def lifespan(app: FastAPI):
     _setup_logging()
     with engine.connect() as conn:
         conn.execute(sqlalchemy.text("SELECT 1"))
+    from app.services.scheduler_service import start_scheduler, stop_scheduler
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 app = FastAPI(

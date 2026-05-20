@@ -9,7 +9,7 @@ from app.models.conversa import Conversa
 from app.models.dieta import Dieta
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service, nutricao_service
+from app.services import exercicio_service, habito_service, nutricao_service
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,15 @@ Siga os passos abaixo SEMPRE que criar uma dieta personalizada:
   • Creatina monoidratada: para melhora de performance e força (3-5 g/dia)
   • Vitamina D3: se houver suspeita de deficiência (treino indoor, pouca exposição solar)
   • Ômega-3: suporte anti-inflamatório se consumo de peixes for baixo
-  NUNCA recomende termogênicos, detox, emagrecedores ou produtos sem base científica."""
+  NUNCA recomende termogênicos, detox, emagrecedores ou produtos sem base científica.
+
+REGISTRO DE HÁBITOS DIÁRIOS:
+- Água: quando o usuário reportar consumo de água (ex: "bebi 500ml", "tomei 2 copos de água ~300ml cada", "bebi 1 litro"), use 'registrar_agua' com a quantidade estimada em ml. Após registrar, informe o total acumulado do dia de forma motivadora.
+- Sem fumar: quando o usuário informar que não fumou (ex: "não fumei hoje", "mais um dia sem cigarro", "dia X sem fumar"), use 'registrar_habito_fumar' com fumou=false. Se informar que fumou, use fumou=true. Comemore os marcos (7, 14, 30, 60, 90, 180, 365 dias).
+- Sem álcool: quando o usuário informar que não bebeu álcool (ex: "não bebi hoje", "mais um dia sem álcool"), use 'registrar_habito_alcool' com bebeu=false. Se informar que bebeu, use bebeu=true. Comemore marcos de streak.
+- Suplementos tomados: quando o usuário confirmar que tomou suplementos (ex: "tomei meus suplementos", "já tomei a creatina", "tomei tudo"), use 'registrar_tomei_suplementos'.
+- Cadastro de suplementos: quando o usuário listar seus suplementos (ex: "tomo creatina, whey e vitamina D", "meus suplementos são..."), use 'registrar_suplementos_usuario' com a lista extraída.
+- Ao exibir streaks, use emojis motivadores e compare com marcos anteriores quando disponíveis no contexto."""
 
 MAX_HISTORY = 20
 
@@ -336,6 +344,83 @@ TOOLS = [
             "Use quando identificar que o usuário enviou uma foto do próprio corpo para avaliação de % de gordura."
         ),
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "registrar_agua",
+        "description": (
+            "Registra o consumo de água do usuário. "
+            "Use quando o usuário informar que bebeu água, indicando a quantidade."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ml": {
+                    "type": "integer",
+                    "description": "Quantidade de água em mililitros (converta copos, litros, etc. para ml)",
+                },
+            },
+            "required": ["ml"],
+        },
+    },
+    {
+        "name": "registrar_habito_fumar",
+        "description": (
+            "Registra se o usuário fumou ou não no dia. "
+            "Use quando o usuário reportar status de cigarro — fumou=false inicia/mantém o streak sem fumar."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "fumou": {
+                    "type": "boolean",
+                    "description": "true se fumou hoje, false se não fumou",
+                },
+            },
+            "required": ["fumou"],
+        },
+    },
+    {
+        "name": "registrar_habito_alcool",
+        "description": (
+            "Registra se o usuário consumiu álcool ou não no dia. "
+            "Use quando o usuário reportar status de bebida alcoólica — bebeu=false inicia/mantém o streak."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "bebeu": {
+                    "type": "boolean",
+                    "description": "true se bebeu álcool hoje, false se não bebeu",
+                },
+            },
+            "required": ["bebeu"],
+        },
+    },
+    {
+        "name": "registrar_tomei_suplementos",
+        "description": (
+            "Registra que o usuário tomou seus suplementos do dia. "
+            "Use quando o usuário confirmar que tomou creatina, vitaminas, manipulados ou quaisquer suplementos."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "registrar_suplementos_usuario",
+        "description": (
+            "Salva a lista de suplementos que o usuário toma regularmente. "
+            "Use quando o usuário listar seus suplementos para personalizar os lembretes diários."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "suplementos": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Lista de nomes dos suplementos (ex: ['Creatina', 'Whey', 'Vitamina D3'])",
+                },
+            },
+            "required": ["suplementos"],
+        },
     },
 ]
 
@@ -885,6 +970,59 @@ def _process_tool_cadastrar_treino(tool_input: dict, user: Usuario, db: Session)
     )
 
 
+def _process_tool_agua(tool_input: dict, user: Usuario, db: Session) -> str:
+    ml = int(tool_input["ml"])
+    resultado = habito_service.registrar_agua(user.id, ml, db)
+    return (
+        f"REGISTRADO: +{ml}ml de água. "
+        f"Total de hoje: {resultado['total_l']}L ({resultado['total_ml']}ml). "
+        "Mostre o progresso de forma motivadora."
+    )
+
+
+def _process_tool_habito_fumar(tool_input: dict, user: Usuario, db: Session) -> str:
+    fumou = bool(tool_input["fumou"])
+    resultado = habito_service.registrar_fumou(user.id, fumou, db)
+    if fumou:
+        return "REGISTRADO: fumou hoje. Streak sem fumar zerado. Motive o usuário a retomar o streak."
+    dias = resultado["dias_sem_fumar"]
+    marcos = {1: "primeiro dia", 7: "1 semana", 14: "2 semanas", 30: "1 mês", 60: "2 meses", 90: "3 meses", 180: "6 meses", 365: "1 ANO"}
+    marco_msg = f" 🎉 MARCO: {marcos[dias]}!" if dias in marcos else ""
+    return (
+        f"REGISTRADO: não fumou hoje. Streak sem fumar: {dias} dia(s).{marco_msg} "
+        "Comemore e motive o usuário."
+    )
+
+
+def _process_tool_habito_alcool(tool_input: dict, user: Usuario, db: Session) -> str:
+    bebeu = bool(tool_input["bebeu"])
+    resultado = habito_service.registrar_alcool(user.id, bebeu, db)
+    if bebeu:
+        return "REGISTRADO: bebeu álcool hoje. Streak sem álcool zerado. Motive o usuário a retomar."
+    dias = resultado["dias_sem_alcool"]
+    marcos = {1: "primeiro dia", 7: "1 semana", 14: "2 semanas", 30: "1 mês", 60: "2 meses", 90: "3 meses", 180: "6 meses", 365: "1 ANO"}
+    marco_msg = f" 🎉 MARCO: {marcos[dias]}!" if dias in marcos else ""
+    return (
+        f"REGISTRADO: não bebeu álcool hoje. Streak: {dias} dia(s).{marco_msg} "
+        "Comemore e motive o usuário."
+    )
+
+
+def _process_tool_tomei_suplementos(user: Usuario, db: Session) -> str:
+    habito_service.registrar_tomei_suplementos(user.id, db)
+    return "REGISTRADO: suplementos tomados hoje. ✅ Confirme de forma motivadora."
+
+
+def _process_tool_suplementos_usuario(tool_input: dict, user: Usuario, db: Session) -> str:
+    suplementos = tool_input.get("suplementos", [])
+    habito_service.registrar_suplementos_usuario(user.id, suplementos, db)
+    lista = ", ".join(suplementos)
+    return (
+        f"REGISTRADO: suplementos cadastrados: {lista}. "
+        "Confirme e informe que lembretes diários às 20h serão personalizados com essa lista."
+    )
+
+
 def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
     nutricao_service.registrar_foto_analise(
         user_id=user.id,
@@ -903,6 +1041,24 @@ def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
 # ---------------------------------------------------------------------------
 # Menu principal
 # ---------------------------------------------------------------------------
+
+def _build_menu_text(user_id: int, db: Session) -> str:
+    resumo = habito_service.get_resumo_habitos(user_id, db)
+    habito_parts = []
+
+    if resumo["agua_ml"] > 0:
+        habito_parts.append(f"💧 Água: {resumo['agua_l']}L")
+    if resumo["dias_sem_fumar"]:
+        habito_parts.append(f"🚬 Sem fumar: {resumo['dias_sem_fumar']} dias 🔥")
+    if resumo["dias_sem_alcool"]:
+        habito_parts.append(f"🍺 Sem álcool: {resumo['dias_sem_alcool']} dias 🔥")
+    if resumo["suplementos_tomados_hoje"]:
+        habito_parts.append("💊 Suplementos: ✅")
+
+    text = MENU_TEXT
+    if habito_parts:
+        text += "\n\n📊 *Seus hábitos hoje:*\n" + "\n".join(habito_parts)
+    return text
 
 async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session) -> str:
     from app.services import card_service
@@ -1032,7 +1188,7 @@ async def process_message(
         conversa.estado_pendente = {"tipo": "aguardando_menu"}
         db.add(conversa)
         db.commit()
-        return MENU_TEXT
+        return _build_menu_text(user.id, db)
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_menu":
         if stripped.isdigit() and 1 <= int(stripped) <= 11:
@@ -1089,6 +1245,7 @@ async def process_message(
     # 6. Injeta contexto de sessão, nutrição e coleta pendente de fotos
     ctx_sessao = _sessao_context_str(user.id, sessao_data, db)
     ctx_nutricao = nutricao_service.build_nutricao_context(user.id, db)
+    ctx_habitos = habito_service.build_habito_context(user.id, db)
 
     # Se há coleta de fotos ativa e o usuário mandou texto, lembra o Claude
     ctx_coleta = None
@@ -1102,7 +1259,7 @@ async def process_message(
                 "Responda a mensagem de texto normalmente, mas ao final lembre de aguardar a próxima foto."
             )
 
-    partes_ctx = [p for p in [ctx_sessao, ctx_nutricao, ctx_confirmacao, ctx_coleta] if p]
+    partes_ctx = [p for p in [ctx_sessao, ctx_nutricao, ctx_habitos, ctx_confirmacao, ctx_coleta] if p]
     if partes_ctx:
         injecao = "\n\n".join(partes_ctx)
         history = [
@@ -1187,6 +1344,16 @@ async def process_message(
                         result = "COLETA_INICIADA"
                     else:
                         result = "Nenhuma imagem recebida para iniciar a coleta."
+                elif block.name == "registrar_agua":
+                    result = _process_tool_agua(block.input, user, db)
+                elif block.name == "registrar_habito_fumar":
+                    result = _process_tool_habito_fumar(block.input, user, db)
+                elif block.name == "registrar_habito_alcool":
+                    result = _process_tool_habito_alcool(block.input, user, db)
+                elif block.name == "registrar_tomei_suplementos":
+                    result = _process_tool_tomei_suplementos(user, db)
+                elif block.name == "registrar_suplementos_usuario":
+                    result = _process_tool_suplementos_usuario(block.input, user, db)
                 else:
                     result = "Ferramenta desconhecida."
                 tool_results.append({
