@@ -13,11 +13,15 @@ services:
         sync: false
       - key: CLAUDE_MODEL
         value: claude-sonnet-4-6
-      - key: EVOLUTION_API_URL
+      - key: OPENAI_API_KEY
         sync: false
-      - key: EVOLUTION_API_TOKEN
+      - key: META_PHONE_NUMBER_ID
         sync: false
-      - key: EVOLUTION_API_INSTANCE
+      - key: META_ACCESS_TOKEN
+        sync: false
+      - key: META_WEBHOOK_VERIFY_TOKEN
+        sync: false
+      - key: META_APP_SECRET
         sync: false
       - key: ADMIN_API_KEY
         sync: false

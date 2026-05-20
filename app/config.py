@@ -11,9 +11,10 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = ""
 
-    EVOLUTION_API_URL: str
-    EVOLUTION_API_TOKEN: str
-    EVOLUTION_API_INSTANCE: str
+    META_PHONE_NUMBER_ID: str
+    META_ACCESS_TOKEN: str
+    META_WEBHOOK_VERIFY_TOKEN: str
+    META_APP_SECRET: str = ""
 
     ADMIN_API_KEY: str
 

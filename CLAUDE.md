@@ -24,33 +24,54 @@ DATABASE_URL=<url> python scripts/activate_test.py <telefone> [anual|trimestral]
 pip install -r requirements.txt
 ```
 
-O arquivo `.env` é obrigatório na raiz. Variáveis obrigatórias: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_API_TOKEN`, `EVOLUTION_API_INSTANCE`, `ADMIN_API_KEY`. Opcionais: `OPENAI_API_KEY` (Whisper), `CLAUDE_MODEL` (default `claude-sonnet-4-6`).
+O arquivo `.env` é obrigatório na raiz. Variáveis obrigatórias: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `META_PHONE_NUMBER_ID`, `META_ACCESS_TOKEN`, `META_WEBHOOK_VERIFY_TOKEN`, `ADMIN_API_KEY`. Opcionais: `OPENAI_API_KEY` (Whisper), `META_APP_SECRET` (validação de assinatura, recomendado em produção), `CLAUDE_MODEL` (default `claude-sonnet-4-6`).
 
-**NUNCA** use Docker ou PowerShell — use apenas Bash. **NUNCA** desconecte a instância WhatsApp `evolutionfit`.
+**NUNCA** use Docker ou PowerShell — use apenas Bash.
 
 ---
 
 ## Arquitetura geral
 
-SaaS de fitness no WhatsApp: usuário → WhatsApp → Evolution API → webhook → FastAPI → Claude/Whisper → resposta via Evolution API.
+SaaS de fitness no WhatsApp: usuário → WhatsApp → Meta Cloud API → webhook → FastAPI → Claude/Whisper → resposta via Meta Cloud API.
 
 ### Fluxo principal (mensagem recebida)
 
 ```
+GET  /webhook/whatsapp  → verificação do webhook Meta (hub.challenge)
 POST /webhook/whatsapp
+  → validar X-Hub-Signature-256 (HMAC-SHA256 com META_APP_SECRET)
   → dedup (ultima_mensagem_id)
   → check_active_subscription()
-  → [se áudio] media_service → audio_service.transcrever_audio() → send "🎤 transcrito"
-  → [se imagem] media_service → image_b64
+  → [se áudio] media_service.get_media_bytes(media_id) → audio_service.transcrever_audio() → send "🎤 transcrito"
+  → [se imagem] media_service.get_media_bytes(media_id) → image_b64
   → claude_service.process_message()
   → whatsapp_service.send_message()
 ```
 
-Todos os handlers retornam HTTP 200 mesmo em erro (sem retentativas do Evolution API).
+Todos os handlers retornam HTTP 200 mesmo em erro (sem retentativas da Meta).
 
-### WhatsApp LID Addressing
+### Payload Meta Cloud API (mensagem recebida)
 
-`remoteJid` pode ser `700146790417@lid` com `addressingMode: "lid"`. Nesses casos, o número real está em `remoteJidAlt`. O `get_phone()` em `app/schemas/whatsapp.py` trata isso automaticamente.
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [{
+    "changes": [{
+      "value": {
+        "contacts": [{"profile": {"name": "Nome"}, "wa_id": "5511999999999"}],
+        "messages": [{
+          "from": "5511999999999",
+          "id": "wamid.xxx",
+          "type": "text",
+          "text": {"body": "mensagem"}
+        }]
+      }
+    }]
+  }]
+}
+```
+
+Tipos suportados: `text`, `image`, `audio`. Status updates (sem `messages[]`) são ignorados via `is_message_event()`.
 
 ### Fluxo Hotmart (compra aprovada)
 
@@ -112,8 +133,8 @@ O menu mostra contadores de hábitos do dia no rodapé quando há dados (água, 
 
 ### Fluxo de áudio
 
-- `payload.is_audio()` detecta `audioMessage` e `pttMessage` (PTT/voz)
-- Download via Evolution API (`getBase64FromMediaMessage`)
+- `payload.is_audio()` detecta `type == "audio"` no payload Meta
+- Download via `media_service.get_media_bytes(media_id)` — dois GETs à Graph API
 - Transcrição via OpenAI Whisper (`whisper-1`, `language="pt"`)
 - Suporte a: OGG (padrão WhatsApp), MP3, MP4, WAV, WebM
 - Bot envia `🎤 _Áudio transcrito:_ "..."` antes de responder
@@ -170,7 +191,8 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 
 | Endpoint | Arquivo | Descrição |
 |----------|---------|-----------|
-| `GET /` | `main.py` | Health check (banco + Evolution API) |
+| `GET /` | `main.py` | Health check (banco) |
+| `GET /webhook/whatsapp` | `app/routers/whatsapp.py` | Verificação do webhook Meta (hub.challenge) |
 | `POST /webhook/whatsapp` | `app/routers/whatsapp.py` | Mensagens WhatsApp (texto, imagem, áudio) |
 | `POST /webhook/hotmart` | `app/routers/hotmart.py` | Compras aprovadas |
 | `GET /admin/users` | `app/routers/admin.py` | Lista usuários — `X-Admin-Key` |
@@ -195,20 +217,21 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `habito_service.py` | Água, streaks fumar/álcool, suplementos, contexto de hábitos |
 | `scheduler_service.py` | APScheduler — lembrete de suplementação às 20h |
 | `audio_service.py` | Transcrição via OpenAI Whisper |
-| `media_service.py` | Download de mídia da Evolution API (imagem e áudio) |
+| `media_service.py` | Download de mídia via Meta Cloud API (GET graph.facebook.com/{media_id}) |
 | `card_service.py` | Geração de PNG dark-theme (matplotlib) para item 6 do menu |
-| `whatsapp_service.py` | Envio de texto e imagem via Evolution API (retry 3x) |
+| `whatsapp_service.py` | Envio de texto e imagem via Meta Cloud API (retry 3x) |
 | `subscription_service.py` | get_or_create_user, check_active_subscription, activate_subscription |
 
 ---
 
-## Evolution API
+## Meta Cloud API
 
-- Versão: v2.3.7 — instância `evolutionfit` — porta 8080
-- `POST /message/sendText/{instance}` — texto
-- `POST /message/sendMedia/{instance}` — imagem (base64, campo `media`)
-- `POST /chat/getBase64FromMediaMessage/{instance}` — baixar mídia (imagem e áudio)
-- **NUNCA** chamar endpoints de disconnect/logout
+- Endpoint de envio: `POST https://graph.facebook.com/v19.0/{META_PHONE_NUMBER_ID}/messages`
+- Autenticação: `Authorization: Bearer {META_ACCESS_TOKEN}`
+- Upload de mídia: `POST https://graph.facebook.com/v19.0/{META_PHONE_NUMBER_ID}/media` (multipart)
+- Download de mídia: `GET https://graph.facebook.com/v19.0/{media_id}` → resolve URL → GET com Bearer
+- Webhook: `GET /webhook/whatsapp` (verificação) + `POST /webhook/whatsapp` (mensagens)
+- Assinatura: `X-Hub-Signature-256: sha256=<HMAC-SHA256(body, META_APP_SECRET)>`
 
 ## Card PNG de evolução (item 6 do menu)
 
@@ -223,9 +246,9 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 ## Infraestrutura
 
 - **FastAPI:** Render (free tier, Docker). `alembic upgrade head` no startup. Push em `master` dispara deploy automático.
-- **Evolution API:** Node.js separado. Local: `node dist/main.js` em `C:\Users\Igor Hanate\evolution-api\`. Tunnel: `cloudflared tunnel --url http://localhost:8080`.
+- **WhatsApp:** Meta Cloud API (WhatsApp Business Platform). Webhook configurado no painel Meta for Developers apontando para `https://evolutionfit-api.onrender.com/webhook/whatsapp`.
 - **Banco:** PostgreSQL no Render (free tier).
-- **Scheduler:** APScheduler in-process (sem Redis). No Render free tier pode ter cold start — o lembrete de 20h pode ser perdido se o serviço estiver dormindo; manter um ping externo ou usar Render paid para evitar sleep.
+- **Scheduler:** APScheduler in-process (sem Redis). No Render free tier pode ter cold start — o lembrete de 20h pode ser perdido se o serviço estiver dormindo.
 
 ## Variáveis de ambiente no Render
 
@@ -233,11 +256,12 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 |----------|--------|
 | `DATABASE_URL` | ✅ configurada |
 | `ANTHROPIC_API_KEY` | ✅ configurada |
-| `EVOLUTION_API_URL` | ✅ configurada (tunnel Cloudflare) |
-| `EVOLUTION_API_TOKEN` | ✅ configurada |
-| `EVOLUTION_API_INSTANCE` | ✅ `evolutionfit` |
+| `META_PHONE_NUMBER_ID` | ⚠️ **pendente** — preencher após criar número na Meta |
+| `META_ACCESS_TOKEN` | ⚠️ **pendente** — token permanente do sistema |
+| `META_WEBHOOK_VERIFY_TOKEN` | ⚠️ **pendente** — token livre que você define |
+| `META_APP_SECRET` | ⚠️ **pendente** — App Secret do painel Meta |
 | `ADMIN_API_KEY` | ✅ configurada |
-| `OPENAI_API_KEY` | ⚠️ **pendente** — necessário para transcrição de áudio |
+| `OPENAI_API_KEY` | ⚠️ pendente — necessário para transcrição de áudio |
 | `HOTMART_WEBHOOK_SECRET` | ⚠️ pendente — configurar antes de ativar vendas |
 | `HOTMART_OFFER_ID_*` | ⚠️ pendente |
 | `PAYMENT_LINK_*` | ⚠️ pendente |

@@ -1,84 +1,126 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
-class EvolutionMessageKey(BaseModel):
-    remoteJid: str
-    fromMe: bool
-    id: str
-    remoteJidAlt: str | None = None
-    addressingMode: str | None = None
+class MetaProfile(BaseModel):
+    name: str | None = None
 
 
-class EvolutionMessageData(BaseModel):
-    key: EvolutionMessageKey | None = None
-    message: dict | None = None
-    messageType: str | None = None
-    messageTimestamp: int | None = None
-    pushName: str | None = None
+class MetaContact(BaseModel):
+    profile: MetaProfile | None = None
+    wa_id: str | None = None
 
 
-class EvolutionWebhookPayload(BaseModel):
-    event: str
-    instance: str | None = None
-    data: EvolutionMessageData | None = None
+class MetaTextContent(BaseModel):
+    body: str | None = None
+
+
+class MetaMediaContent(BaseModel):
+    id: str | None = None
+    mime_type: str | None = None
+    caption: str | None = None
+
+
+class MetaMessage(BaseModel):
+    model_config = {"populate_by_name": True}
+
+    id: str | None = None
+    from_number: str | None = Field(default=None, alias="from")
+    timestamp: str | None = None
+    type: str | None = None
+    text: MetaTextContent | None = None
+    image: MetaMediaContent | None = None
+    audio: MetaMediaContent | None = None
+
+
+class MetaValue(BaseModel):
+    contacts: list[MetaContact] | None = None
+    messages: list[MetaMessage] | None = None
+
+
+class MetaChange(BaseModel):
+    value: MetaValue | None = None
+    field: str | None = None
+
+
+class MetaEntry(BaseModel):
+    changes: list[MetaChange] | None = None
+
+
+class MetaWebhookPayload(BaseModel):
+    object: str | None = None
+    entry: list[MetaEntry] | None = None
+
+    def _get_message(self) -> MetaMessage | None:
+        try:
+            return self.entry[0].changes[0].value.messages[0]
+        except (IndexError, AttributeError, TypeError):
+            return None
+
+    def _get_contacts(self) -> list[MetaContact]:
+        try:
+            return self.entry[0].changes[0].value.contacts or []
+        except (IndexError, AttributeError, TypeError):
+            return []
 
     def get_phone(self) -> str | None:
-        if not self.data or not self.data.key:
+        msg = self._get_message()
+        if not msg or not msg.from_number:
             return None
-        key = self.data.key
-        # Quando o contato usa LID, usa o JID alternativo com o número real
-        if key.addressingMode == "lid" and key.remoteJidAlt:
-            jid = key.remoteJidAlt
-        else:
-            jid = key.remoteJid
-        return "".join(filter(str.isdigit, jid.split("@")[0]))
+        return "".join(filter(str.isdigit, msg.from_number))
 
     def get_text(self) -> str | None:
-        if not self.data or not self.data.message:
+        msg = self._get_message()
+        if not msg:
             return None
-        msg = self.data.message
-        return (
-            msg.get("conversation")
-            or msg.get("extendedTextMessage", {}).get("text")
-            or msg.get("imageMessage", {}).get("caption")
-        )
-
-    def get_message_id(self) -> str | None:
-        if self.data and self.data.key:
-            return self.data.key.id
+        if msg.type == "text" and msg.text:
+            return msg.text.body
+        if msg.type == "image" and msg.image and msg.image.caption:
+            return msg.image.caption
         return None
 
+    def get_message_id(self) -> str | None:
+        msg = self._get_message()
+        return msg.id if msg else None
+
+    def get_push_name(self) -> str | None:
+        msg = self._get_message()
+        if not msg or not msg.from_number:
+            return None
+        for contact in self._get_contacts():
+            if contact.wa_id == msg.from_number:
+                return contact.profile.name if contact.profile else None
+        return None
+
+    def is_message_event(self) -> bool:
+        return self._get_message() is not None
+
     def is_from_me(self) -> bool:
-        return bool(self.data and self.data.key and self.data.key.fromMe)
+        return False
 
     def is_image(self) -> bool:
-        return bool(
-            self.data
-            and self.data.message
-            and self.data.message.get("imageMessage")
-        )
+        msg = self._get_message()
+        return bool(msg and msg.type == "image")
+
+    def get_image_id(self) -> str | None:
+        msg = self._get_message()
+        return msg.image.id if msg and msg.image else None
 
     def get_image_mimetype(self) -> str:
-        if not self.data or not self.data.message:
-            return "image/jpeg"
-        return self.data.message.get("imageMessage", {}).get("mimetype", "image/jpeg")
+        msg = self._get_message()
+        if msg and msg.image and msg.image.mime_type:
+            return msg.image.mime_type
+        return "image/jpeg"
 
     def is_audio(self) -> bool:
-        return bool(
-            self.data
-            and self.data.message
-            and (
-                self.data.message.get("audioMessage")
-                or self.data.message.get("pttMessage")
-            )
-        )
+        msg = self._get_message()
+        return bool(msg and msg.type == "audio")
+
+    def get_audio_id(self) -> str | None:
+        msg = self._get_message()
+        return msg.audio.id if msg and msg.audio else None
 
     def get_audio_mimetype(self) -> str:
-        if not self.data or not self.data.message:
-            return "audio/ogg"
-        audio = (
-            self.data.message.get("audioMessage")
-            or self.data.message.get("pttMessage")
-            or {}
-        )
-        return audio.get("mimetype", "audio/ogg; codecs=opus")
+        msg = self._get_message()
+        if msg and msg.audio and msg.audio.mime_type:
+            return msg.audio.mime_type
+        return "audio/ogg; codecs=opus"

@@ -1,6 +1,5 @@
 import logging
 
-import httpx
 import sqlalchemy
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -52,26 +51,9 @@ app.include_router(admin.router, prefix="/admin")
 
 @app.get("/")
 async def health():
-    details: dict = {}
-
-    # Verifica banco
     try:
         with engine.connect() as conn:
             conn.execute(sqlalchemy.text("SELECT 1"))
-        details["database"] = "ok"
+        return {"status": "ok", "details": {"database": "ok"}}
     except Exception as e:
-        details["database"] = str(e)
-
-    # Verifica Evolution API
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(
-                f"{settings.EVOLUTION_API_URL}/instance/connectionState/{settings.EVOLUTION_API_INSTANCE}",
-                headers={"apikey": settings.EVOLUTION_API_TOKEN},
-            )
-            details["evolution_api"] = "ok" if resp.status_code == 200 else f"http_{resp.status_code}"
-    except Exception as e:
-        details["evolution_api"] = str(e)
-
-    status = "ok" if all(v == "ok" for v in details.values()) else "degraded"
-    return {"status": status, "details": details}
+        return {"status": "degraded", "details": {"database": str(e)}}
