@@ -32,7 +32,7 @@ O arquivo `.env` é obrigatório na raiz. Variáveis obrigatórias: `DATABASE_UR
 
 ## Arquitetura geral
 
-SaaS de fitness no WhatsApp: usuário → WhatsApp → Meta Cloud API → webhook → FastAPI → Claude/Whisper → resposta via Meta Cloud API.
+SaaS de fitness no WhatsApp: usuário → WhatsApp → Meta Cloud API → webhook → FastAPI → Claude → resposta via Meta Cloud API.
 
 ### Fluxo principal (mensagem recebida)
 
@@ -42,7 +42,7 @@ POST /webhook/whatsapp
   → validar X-Hub-Signature-256 (HMAC-SHA256 com META_APP_SECRET)
   → dedup (ultima_mensagem_id)
   → check_active_subscription()
-  → [se áudio] media_service.get_media_bytes(media_id) → audio_service.transcrever_audio() → send "🎤 transcrito"
+  → [se áudio] responde "só texto e fotos por enquanto" e retorna (transcrição desativada)
   → [se imagem] media_service.get_media_bytes(media_id) → image_b64
   → claude_service.process_message()
   → whatsapp_service.send_message()
@@ -248,17 +248,19 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 ### ✅ Concluído
 - Migração completa de Evolution API → Meta Cloud API
 - Webhook configurado e testado: `POST /webhook/whatsapp` recebe eventos da Meta corretamente
-- Deploy no Render estável (commit `bcc5be0`)
+- Deploy no Render estável
 - App Meta: **Evolution Fit Ai** (ID `2038319580456035`)
 - WABA ID: `1518787246362458` — subscrita ao app
 - Webhook URL: `https://evolutionfit-api.onrender.com/webhook/whatsapp`
 - Token de verificação: `evfit-webhook-verify-2026`
+- **Token Meta permanente configurado** no Render (`META_ACCESS_TOKEN`) — não expira
+- **Áudio desativado temporariamente** — responde educadamente que só processa texto e fotos; reativar quando `OPENAI_API_KEY` for configurada
 
 ### ⚠️ Pendente para ir ao ar
-1. **Número definitivo:** comprar chip novo (~R$10), não instalar WhatsApp, adicionar no painel Meta → WhatsApp → Gerenciamento de números → atualizar `META_PHONE_NUMBER_ID` no Render
-2. **Token Meta permanente:** o `META_ACCESS_TOKEN` atual expira em ~24h — gerar token permanente via Meta for Developers → Configurações do app → Usuários do sistema → Gerar token (escopos: `whatsapp_business_messaging`, `whatsapp_business_management`)
-3. **Variáveis Hotmart:** configurar antes de ativar vendas
-4. **OpenAI API Key:** necessário para transcrição de áudio
+1. **Número definitivo:** número Twilio aguardando aprovação — quando aprovado, atualizar `META_PHONE_NUMBER_ID` no Render
+2. **Plataforma de vendas (Cakto):** Hotmart substituída pela Cakto — próximo passo é criar landing page para cadastrar produto na Cakto e configurar webhook de pagamento
+3. **Variáveis Cakto no Render:** substituir as vars `HOTMART_*` por equivalentes da Cakto após integração
+4. **OpenAI API Key:** necessário para reativar transcrição de áudio
 
 ---
 
@@ -277,15 +279,15 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 |----------|--------|
 | `DATABASE_URL` | ✅ configurada (fromDatabase) |
 | `ANTHROPIC_API_KEY` | ✅ configurada |
-| `META_PHONE_NUMBER_ID` | ⚠️ número de teste — atualizar com chip definitivo |
-| `META_ACCESS_TOKEN` | ⚠️ expira em ~24h — gerar token permanente |
+| `META_PHONE_NUMBER_ID` | ⚠️ número de teste — atualizar quando Twilio for aprovado |
+| `META_ACCESS_TOKEN` | ✅ token permanente configurado |
 | `META_WEBHOOK_VERIFY_TOKEN` | ✅ configurada (`evfit-webhook-verify-2026`) |
 | `META_APP_SECRET` | ✅ configurada |
 | `ADMIN_API_KEY` | ✅ configurada |
-| `OPENAI_API_KEY` | ⚠️ pendente — necessário para transcrição de áudio |
-| `HOTMART_WEBHOOK_SECRET` | ⚠️ pendente — configurar antes de ativar vendas |
-| `HOTMART_OFFER_ID_*` | ⚠️ pendente |
-| `PAYMENT_LINK_*` | ⚠️ pendente |
+| `OPENAI_API_KEY` | ⚠️ pendente — necessário para reativar transcrição de áudio |
+| `HOTMART_WEBHOOK_SECRET` | ⚠️ substituir por Cakto — remover após integração |
+| `HOTMART_OFFER_ID_*` | ⚠️ substituir por Cakto |
+| `PAYMENT_LINK_*` | ⚠️ atualizar com links da Cakto |
 
 ## Logs
 
