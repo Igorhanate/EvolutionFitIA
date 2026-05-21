@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Evolution Fit IA — Personal trainer e nutricionista no WhatsApp por R$19,99/mês</title>
+  <meta name="description" content="Treinos personalizados, dieta de 7 dias e análise de refeição por foto. IA disponível 24h direto no WhatsApp. Sem baixar app. A partir de R$19,99/mês.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ── Tokens ── */
+    :root {
+      --bg:          oklch(13% 0.005 30);
+      --surface:     oklch(18% 0.005 30);
+      --surface-2:   oklch(23% 0.006 30);
+      --border:      oklch(28% 0.005 30);
+      --orange:      oklch(68% 0.185 42);
+      --orange-lo:   oklch(30% 0.06 42);
+      --text:        oklch(96% 0.008 80);
+      --text-muted:  oklch(60% 0.006 80);
+      --wa-bg:       oklch(10.5% 0.007 145);
+      --wa-bubble:   oklch(20% 0.012 145);
+      --wa-sent:     oklch(26% 0.07 145);
+      --wa-header:   oklch(15% 0.01 145);
+      --wa-green:    oklch(58% 0.14 145);
+      --font-d:      'Barlow Condensed', system-ui, sans-serif;
+      --font-b:      'Figtree', system-ui, sans-serif;
+      --r-sm:        8px;
+      --r-md:        14px;
+      --r-lg:        24px;
+    }
+
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-b);
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── Nav ── */
+    nav {
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.9rem 2rem;
+      background: oklch(13% 0.005 30 / 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+    .nav-logo img {
+      height: 34px;
+      width: auto;
+      border-radius: 6px;
+      object-fit: cover;
+    }
+    .nav-logo-text {
+      font-family: var(--font-d);
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text);
+      line-height: 1;
+    }
+    .nav-cta {
+      background: var(--orange);
+      color: var(--bg);
+      font-weight: 700;
+      font-size: 0.85rem;
+      padding: 0.55rem 1.2rem;
+      border-radius: var(--r-sm);
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .nav-cta:hover { opacity: 0.86; }
+
+    /* ── Section primitives ── */
+    .section { padding: 5.5rem 2rem; }
+    .container { max-width: 1160px; margin: 0 auto; }
+    .kicker {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--orange);
+      margin-bottom: 1rem;
+    }
+    .headline {
+      font-family: var(--font-d);
+      font-size: clamp(2.6rem, 5vw, 4.5rem);
+      font-weight: 900;
+      line-height: 0.94;
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+      color: var(--text);
+      margin-bottom: 1.25rem;
+    }
+    .headline .hl { color: var(--orange); }
+    .body-text {
+      font-size: 1.05rem;
+      line-height: 1.7;
+      color: var(--text-muted);
+    }
+
+    /* ── Buttons ── */
+    .btn-primary {
+      display: inline-block;
+      background: var(--orange);
+      color: var(--bg);
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 0.9rem 1.8rem;
+      border-radius: var(--r-sm);
+      transition: opacity 0.15s, transform 0.1s;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .btn-primary:hover { opacity: 0.86; transform: translateY(-1px); }
+    .btn-ghost {
+      display: inline-block;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      padding: 0.9rem 0;
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      transition: color 0.15s;
+    }
+    .btn-ghost:hover { color: var(--text); }
+
+    /* ── Hero ── */
+    .hero {
+      min-height: 100svh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      gap: 5rem;
+      padding: 9rem 2rem 4rem;
+      max-width: 1160px;
+      margin: 0 auto;
+    }
+    .hero-headline {
+      font-family: var(--font-d);
+      font-size: clamp(3.2rem, 6vw, 6.5rem);
+      font-weight: 900;
+      line-height: 0.92;
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+    .hero-sub {
+      font-size: clamp(0.95rem, 1.4vw, 1.1rem);
+      line-height: 1.7;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      max-width: 44ch;
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+      margin-bottom: 2.5rem;
+    }
+    .hero-trust {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.25rem;
+    }
+    .trust-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .trust-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--orange);
+      flex-shrink: 0;
+    }
+
+    /* ── Phone mockup ── */
+    .hero-visual {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+    .phone-glow {
+      position: absolute;
+      width: 260px;
+      height: 360px;
+      background: var(--orange);
+      filter: blur(90px);
+      opacity: 0.1;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    .phone {
+      position: relative;
+      width: 268px;
+      background: oklch(9% 0.004 30);
+      border-radius: 38px;
+      border: 1.5px solid var(--border);
+      overflow: hidden;
+      box-shadow: 0 40px 80px oklch(0% 0 0 / 0.65), 0 0 0 1px oklch(28% 0.005 30);
+    }
+    .phone-pill {
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: oklch(9% 0.004 30);
+    }
+    .phone-pill-bar {
+      width: 72px;
+      height: 5px;
+      background: var(--surface-2);
+      border-radius: 3px;
+    }
+    .wa-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.55rem 0.7rem;
+      background: var(--wa-header);
+    }
+    .wa-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--orange);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-d);
+      font-size: 0.72rem;
+      font-weight: 900;
+      color: var(--bg);
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
+    }
+    .wa-info { flex: 1; min-width: 0; }
+    .wa-name { font-size: 0.75rem; font-weight: 600; color: var(--text); }
+    .wa-status { font-size: 0.62rem; color: var(--wa-green); }
+    .wa-dots {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+    }
+    .wa-dots span {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .wa-body {
+      padding: 0.7rem;
+      background: var(--wa-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      min-height: 400px;
+    }
+    .bubble {
+      max-width: 88%;
+      padding: 0.42rem 0.6rem;
+      font-size: 0.68rem;
+      line-height: 1.55;
+      color: var(--text);
+    }
+    .b-in {
+      background: var(--wa-bubble);
+      border-radius: 2px 10px 10px 10px;
+      align-self: flex-start;
+    }
+    .b-out {
+      background: var(--wa-sent);
+      border-radius: 10px 2px 10px 10px;
+      align-self: flex-end;
+    }
+    .b-time {
+      font-size: 0.58rem;
+      color: var(--text-muted);
+      text-align: right;
+      margin-top: 3px;
+    }
+    .b-sender {
+      font-size: 0.58rem;
+      font-weight: 700;
+      color: var(--orange);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 3px;
+    }
+    .b-divider {
+      text-align: center;
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      padding: 0.25rem 0;
+      opacity: 0.6;
+    }
+
+    /* ── Pain section ── */
+    .pain { background: var(--surface); }
+    .pain-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5rem;
+      align-items: start;
+    }
+    .pain-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+      margin-top: 2rem;
+    }
+    .pain-list li {
+      display: flex;
+      gap: 0.85rem;
+      align-items: flex-start;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+    .pain-list li::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--orange);
+      flex-shrink: 0;
+      margin-top: 0.62em;
+    }
+    .pain-right { display: flex; flex-direction: column; gap: 1rem; padding-top: 0.5rem; }
+    .pain-card {
+      background: var(--bg);
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+      padding: 1.25rem 1.5rem;
+    }
+    .pain-card-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    .pain-card-price {
+      font-family: var(--font-d);
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--text-muted);
+      line-height: 1;
+    }
+    .pain-card-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.3rem; }
+    .pain-card.featured {
+      border-color: var(--orange);
+      background: var(--orange-lo);
+    }
+    .pain-card.featured .pain-card-label { color: var(--orange); }
+    .pain-card.featured .pain-card-price { color: var(--orange); }
+    .pain-card.featured .pain-card-desc { color: var(--text); }
+
+    /* ── Features ── */
+    .features-header { text-align: center; margin-bottom: 4rem; }
+    .features-header .body-text { max-width: 50ch; margin: 0 auto; }
+    .feature-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4.5rem;
+      align-items: center;
+      margin-bottom: 5rem;
+    }
+    .feature-row:last-child { margin-bottom: 0; }
+    .feature-row.rev { direction: rtl; }
+    .feature-row.rev > * { direction: ltr; }
+    .feat-n {
+      font-family: var(--font-d);
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: var(--orange);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+    .feat-title {
+      font-family: var(--font-d);
+      font-size: clamp(2rem, 3.5vw, 3rem);
+      font-weight: 900;
+      text-transform: uppercase;
+      line-height: 0.96;
+      color: var(--text);
+      margin-bottom: 1rem;
+    }
+    .feat-desc {
+      font-size: 0.97rem;
+      line-height: 1.7;
+      color: var(--text-muted);
+      max-width: 42ch;
+    }
+    .feat-visual {
+      background: var(--surface);
+      border-radius: var(--r-lg);
+      border: 1px solid var(--border);
+      padding: 1.75rem;
+      overflow: hidden;
+    }
+
+    /* Workout visual */
+    .wk-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .wk-title {
+      font-family: var(--font-d);
+      font-size: 1.05rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+    .badge-sm {
+      font-size: 0.62rem;
+      font-weight: 700;
+      background: var(--orange-lo);
+      color: var(--orange);
+      padding: 0.2rem 0.55rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .ex-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.82rem;
+      gap: 0.5rem;
+    }
+    .ex-row:last-child { border-bottom: none; }
+    .ex-name { color: var(--text); flex: 1; }
+    .ex-sets { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ex-pr {
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: var(--orange);
+      background: var(--orange-lo);
+      padding: 0.15rem 0.4rem;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+
+    /* Food analysis visual */
+    .food-photo {
+      width: 100%;
+      height: 110px;
+      background: var(--surface-2);
+      border-radius: var(--r-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .food-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+    .macro-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+    .macro-card {
+      background: var(--surface-2);
+      border-radius: var(--r-sm);
+      padding: 0.55rem;
+      text-align: center;
+    }
+    .macro-val {
+      font-family: var(--font-d);
+      font-size: 1.35rem;
+      font-weight: 900;
+      color: var(--orange);
+      line-height: 1;
+    }
+    .macro-lbl {
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-top: 2px;
+    }
+    .food-ok {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--wa-green);
+    }
+
+    /* Habit tracker visual */
+    .habit-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.65rem 0;
+      border-bottom: 1px solid var(--border);
+      gap: 0.75rem;
+    }
+    .habit-row:last-child { border-bottom: none; }
+    .habit-name { font-size: 0.85rem; color: var(--text); flex: 1; }
+    .habit-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+    .dots {
+      display: flex;
+      gap: 3px;
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--orange);
+    }
+    .dot.off { background: var(--surface-2); }
+    .streak {
+      font-family: var(--font-d);
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: var(--orange);
+      white-space: nowrap;
+    }
+
+    /* ── How it works ── */
+    .how { background: var(--surface); }
+    .how-header { margin-bottom: 3.5rem; }
+    .how-steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2rem;
+    }
+    .step {
+      background: var(--bg);
+      border-radius: var(--r-lg);
+      border: 1px solid var(--border);
+      padding: 2rem 1.75rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .step-num {
+      font-family: var(--font-d);
+      font-size: 5rem;
+      font-weight: 900;
+      color: var(--orange);
+      opacity: 0.12;
+      line-height: 1;
+      margin-bottom: 0.25rem;
+      user-select: none;
+    }
+    .step-title {
+      font-family: var(--font-d);
+      font-size: 1.45rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+    }
+    .step-desc {
+      font-size: 0.9rem;
+      line-height: 1.65;
+      color: var(--text-muted);
+    }
+
+    /* ── Pricing ── */
+    .pricing-header { text-align: center; margin-bottom: 3rem; }
+    .pricing-header .body-text { max-width: 44ch; margin: 0 auto; }
+    .plans {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    .plan {
+      background: var(--surface);
+      border-radius: var(--r-lg);
+      border: 1px solid var(--border);
+      padding: 2rem 1.75rem;
+      position: relative;
+    }
+    .plan.feat {
+      border-color: var(--orange);
+      background: oklch(17% 0.015 42);
+    }
+    .plan-badge {
+      position: absolute;
+      top: -13px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--orange);
+      color: var(--bg);
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.28rem 0.85rem;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+    .plan-name {
+      font-family: var(--font-d);
+      font-size: 0.85rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+    .plan-price {
+      display: flex;
+      align-items: baseline;
+      gap: 0.2rem;
+      margin-bottom: 0.35rem;
+    }
+    .plan-cur { font-size: 1rem; font-weight: 600; color: var(--text); line-height: 1; }
+    .plan-amt {
+      font-family: var(--font-d);
+      font-size: 3.25rem;
+      font-weight: 900;
+      line-height: 1;
+      color: var(--text);
+    }
+    .plan-cents {
+      font-family: var(--font-d);
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: var(--text);
+    }
+    .plan-per { font-size: 0.82rem; color: var(--text-muted); }
+    .plan-billing {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+    }
+    .plan-items {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      margin-bottom: 1.75rem;
+    }
+    .plan-items li {
+      display: flex;
+      gap: 0.5rem;
+      align-items: flex-start;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+    .plan-items li::before {
+      content: '✓';
+      color: var(--orange);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .btn-plan {
+      display: block;
+      width: 100%;
+      padding: 0.85rem;
+      border-radius: var(--r-sm);
+      font-weight: 700;
+      font-size: 0.88rem;
+      border: 2px solid var(--orange);
+      cursor: pointer;
+      text-align: center;
+      transition: 0.15s;
+    }
+    .plan:not(.feat) .btn-plan {
+      background: transparent;
+      color: var(--orange);
+    }
+    .plan:not(.feat) .btn-plan:hover { background: var(--orange-lo); }
+    .plan.feat .btn-plan {
+      background: var(--orange);
+      color: var(--bg);
+    }
+    .plan.feat .btn-plan:hover { opacity: 0.86; }
+    .pricing-note {
+      text-align: center;
+      margin-top: 1.25rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* ── FAQ ── */
+    .faq-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin-top: 3rem;
+    }
+    .faq-item {
+      background: var(--surface);
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+      padding: 1.5rem;
+    }
+    .faq-q {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--text);
+      margin-bottom: 0.45rem;
+    }
+    .faq-a {
+      font-size: 0.875rem;
+      line-height: 1.65;
+      color: var(--text-muted);
+    }
+    .faq-a strong { color: var(--orange); font-weight: 600; }
+
+    /* ── Final CTA ── */
+    .cta-final {
+      background: var(--orange);
+      padding: 6.5rem 2rem;
+      text-align: center;
+    }
+    .cta-final .kicker { color: oklch(28% 0.07 42); }
+    .cta-final .headline { color: var(--bg); }
+    .cta-final-sub {
+      font-size: 1.05rem;
+      color: oklch(22% 0.07 42);
+      max-width: 42ch;
+      margin: 0 auto 2.5rem;
+      line-height: 1.65;
+    }
+    .btn-dark {
+      display: inline-block;
+      background: var(--bg);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 1rem 2.25rem;
+      border-radius: var(--r-sm);
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn-dark:hover { opacity: 0.88; transform: translateY(-1px); }
+    .cta-note-dark {
+      margin-top: 0.9rem;
+      font-size: 0.78rem;
+      color: oklch(30% 0.07 42);
+    }
+
+    /* ── Footer ── */
+    footer {
+      background: oklch(10% 0.003 30);
+      border-top: 1px solid var(--border);
+      padding: 2rem;
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    footer a { color: var(--orange); }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── Reveal animation ── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 0.55s ease, transform 0.55s ease;
+    }
+    .reveal.visible { opacity: 1; transform: none; }
+
+    /* ── Responsive ── */
+    @media (max-width: 860px) {
+      .hero {
+        grid-template-columns: 1fr;
+        padding: 7rem 1.25rem 3.5rem;
+        gap: 2.5rem;
+        text-align: center;
+      }
+      .hero-sub { max-width: 100%; }
+      .hero-actions { justify-content: center; }
+      .hero-trust { justify-content: center; }
+      .hero-visual { order: -1; }
+      .phone { width: 248px; }
+
+      .pain-grid,
+      .feature-row,
+      .feature-row.rev {
+        grid-template-columns: 1fr;
+        direction: ltr;
+        gap: 2.5rem;
+      }
+      .how-steps { grid-template-columns: 1fr; }
+      .plans { grid-template-columns: 1fr; max-width: 380px; }
+      .faq-grid { grid-template-columns: 1fr; }
+
+      nav { padding: 0.75rem 1.25rem; }
+      .section { padding: 4rem 1.25rem; }
+      .nav-logo-text { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { opacity: 1; transform: none; transition: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="nav-logo">
+    <img src="/landing/logo.jpeg" alt="Evolution Fit IA">
+    <span class="nav-logo-text">Evolution Fit IA</span>
+  </div>
+  <a href="#planos" class="nav-cta">Começar agora</a>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="reveal">
+    <span class="kicker">Personal trainer + nutricionista com IA</span>
+    <h1 class="hero-headline">
+      Treino.<br>
+      Dieta.<br>
+      <span class="hl">24h no<br>WhatsApp.</span>
+    </h1>
+    <p class="hero-sub">
+      Plano de treino e dieta personalizados, análise de refeição por foto e acompanhamento de hábitos. Tudo pelo WhatsApp que você já usa. A partir de R$19,99/mês.
+    </p>
+    <div class="hero-actions">
+      <a href="#planos" class="btn-primary">Quero meu personal no WhatsApp</a>
+      <a href="#como-funciona" class="btn-ghost">Ver como funciona</a>
+    </div>
+    <div class="hero-trust">
+      <span class="trust-item"><span class="trust-dot"></span> Sem baixar app</span>
+      <span class="trust-item"><span class="trust-dot"></span> Disponível 24h</span>
+      <span class="trust-item"><span class="trust-dot"></span> Cancele quando quiser</span>
+    </div>
+  </div>
+
+  <div class="hero-visual reveal" style="transition-delay:0.15s">
+    <div class="phone-glow"></div>
+    <div class="phone">
+      <div class="phone-pill"><div class="phone-pill-bar"></div></div>
+      <div class="wa-header">
+        <div class="wa-avatar">EF</div>
+        <div class="wa-info">
+          <div class="wa-name">Evolution Fit IA</div>
+          <div class="wa-status">online agora</div>
+        </div>
+        <div class="wa-dots"><span></span><span></span><span></span></div>
+      </div>
+      <div class="wa-body">
+        <div class="b-divider">Hoje, 08:47</div>
+        <div class="bubble b-out">
+          Oi! Quero emagrecer. Treino em casa
+          <div class="b-time">08:47</div>
+        </div>
+        <div class="bubble b-in">
+          <div class="b-sender">Evolution Fit IA</div>
+          Perfeito! Aqui está seu treino de hoje:
+
+          <br><br>🏠 <strong>Treino A — Corpo todo</strong><br>
+          Agachamento: 4x15<br>
+          Flexão: 3x12<br>
+          Afundo: 3x12 cada<br>
+          Abdominal: 3x20<br>
+          Prancha: 3x40s
+          <div class="b-time">08:47 ✓✓</div>
+        </div>
+        <div class="b-divider">12:23</div>
+        <div class="bubble b-out">
+          [foto do almoço]
+          <div class="b-time">12:23</div>
+        </div>
+        <div class="bubble b-in">
+          <div class="b-sender">Análise de refeição</div>
+          Arroz, feijão, frango e salada<br><br>
+          📊 480 kcal · Proteína 42g<br>
+          Carbo 38g · Gordura 9g<br><br>
+          Refeição registrada. Ótima escolha!
+          <div class="b-time">12:23 ✓✓</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pain -->
+<section class="section pain">
+  <div class="container pain-grid">
+    <div class="reveal">
+      <span class="kicker">O problema</span>
+      <h2 class="headline">Personal caro.<br>App genérico.<br>Nenhum resultado.</h2>
+      <ul class="pain-list">
+        <li>Personal presencial custa R$100 a R$300 por sessão. Fora do alcance de quem mais precisa.</li>
+        <li>Apps de treino entregam o mesmo plano para todo mundo. Sem considerar seu objetivo, seus equipamentos, sua rotina.</li>
+        <li>Nutricionista: consultas de mês em mês, sem acompanhamento no dia a dia quando você mais precisa de orientação.</li>
+        <li>Resultado: meses treinando sem evolução. Dinheiro e tempo desperdiçados.</li>
+      </ul>
+    </div>
+    <div class="pain-right reveal" style="transition-delay:0.12s">
+      <div class="pain-card">
+        <div class="pain-card-label">Personal presencial</div>
+        <div class="pain-card-price">R$200</div>
+        <div class="pain-card-desc">por sessão. Horário fixo. Disponível só quando ele pode.</div>
+      </div>
+      <div class="pain-card">
+        <div class="pain-card-label">Nutricionista presencial</div>
+        <div class="pain-card-price">R$300</div>
+        <div class="pain-card-desc">por consulta. Retorno em 30 dias. Sem acompanhamento diário.</div>
+      </div>
+      <div class="pain-card featured">
+        <div class="pain-card-label">Evolution Fit IA</div>
+        <div class="pain-card-price">R$19,99</div>
+        <div class="pain-card-desc">por mês. Personal + nutricionista. Disponível 24h no WhatsApp.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="section" id="funcionalidades">
+  <div class="container">
+    <div class="features-header reveal">
+      <span class="kicker">O que você recebe</span>
+      <h2 class="headline">Tudo que você precisa.<br>Direto no WhatsApp.</h2>
+      <p class="body-text">Sem baixar nenhum app novo. Sem interface complicada. Só você e a IA que age como personal e nutricionista.</p>
+    </div>
+
+    <!-- Feature 1 -->
+    <div class="feature-row reveal">
+      <div>
+        <div class="feat-n">01 — Treinos</div>
+        <h3 class="feat-title">Treino montado<br>para você.</h3>
+        <p class="feat-desc">Academia, casa, corrida, yoga ou bike: a IA monta o plano certo para o seu objetivo, seu tempo e seus equipamentos. E registra cada evolução de carga semana a semana.</p>
+      </div>
+      <div class="feat-visual">
+        <div class="wk-head">
+          <div class="wk-title">Treino B — Costas</div>
+          <span class="badge-sm">Academia</span>
+        </div>
+        <div class="ex-row">
+          <span class="ex-name">Puxada frontal</span>
+          <span class="ex-sets">4 × 10 · 60 kg</span>
+          <span class="ex-pr">PR</span>
+        </div>
+        <div class="ex-row">
+          <span class="ex-name">Remada curvada</span>
+          <span class="ex-sets">4 × 10 · 50 kg</span>
+        </div>
+        <div class="ex-row">
+          <span class="ex-name">Rosca direta</span>
+          <span class="ex-sets">3 × 12 · 30 kg</span>
+        </div>
+        <div class="ex-row">
+          <span class="ex-name">Facepull</span>
+          <span class="ex-sets">3 × 15 · 20 kg</span>
+        </div>
+        <div class="ex-row">
+          <span class="ex-name">Martelo</span>
+          <span class="ex-sets">3 × 12 · 14 kg</span>
+          <span class="ex-pr">+2 kg</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feature 2 -->
+    <div class="feature-row rev reveal">
+      <div>
+        <div class="feat-n">02 — Nutrição</div>
+        <h3 class="feat-title">Mande a foto.<br>Saiba tudo.</h3>
+        <p class="feat-desc">Fotografou o prato? A IA calcula calorias, proteínas, carboidratos e gorduras na hora. Além de um plano de dieta de 7 dias com macros e suplementação sob medida.</p>
+      </div>
+      <div class="feat-visual">
+        <div class="food-photo">🍱</div>
+        <p class="food-label">Arroz, feijão, frango grelhado e salada</p>
+        <div class="macro-row">
+          <div class="macro-card">
+            <div class="macro-val">523</div>
+            <div class="macro-lbl">Kcal</div>
+          </div>
+          <div class="macro-card">
+            <div class="macro-val">46g</div>
+            <div class="macro-lbl">Proteína</div>
+          </div>
+          <div class="macro-card">
+            <div class="macro-val">52g</div>
+            <div class="macro-lbl">Carbo</div>
+          </div>
+        </div>
+        <div class="food-ok">✓ Refeição registrada. Ótima escolha para emagrecer.</div>
+      </div>
+    </div>
+
+    <!-- Feature 3 -->
+    <div class="feature-row reveal">
+      <div>
+        <div class="feat-n">03 — Hábitos e evolução</div>
+        <h3 class="feat-title">Acompanhamento<br>que muda hábitos.</h3>
+        <p class="feat-desc">Contador de água, streaks sem cigarro e sem álcool, lembretes de suplementação e card de evolução estilo Strava para compartilhar seu progresso. A IA cuida do que faz diferença no longo prazo.</p>
+      </div>
+      <div class="feat-visual">
+        <div class="habit-row">
+          <span class="habit-name">Água</span>
+          <div class="habit-right">
+            <div class="dots">
+              <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+              <div class="dot"></div><div class="dot"></div><div class="dot off"></div>
+              <div class="dot off"></div>
+            </div>
+            <span class="streak">2,1 L</span>
+          </div>
+        </div>
+        <div class="habit-row">
+          <span class="habit-name">Sem cigarro</span>
+          <div class="habit-right">
+            <div class="dots">
+              <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+              <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+              <div class="dot"></div>
+            </div>
+            <span class="streak">18 dias</span>
+          </div>
+        </div>
+        <div class="habit-row">
+          <span class="habit-name">Sem álcool</span>
+          <div class="habit-right">
+            <div class="dots">
+              <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+              <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+              <div class="dot"></div>
+            </div>
+            <span class="streak">31 dias</span>
+          </div>
+        </div>
+        <div class="habit-row">
+          <span class="habit-name">Suplementos</span>
+          <span class="streak" style="font-size:0.8rem">✓ Lembrete às 20h</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="section how" id="como-funciona">
+  <div class="container">
+    <div class="how-header reveal">
+      <span class="kicker">Como funciona</span>
+      <h2 class="headline">Três passos.<br>Zero complicação.</h2>
+    </div>
+    <div class="how-steps">
+      <div class="step reveal">
+        <div class="step-num">01</div>
+        <div class="step-title">Assine o plano</div>
+        <p class="step-desc">Escolha trimestral ou anual. Você recebe acesso imediato ao número da Evolution Fit IA no WhatsApp.</p>
+      </div>
+      <div class="step reveal" style="transition-delay:0.1s">
+        <div class="step-num">02</div>
+        <div class="step-title">Conta seus objetivos</div>
+        <p class="step-desc">Diga à IA o que você quer: emagrecer, ganhar massa ou melhorar a saúde. Onde treina, há quanto tempo e quanto tempo tem disponível.</p>
+      </div>
+      <div class="step reveal" style="transition-delay:0.2s">
+        <div class="step-num">03</div>
+        <div class="step-title">Receba e evolua</div>
+        <p class="step-desc">Treino e dieta personalizados na hora. Mande foto da refeição. Registre as cargas. A IA acompanha e ajusta conforme você evolui.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Pricing -->
+<section class="section" id="planos">
+  <div class="container">
+    <div class="pricing-header reveal">
+      <span class="kicker">Planos</span>
+      <h2 class="headline">Menos que uma<br>única consulta.</h2>
+      <p class="body-text">Por R$19,99/mês você tem personal trainer e nutricionista disponíveis 24 horas por dia, 7 dias por semana.</p>
+    </div>
+    <div class="plans reveal" style="transition-delay:0.1s">
+      <div class="plan">
+        <div class="plan-name">Trimestral</div>
+        <div class="plan-price">
+          <span class="plan-cur">R$</span>
+          <span class="plan-amt">29</span>
+          <span class="plan-cents">,99</span>
+          <span class="plan-per">/mês</span>
+        </div>
+        <div class="plan-billing">Cobrado a cada 3 meses</div>
+        <ul class="plan-items">
+          <li>Treinos personalizados ilimitados</li>
+          <li>Plano de dieta de 7 dias</li>
+          <li>Análise de refeição por foto</li>
+          <li>Registro de evolução de cargas</li>
+          <li>Contadores de hábitos</li>
+          <li>Disponível 24h no WhatsApp</li>
+        </ul>
+        <a href="#" class="btn-plan">Assinar trimestral</a>
+      </div>
+      <div class="plan feat">
+        <div class="plan-badge">Melhor custo-benefício</div>
+        <div class="plan-name">Anual</div>
+        <div class="plan-price">
+          <span class="plan-cur">R$</span>
+          <span class="plan-amt">19</span>
+          <span class="plan-cents">,99</span>
+          <span class="plan-per">/mês</span>
+        </div>
+        <div class="plan-billing">Cobrado uma vez por ano · Economia de R$120</div>
+        <ul class="plan-items">
+          <li>Tudo do plano trimestral</li>
+          <li>Lembretes automáticos de suplementação</li>
+          <li>Card de evolução estilo Strava</li>
+          <li>Análise de composição corporal por fotos</li>
+          <li>Prioridade no suporte</li>
+        </ul>
+        <a href="#" class="btn-plan">Assinar anual por R$19,99/mês</a>
+      </div>
+    </div>
+    <p class="pricing-note reveal">Sem fidelidade. Sem multa. Cancele quando quiser.</p>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section" style="background: var(--surface);">
+  <div class="container">
+    <div class="reveal">
+      <span class="kicker">Dúvidas frequentes</span>
+      <h2 class="headline">Respostas diretas.</h2>
+    </div>
+    <div class="faq-grid">
+      <div class="faq-item reveal">
+        <div class="faq-q">Precisa baixar algum app?</div>
+        <div class="faq-a">Não. A Evolution Fit IA funciona <strong>direto no WhatsApp</strong> que você já tem instalado. Zero instalação, zero fricção.</div>
+      </div>
+      <div class="faq-item reveal" style="transition-delay:0.06s">
+        <div class="faq-q">A IA realmente funciona?</div>
+        <div class="faq-a">A IA é treinada com protocolos científicos de treino e nutrição. Ela monta planos individuais baseados no seu objetivo, equipamentos e rotina, não planos genéricos iguais para todo mundo.</div>
+      </div>
+      <div class="faq-item reveal" style="transition-delay:0.1s">
+        <div class="faq-q">R$19,99 por mês é caro?</div>
+        <div class="faq-a">Uma sessão com personal custa R$100 a R$300. Uma consulta de nutricionista, R$150 a R$400. Por <strong>R$19,99 você tem os dois</strong>, disponíveis 24h todos os dias do mês.</div>
+      </div>
+      <div class="faq-item reveal" style="transition-delay:0.14s">
+        <div class="faq-q">Funciona para qualquer objetivo?</div>
+        <div class="faq-a">Sim. Emagrecimento, ganho de massa, corrida, yoga, treino em casa ou academia. A IA adapta o plano para o seu objetivo e situação específica.</div>
+      </div>
+      <div class="faq-item reveal" style="transition-delay:0.18s">
+        <div class="faq-q">Posso cancelar a qualquer momento?</div>
+        <div class="faq-a">Sim. Sem fidelidade, sem multa. Cancele pelo próprio WhatsApp quando quiser.</div>
+      </div>
+      <div class="faq-item reveal" style="transition-delay:0.22s">
+        <div class="faq-q">A análise de refeição por foto é precisa?</div>
+        <div class="faq-a">A IA identifica os alimentos e estima macros com boa precisão para uso no dia a dia. Quanto mais nítida a foto, mais precisa é a análise.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Final CTA -->
+<section class="cta-final">
+  <div class="container">
+    <div class="reveal">
+      <span class="kicker">Comece hoje</span>
+      <h2 class="headline" style="margin-bottom:1.25rem">Seu personal está<br>esperando no<br>WhatsApp.</h2>
+      <p class="cta-final-sub">R$19,99/mês. Sem baixar app. Disponível 24h. Cancele quando quiser.</p>
+      <a href="#planos" class="btn-dark">Quero começar agora</a>
+      <p class="cta-note-dark">Acesso imediato após a assinatura.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>© 2026 Evolution Fit IA. Feito no Brasil.</p>
+  <p style="margin-top:0.5rem"><a href="#">Termos de uso</a> &nbsp;·&nbsp; <a href="#">Privacidade</a></p>
+</footer>
+
+<script>
+  const obs = new IntersectionObserver(
+    entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); }),
+    { threshold: 0.1 }
+  );
+  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>

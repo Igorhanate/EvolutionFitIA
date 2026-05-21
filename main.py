@@ -4,6 +4,7 @@ import sqlalchemy
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pythonjsonlogger import jsonlogger
 
 from app.config import settings
@@ -47,6 +48,8 @@ app.add_middleware(
 app.include_router(whatsapp.router, prefix="/webhook")
 app.include_router(hotmart.router, prefix="/webhook")
 app.include_router(admin.router, prefix="/admin")
+
+app.mount("/landing", StaticFiles(directory="static/landing", html=True), name="landing")
 
 
 @app.get("/")
