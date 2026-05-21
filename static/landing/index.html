@@ -11,29 +11,44 @@
   <style>
     /* ── Tokens ── */
     :root {
-      --bg:           oklch(13% 0.005 30);
-      --surface:      oklch(18% 0.005 30);
-      --surface-2:    oklch(23% 0.006 30);
-      --border:       oklch(28% 0.005 30);
-      --orange:       oklch(68% 0.185 42);
-      --orange-lo:    oklch(30% 0.06 42);
-      --text:         oklch(96% 0.008 80);
-      --text-muted:   oklch(60% 0.006 80);
+      /* Light surfaces */
+      --bg:           oklch(99.5% 0.003 145);   /* near-white, green-tinted */
+      --surface:      oklch(96% 0.004 145);      /* light gray sections */
+      --surface-2:    oklch(92% 0.005 145);      /* card backgrounds */
+      --border:       oklch(87% 0.005 145);      /* borders on light */
+
+      /* Brand green */
+      --green:        oklch(72% 0.22 145);       /* #22C55E — CTAs, accents */
+      --green-text:   oklch(56% 0.20 145);       /* green for text on white, WCAG AA */
+      --green-lo:     oklch(98% 0.025 145);      /* very light green tint */
+      --green-hover:  oklch(64% 0.21 145);       /* button hover */
+
+      /* Dark surfaces */
+      --dark-bg:      oklch(13.5% 0.006 145);   /* #111111-equivalent */
+      --dark-surface: oklch(19% 0.007 145);      /* dark cards */
+      --dark-border:  oklch(28% 0.006 145);      /* borders on dark */
+      --dark-muted:   oklch(68% 0.005 145);      /* muted text on dark */
+      --dark-text:    oklch(97% 0.005 145);      /* white text on dark */
+
+      /* Content */
+      --text:         oklch(13.5% 0.006 145);   /* #111111 */
+      --text-muted:   oklch(46% 0.006 145);      /* gray body text */
+
+      /* WhatsApp (stays dark) */
       --wa-bg:        oklch(10.5% 0.007 145);
       --wa-bubble:    oklch(20% 0.012 145);
       --wa-sent:      oklch(26% 0.07 145);
       --wa-header:    oklch(15% 0.01 145);
       --wa-green:     oklch(58% 0.14 145);
       --phone-bg:     oklch(9% 0.004 30);
-      --plan-feat-bg: oklch(17% 0.015 42);
-      --cta-text:     oklch(22% 0.07 42);
-      --cta-kicker:   oklch(28% 0.07 42);
-      --shadow-deep:  oklch(0% 0 0 / 0.65);
-      --font-d:       'Barlow Condensed', system-ui, sans-serif;
-      --font-b:       'Figtree', system-ui, sans-serif;
-      --r-sm:         8px;
-      --r-md:         14px;
-      --r-lg:         24px;
+      --shadow-phone: oklch(13.5% 0.006 145 / 0.22);
+      --shadow-card:  oklch(13.5% 0.006 145 / 0.07);
+
+      --font-d: 'Barlow Condensed', system-ui, sans-serif;
+      --font-b: 'Figtree', system-ui, sans-serif;
+      --r-sm:   8px;
+      --r-md:   14px;
+      --r-lg:   24px;
     }
 
     /* ── Reset ── */
@@ -49,9 +64,9 @@
     img { max-width: 100%; display: block; }
     a { color: inherit; text-decoration: none; }
 
-    /* ── Focus visible — keyboard nav ── */
+    /* ── Focus visible ── */
     :focus-visible {
-      outline: 2px solid var(--orange);
+      outline: 2px solid var(--green);
       outline-offset: 3px;
       border-radius: 4px;
     }
@@ -65,7 +80,7 @@
       align-items: center;
       justify-content: space-between;
       padding: 0.6rem 2rem;
-      background: oklch(13% 0.005 30 / 0.88);
+      background: oklch(99.5% 0.003 145 / 0.92);
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
       border-bottom: 1px solid var(--border);
@@ -76,9 +91,9 @@
       gap: 0.55rem;
     }
     .nav-logo img {
-      height: 34px;
+      height: 36px;
       width: auto;
-      border-radius: 6px;
+      border-radius: 4px;
       object-fit: cover;
     }
     .nav-logo-text {
@@ -90,21 +105,20 @@
       color: var(--text);
       line-height: 1;
     }
-    /* Touch target: min 44px height */
     .nav-cta {
-      background: var(--orange);
-      color: var(--bg);
+      background: var(--green);
+      color: var(--text);
       font-weight: 700;
       font-size: 0.85rem;
       padding: 0.7rem 1.2rem;
       min-height: 44px;
       border-radius: var(--r-sm);
-      transition: opacity 0.15s;
+      transition: background 0.15s;
       white-space: nowrap;
       display: flex;
       align-items: center;
     }
-    .nav-cta:hover { opacity: 0.86; }
+    .nav-cta:hover { background: var(--green-hover); }
 
     /* ── Section primitives ── */
     .section { padding: 5.5rem 2rem; }
@@ -115,7 +129,7 @@
       font-weight: 700;
       letter-spacing: 0.13em;
       text-transform: uppercase;
-      color: var(--orange);
+      color: var(--green-text);
       margin-bottom: 1rem;
     }
     .headline {
@@ -128,7 +142,7 @@
       color: var(--text);
       margin-bottom: 1.25rem;
     }
-    .headline .hl { color: var(--orange); }
+    .headline .hl { color: var(--green-text); }
     .body-text {
       font-size: 1.05rem;
       line-height: 1.7;
@@ -140,18 +154,18 @@
     .btn-primary {
       display: inline-flex;
       align-items: center;
-      background: var(--orange);
-      color: var(--bg);
+      background: var(--green);
+      color: var(--text);
       font-weight: 700;
       font-size: 1rem;
       padding: 0.9rem 1.8rem;
       min-height: 44px;
       border-radius: var(--r-sm);
-      transition: opacity 0.15s, transform 0.1s;
+      transition: background 0.15s, transform 0.1s;
       line-height: 1;
       white-space: nowrap;
     }
-    .btn-primary:hover { opacity: 0.86; transform: translateY(-1px); }
+    .btn-primary:hover { background: var(--green-hover); transform: translateY(-1px); }
     .btn-ghost {
       display: inline-flex;
       align-items: center;
@@ -216,7 +230,7 @@
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: var(--orange);
+      background: var(--green);
       flex-shrink: 0;
     }
 
@@ -229,11 +243,11 @@
     }
     .phone-glow {
       position: absolute;
-      width: 260px;
-      height: 360px;
-      background: var(--orange);
-      filter: blur(90px);
-      opacity: 0.1;
+      width: 240px;
+      height: 340px;
+      background: var(--green);
+      filter: blur(80px);
+      opacity: 0.08;
       border-radius: 50%;
       pointer-events: none;
       will-change: filter;
@@ -245,7 +259,7 @@
       border-radius: 38px;
       border: 1.5px solid var(--border);
       overflow: hidden;
-      box-shadow: 0 40px 80px var(--shadow-deep), 0 0 0 1px var(--border);
+      box-shadow: 0 32px 80px var(--shadow-phone), 0 0 0 1px var(--border);
     }
     .phone-pill {
       height: 26px;
@@ -257,7 +271,7 @@
     .phone-pill-bar {
       width: 72px;
       height: 5px;
-      background: var(--surface-2);
+      background: var(--dark-surface);
       border-radius: 3px;
     }
     .wa-header {
@@ -271,31 +285,22 @@
       width: 32px;
       height: 32px;
       border-radius: 50%;
-      background: var(--orange);
+      background: var(--green);
       display: flex;
       align-items: center;
       justify-content: center;
       font-family: var(--font-d);
       font-size: 0.72rem;
       font-weight: 900;
-      color: var(--bg);
+      color: var(--text);
       flex-shrink: 0;
       letter-spacing: 0.02em;
     }
     .wa-info { flex: 1; min-width: 0; }
-    .wa-name { font-size: 0.75rem; font-weight: 600; color: var(--text); }
+    .wa-name { font-size: 0.75rem; font-weight: 600; color: var(--dark-text); }
     .wa-status { font-size: 0.65rem; color: var(--wa-green); }
-    .wa-dots {
-      display: flex;
-      gap: 3px;
-      align-items: center;
-    }
-    .wa-dots span {
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: var(--text-muted);
-    }
+    .wa-dots { display: flex; gap: 3px; align-items: center; }
+    .wa-dots span { width: 4px; height: 4px; border-radius: 50%; background: var(--dark-muted); }
     .wa-body {
       padding: 0.7rem;
       background: var(--wa-bg);
@@ -309,7 +314,7 @@
       padding: 0.45rem 0.65rem;
       font-size: 0.72rem;
       line-height: 1.55;
-      color: var(--text);
+      color: var(--dark-text);
     }
     .b-in {
       background: var(--wa-bubble);
@@ -321,16 +326,11 @@
       border-radius: 10px 2px 10px 10px;
       align-self: flex-end;
     }
-    .b-time {
-      font-size: 0.65rem;
-      color: var(--text-muted);
-      text-align: right;
-      margin-top: 3px;
-    }
+    .b-time { font-size: 0.65rem; color: var(--dark-muted); text-align: right; margin-top: 3px; }
     .b-sender {
       font-size: 0.65rem;
       font-weight: 700;
-      color: var(--orange);
+      color: var(--green);
       text-transform: uppercase;
       letter-spacing: 0.04em;
       margin-bottom: 3px;
@@ -338,7 +338,7 @@
     .b-divider {
       text-align: center;
       font-size: 0.65rem;
-      color: var(--text-muted);
+      color: var(--dark-muted);
       padding: 0.25rem 0;
       opacity: 0.65;
     }
@@ -372,7 +372,7 @@
       width: 5px;
       height: 5px;
       border-radius: 50%;
-      background: var(--orange);
+      background: var(--green);
       flex-shrink: 0;
       margin-top: 0.62em;
     }
@@ -382,6 +382,7 @@
       border-radius: var(--r-md);
       border: 1px solid var(--border);
       padding: 1.25rem 1.5rem;
+      box-shadow: 0 2px 8px var(--shadow-card);
     }
     .pain-card-label {
       font-size: 0.68rem;
@@ -400,11 +401,11 @@
     }
     .pain-card-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.3rem; }
     .pain-card.featured {
-      border-color: var(--orange);
-      background: var(--orange-lo);
+      border-color: var(--green);
+      background: var(--green-lo);
     }
-    .pain-card.featured .pain-card-label { color: var(--orange); }
-    .pain-card.featured .pain-card-price { color: var(--orange); }
+    .pain-card.featured .pain-card-label { color: var(--green-text); }
+    .pain-card.featured .pain-card-price { color: var(--green-text); }
     .pain-card.featured .pain-card-desc { color: var(--text); }
 
     /* ── Features ── */
@@ -424,7 +425,7 @@
       font-family: var(--font-d);
       font-size: 0.72rem;
       font-weight: 800;
-      color: var(--orange);
+      color: var(--green-text);
       letter-spacing: 0.12em;
       text-transform: uppercase;
       margin-bottom: 0.75rem;
@@ -451,15 +452,11 @@
       border: 1px solid var(--border);
       padding: 1.75rem;
       overflow: hidden;
+      box-shadow: 0 4px 16px var(--shadow-card);
     }
 
     /* Workout visual */
-    .wk-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1rem;
-    }
+    .wk-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     .wk-title {
       font-family: var(--font-d);
       font-size: 1.05rem;
@@ -470,12 +467,13 @@
     .badge-sm {
       font-size: 0.62rem;
       font-weight: 700;
-      background: var(--orange-lo);
-      color: var(--orange);
+      background: var(--green-lo);
+      color: var(--green-text);
       padding: 0.2rem 0.55rem;
       border-radius: 20px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
+      border: 1px solid oklch(87% 0.06 145);
     }
     .ex-row {
       display: flex;
@@ -492,11 +490,12 @@
     .ex-pr {
       font-size: 0.65rem;
       font-weight: 700;
-      color: var(--orange);
-      background: var(--orange-lo);
+      color: var(--green-text);
+      background: var(--green-lo);
       padding: 0.15rem 0.4rem;
       border-radius: 10px;
       white-space: nowrap;
+      border: 1px solid oklch(87% 0.06 145);
     }
 
     /* Food analysis visual */
@@ -511,42 +510,24 @@
       font-size: 2.75rem;
       margin-bottom: 0.75rem;
     }
-    .food-label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-bottom: 0.75rem;
-    }
-    .macro-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0.5rem;
-      margin-bottom: 0.6rem;
-    }
+    .food-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem; }
+    .macro-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 0.6rem; }
     .macro-card {
-      background: var(--surface-2);
+      background: var(--bg);
       border-radius: var(--r-sm);
       padding: 0.55rem;
       text-align: center;
+      border: 1px solid var(--border);
     }
     .macro-val {
       font-family: var(--font-d);
       font-size: 1.35rem;
       font-weight: 900;
-      color: var(--orange);
+      color: var(--green-text);
       line-height: 1;
     }
-    .macro-lbl {
-      font-size: 0.65rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      margin-top: 2px;
-    }
-    .food-ok {
-      font-size: 0.78rem;
-      font-weight: 600;
-      color: var(--wa-green);
-    }
+    .macro-lbl { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 2px; }
+    .food-ok { font-size: 0.78rem; font-weight: 600; color: var(--green-text); }
 
     /* Habit tracker visual */
     .habit-row {
@@ -561,29 +542,14 @@
     .habit-name { font-size: 0.85rem; color: var(--text); flex: 1; }
     .habit-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
     .dots { display: flex; gap: 3px; }
-    .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--orange);
-    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
     .dot.off { background: var(--surface-2); }
-    .streak {
-      font-family: var(--font-d);
-      font-size: 0.95rem;
-      font-weight: 800;
-      color: var(--orange);
-      white-space: nowrap;
-    }
+    .streak { font-family: var(--font-d); font-size: 0.95rem; font-weight: 800; color: var(--green-text); white-space: nowrap; }
 
     /* ── How it works ── */
     .how { background: var(--surface); }
     .how-header { margin-bottom: 3.5rem; }
-    .how-steps {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 2rem;
-    }
+    .how-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
     .step {
       background: var(--bg);
       border-radius: var(--r-lg);
@@ -591,13 +557,14 @@
       padding: 2rem 1.75rem;
       position: relative;
       overflow: hidden;
+      box-shadow: 0 2px 12px var(--shadow-card);
     }
     .step-num {
       font-family: var(--font-d);
       font-size: 5rem;
       font-weight: 900;
-      color: var(--orange);
-      opacity: 0.12;
+      color: var(--green);
+      opacity: 0.18;
       line-height: 1;
       margin-bottom: 0.25rem;
       user-select: none;
@@ -610,17 +577,11 @@
       color: var(--text);
       margin-bottom: 0.5rem;
     }
-    .step-desc {
-      font-size: 0.9rem;
-      line-height: 1.65;
-      color: var(--text-muted);
-      overflow-wrap: break-word;
-    }
+    .step-desc { font-size: 0.9rem; line-height: 1.65; color: var(--text-muted); overflow-wrap: break-word; }
 
     /* ── Pricing ── */
     .pricing-header { text-align: center; margin-bottom: 3rem; }
     .pricing-header .body-text { max-width: 44ch; margin: 0 auto; }
-    /* top padding to accommodate the floating badge */
     .plans {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -630,23 +591,25 @@
       padding-top: 1.5rem;
     }
     .plan {
-      background: var(--surface);
+      background: var(--bg);
       border-radius: var(--r-lg);
       border: 1px solid var(--border);
       padding: 2rem 1.75rem;
       position: relative;
+      box-shadow: 0 2px 12px var(--shadow-card);
     }
+    /* Featured plan: dark card for maximum contrast */
     .plan.feat {
-      border-color: var(--orange);
-      background: var(--plan-feat-bg);
+      background: var(--dark-bg);
+      border-color: var(--green);
     }
     .plan-badge {
       position: absolute;
       top: -13px;
       left: 50%;
       transform: translateX(-50%);
-      background: var(--orange);
-      color: var(--bg);
+      background: var(--green);
+      color: var(--text);
       font-size: 0.68rem;
       font-weight: 800;
       letter-spacing: 0.08em;
@@ -655,62 +618,24 @@
       border-radius: 20px;
       white-space: nowrap;
     }
-    .plan-name {
-      font-family: var(--font-d);
-      font-size: 0.85rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-muted);
-      margin-bottom: 1rem;
-    }
-    .plan-price {
-      display: flex;
-      align-items: baseline;
-      gap: 0.2rem;
-      margin-bottom: 0.35rem;
-    }
+    .plan-name { font-family: var(--font-d); font-size: 0.85rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 1rem; }
+    .plan.feat .plan-name { color: var(--dark-muted); }
+    .plan-price { display: flex; align-items: baseline; gap: 0.2rem; margin-bottom: 0.35rem; }
     .plan-cur { font-size: 1rem; font-weight: 600; color: var(--text); line-height: 1; }
-    .plan-amt {
-      font-family: var(--font-d);
-      font-size: 3.25rem;
-      font-weight: 900;
-      line-height: 1;
-      color: var(--text);
-    }
-    .plan-cents {
-      font-family: var(--font-d);
-      font-size: 1.5rem;
-      font-weight: 900;
-      color: var(--text);
-    }
+    .plan.feat .plan-cur { color: var(--dark-text); }
+    .plan-amt { font-family: var(--font-d); font-size: 3.25rem; font-weight: 900; line-height: 1; color: var(--text); }
+    .plan.feat .plan-amt { color: var(--dark-text); }
+    .plan-cents { font-family: var(--font-d); font-size: 1.5rem; font-weight: 900; color: var(--text); }
+    .plan.feat .plan-cents { color: var(--dark-text); }
     .plan-per { font-size: 0.82rem; color: var(--text-muted); }
-    .plan-billing {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-bottom: 1.5rem;
-    }
-    .plan-items {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 0.55rem;
-      margin-bottom: 1.75rem;
-    }
-    .plan-items li {
-      display: flex;
-      gap: 0.5rem;
-      align-items: flex-start;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      line-height: 1.45;
-    }
-    .plan-items li::before {
-      content: '✓';
-      color: var(--orange);
-      font-weight: 700;
-      flex-shrink: 0;
-    }
+    .plan.feat .plan-per { color: var(--dark-muted); }
+    .plan-billing { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1.5rem; }
+    .plan.feat .plan-billing { color: var(--dark-muted); }
+    .plan-items { list-style: none; display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 1.75rem; }
+    .plan-items li { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.85rem; color: var(--text-muted); line-height: 1.45; }
+    .plan.feat .plan-items li { color: var(--dark-muted); }
+    .plan-items li::before { content: '✓'; color: var(--green-text); font-weight: 700; flex-shrink: 0; }
+    .plan.feat .plan-items li::before { color: var(--green); }
     .btn-plan {
       display: flex;
       align-items: center;
@@ -721,146 +646,93 @@
       border-radius: var(--r-sm);
       font-weight: 700;
       font-size: 0.88rem;
-      border: 2px solid var(--orange);
+      border: 2px solid var(--green);
       cursor: pointer;
       text-align: center;
       transition: 0.15s;
     }
-    .plan:not(.feat) .btn-plan {
-      background: transparent;
-      color: var(--orange);
-    }
-    .plan:not(.feat) .btn-plan:hover { background: var(--orange-lo); }
-    .plan.feat .btn-plan {
-      background: var(--orange);
-      color: var(--bg);
-    }
-    .plan.feat .btn-plan:hover { opacity: 0.86; }
-    .pricing-note {
-      text-align: center;
-      margin-top: 1.25rem;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-    }
+    .plan:not(.feat) .btn-plan { background: transparent; color: var(--green-text); }
+    .plan:not(.feat) .btn-plan:hover { background: var(--green-lo); }
+    .plan.feat .btn-plan { background: var(--green); color: var(--text); border-color: var(--green); }
+    .plan.feat .btn-plan:hover { background: var(--green-hover); border-color: var(--green-hover); }
+    .pricing-note { text-align: center; margin-top: 1.25rem; font-size: 0.8rem; color: var(--text-muted); }
 
     /* ── FAQ ── */
-    .faq-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.25rem;
-      margin-top: 3rem;
-    }
+    .faq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-top: 3rem; }
     .faq-item {
-      background: var(--surface);
+      background: var(--bg);
       border-radius: var(--r-md);
       border: 1px solid var(--border);
       padding: 1.5rem;
+      box-shadow: 0 2px 8px var(--shadow-card);
     }
-    .faq-q {
-      font-weight: 700;
-      font-size: 0.95rem;
-      color: var(--text);
-      margin-bottom: 0.45rem;
-    }
-    .faq-a {
-      font-size: 0.875rem;
-      line-height: 1.65;
-      color: var(--text-muted);
-      overflow-wrap: break-word;
-    }
-    .faq-a strong { color: var(--orange); font-weight: 600; }
+    .faq-q { font-weight: 700; font-size: 0.95rem; color: var(--text); margin-bottom: 0.45rem; }
+    .faq-a { font-size: 0.875rem; line-height: 1.65; color: var(--text-muted); overflow-wrap: break-word; }
+    .faq-a strong { color: var(--green-text); font-weight: 600; }
 
-    /* ── Final CTA ── */
+    /* ── Final CTA — dark section ── */
     .cta-final {
-      background: var(--orange);
+      background: var(--dark-bg);
       padding: 6.5rem 2rem;
       text-align: center;
     }
-    .cta-final .kicker { color: var(--cta-kicker); }
-    .cta-final .headline { color: var(--bg); }
+    .cta-final .kicker { color: var(--green); }
+    .cta-final .headline { color: var(--dark-text); }
     .cta-final-sub {
       font-size: 1.05rem;
-      color: var(--cta-text);
+      color: var(--dark-muted);
       max-width: 42ch;
       margin: 0 auto 2.5rem;
       line-height: 1.65;
     }
-    .btn-dark {
+    .btn-cta {
       display: inline-flex;
       align-items: center;
-      background: var(--bg);
+      background: var(--green);
       color: var(--text);
       font-weight: 700;
       font-size: 1rem;
       padding: 1rem 2.25rem;
       min-height: 44px;
       border-radius: var(--r-sm);
-      transition: opacity 0.15s, transform 0.1s;
+      transition: background 0.15s, transform 0.1s;
     }
-    .btn-dark:hover { opacity: 0.88; transform: translateY(-1px); }
-    .cta-note-dark {
-      margin-top: 0.9rem;
-      font-size: 0.8rem;
-      color: var(--cta-kicker);
-    }
+    .btn-cta:hover { background: var(--green-hover); transform: translateY(-1px); }
+    .cta-note-dark { margin-top: 0.9rem; font-size: 0.8rem; color: oklch(50% 0.005 145); }
 
     /* ── Footer ── */
     footer {
-      background: var(--phone-bg);
-      border-top: 1px solid var(--border);
+      background: var(--dark-bg);
+      border-top: 1px solid var(--dark-border);
       padding: 2rem;
       text-align: center;
       font-size: 0.78rem;
-      color: var(--text-muted);
+      color: oklch(50% 0.005 145);
     }
-    footer a { color: var(--orange); }
+    footer a { color: var(--green); }
     footer a:hover { text-decoration: underline; }
 
     /* ── Scroll reveal ── */
-    .reveal {
-      opacity: 0;
-      transform: translateY(22px);
-      transition: opacity 0.55s ease, transform 0.55s ease;
-    }
+    .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.55s ease, transform 0.55s ease; }
     .reveal.visible { opacity: 1; transform: none; }
 
     /* ── Responsive: tablet 640px ── */
     @media (max-width: 640px) {
-      .pain-grid,
-      .feature-row,
-      .feature-row.rev {
-        grid-template-columns: 1fr;
-        direction: ltr;
-        gap: 2rem;
-      }
-      .hero-sub { max-width: 100%; }
+      .pain-grid, .feature-row, .feature-row.rev { grid-template-columns: 1fr; direction: ltr; gap: 2rem; }
     }
 
     /* ── Responsive: mobile 860px ── */
     @media (max-width: 860px) {
-      .hero {
-        grid-template-columns: 1fr;
-        padding: 7rem 1.25rem 3.5rem;
-        gap: 2.5rem;
-        text-align: center;
-      }
+      .hero { grid-template-columns: 1fr; padding: 7rem 1.25rem 3.5rem; gap: 2.5rem; text-align: center; }
       .hero-sub { max-width: 100%; }
       .hero-actions { justify-content: center; }
       .hero-trust { justify-content: center; }
       .hero-visual { order: -1; }
       .phone { width: 248px; }
-
-      .pain-grid,
-      .feature-row,
-      .feature-row.rev {
-        grid-template-columns: 1fr;
-        direction: ltr;
-        gap: 2.5rem;
-      }
+      .pain-grid, .feature-row, .feature-row.rev { grid-template-columns: 1fr; direction: ltr; gap: 2.5rem; }
       .how-steps { grid-template-columns: 1fr; }
       .plans { grid-template-columns: 1fr; max-width: 400px; }
       .faq-grid { grid-template-columns: 1fr; }
-
       nav { padding: 0.6rem 1.25rem; }
       .section { padding: 4rem 1.25rem; }
       .nav-logo-text { display: none; }
@@ -875,8 +747,7 @@
 
     @media (prefers-reduced-motion: reduce) {
       .reveal { opacity: 1; transform: none; transition: none; }
-      .btn-primary:hover,
-      .btn-dark:hover { transform: none; }
+      .btn-primary:hover, .btn-cta:hover { transform: none; }
     }
   </style>
 </head>
@@ -885,7 +756,7 @@
 <!-- Nav -->
 <nav aria-label="Principal">
   <a class="nav-logo" href="#" aria-label="Evolution Fit IA — página inicial">
-    <img src="/landing/logo.jpeg" alt="" aria-hidden="true" fetchpriority="high" width="34" height="34">
+    <img src="/landing/logo.jpeg" alt="" aria-hidden="true" fetchpriority="high" width="36" height="36">
     <span class="nav-logo-text">Evolution Fit IA</span>
   </a>
   <a href="#planos" class="nav-cta">Começar agora</a>
@@ -1009,7 +880,6 @@
         <p class="body-text">Sem baixar nenhum app novo. Sem interface complicada. Só você e a IA que age como personal e nutricionista.</p>
       </div>
 
-      <!-- Feature 1 -->
       <div class="feature-row reveal">
         <div>
           <div class="feat-n" aria-hidden="true">01 — Treinos</div>
@@ -1021,32 +891,14 @@
             <div class="wk-title">Treino B — Costas</div>
             <span class="badge-sm">Academia</span>
           </div>
-          <div class="ex-row">
-            <span class="ex-name">Puxada frontal</span>
-            <span class="ex-sets">4 × 10 · 60 kg</span>
-            <span class="ex-pr">PR</span>
-          </div>
-          <div class="ex-row">
-            <span class="ex-name">Remada curvada</span>
-            <span class="ex-sets">4 × 10 · 50 kg</span>
-          </div>
-          <div class="ex-row">
-            <span class="ex-name">Rosca direta</span>
-            <span class="ex-sets">3 × 12 · 30 kg</span>
-          </div>
-          <div class="ex-row">
-            <span class="ex-name">Facepull</span>
-            <span class="ex-sets">3 × 15 · 20 kg</span>
-          </div>
-          <div class="ex-row">
-            <span class="ex-name">Martelo</span>
-            <span class="ex-sets">3 × 12 · 14 kg</span>
-            <span class="ex-pr">+2 kg</span>
-          </div>
+          <div class="ex-row"><span class="ex-name">Puxada frontal</span><span class="ex-sets">4 × 10 · 60 kg</span><span class="ex-pr">PR</span></div>
+          <div class="ex-row"><span class="ex-name">Remada curvada</span><span class="ex-sets">4 × 10 · 50 kg</span></div>
+          <div class="ex-row"><span class="ex-name">Rosca direta</span><span class="ex-sets">3 × 12 · 30 kg</span></div>
+          <div class="ex-row"><span class="ex-name">Facepull</span><span class="ex-sets">3 × 15 · 20 kg</span></div>
+          <div class="ex-row"><span class="ex-name">Martelo</span><span class="ex-sets">3 × 12 · 14 kg</span><span class="ex-pr">+2 kg</span></div>
         </div>
       </div>
 
-      <!-- Feature 2 -->
       <div class="feature-row rev reveal">
         <div>
           <div class="feat-n" aria-hidden="true">02 — Nutrição</div>
@@ -1057,24 +909,14 @@
           <div class="food-photo" aria-hidden="true">🍱</div>
           <p class="food-label">Arroz, feijão, frango grelhado e salada</p>
           <div class="macro-row" aria-hidden="true">
-            <div class="macro-card">
-              <div class="macro-val">523</div>
-              <div class="macro-lbl">Kcal</div>
-            </div>
-            <div class="macro-card">
-              <div class="macro-val">46g</div>
-              <div class="macro-lbl">Proteína</div>
-            </div>
-            <div class="macro-card">
-              <div class="macro-val">52g</div>
-              <div class="macro-lbl">Carbo</div>
-            </div>
+            <div class="macro-card"><div class="macro-val">523</div><div class="macro-lbl">Kcal</div></div>
+            <div class="macro-card"><div class="macro-val">46g</div><div class="macro-lbl">Proteína</div></div>
+            <div class="macro-card"><div class="macro-val">52g</div><div class="macro-lbl">Carbo</div></div>
           </div>
           <div class="food-ok">✓ Refeição registrada. Ótima escolha para emagrecer.</div>
         </div>
       </div>
 
-      <!-- Feature 3 -->
       <div class="feature-row reveal">
         <div>
           <div class="feat-n" aria-hidden="true">03 — Hábitos e evolução</div>
@@ -1085,33 +927,21 @@
           <div class="habit-row">
             <span class="habit-name">Água</span>
             <div class="habit-right">
-              <div class="dots" aria-hidden="true">
-                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-                <div class="dot"></div><div class="dot"></div><div class="dot off"></div>
-                <div class="dot off"></div>
-              </div>
+              <div class="dots" aria-hidden="true"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot off"></div><div class="dot off"></div></div>
               <span class="streak">2,1 L</span>
             </div>
           </div>
           <div class="habit-row">
             <span class="habit-name">Sem cigarro</span>
             <div class="habit-right">
-              <div class="dots" aria-hidden="true">
-                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-                <div class="dot"></div>
-              </div>
+              <div class="dots" aria-hidden="true"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
               <span class="streak">18 dias</span>
             </div>
           </div>
           <div class="habit-row">
             <span class="habit-name">Sem álcool</span>
             <div class="habit-right">
-              <div class="dots" aria-hidden="true">
-                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-                <div class="dot"></div>
-              </div>
+              <div class="dots" aria-hidden="true"><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
               <span class="streak">31 dias</span>
             </div>
           </div>
@@ -1160,12 +990,7 @@
       <div class="plans reveal" style="transition-delay:0.1s">
         <div class="plan">
           <div class="plan-name">Trimestral</div>
-          <div class="plan-price">
-            <span class="plan-cur">R$</span>
-            <span class="plan-amt">29</span>
-            <span class="plan-cents">,99</span>
-            <span class="plan-per">/mês</span>
-          </div>
+          <div class="plan-price"><span class="plan-cur">R$</span><span class="plan-amt">29</span><span class="plan-cents">,99</span><span class="plan-per">/mês</span></div>
           <div class="plan-billing">Cobrado a cada 3 meses</div>
           <ul class="plan-items">
             <li>Treinos personalizados ilimitados</li>
@@ -1180,12 +1005,7 @@
         <div class="plan feat">
           <div class="plan-badge" aria-label="Recomendado">Melhor custo-benefício</div>
           <div class="plan-name">Anual</div>
-          <div class="plan-price">
-            <span class="plan-cur">R$</span>
-            <span class="plan-amt">19</span>
-            <span class="plan-cents">,99</span>
-            <span class="plan-per">/mês</span>
-          </div>
+          <div class="plan-price"><span class="plan-cur">R$</span><span class="plan-amt">19</span><span class="plan-cents">,99</span><span class="plan-per">/mês</span></div>
           <div class="plan-billing">Cobrado uma vez por ano · Economia de R$120</div>
           <ul class="plan-items">
             <li>Tudo do plano trimestral</li>
@@ -1243,7 +1063,7 @@
         <span class="kicker" aria-hidden="true">Comece hoje</span>
         <h2 class="headline" id="cta-heading" style="margin-bottom:1.25rem">Seu personal está<br>esperando no<br>WhatsApp.</h2>
         <p class="cta-final-sub">R$19,99/mês. Sem baixar app. Disponível 24h. Cancele quando quiser.</p>
-        <a href="#planos" class="btn-dark">Quero começar agora</a>
+        <a href="#planos" class="btn-cta">Quero começar agora</a>
         <p class="cta-note-dark">Acesso imediato após a assinatura.</p>
       </div>
     </div>
@@ -1251,7 +1071,6 @@
 
 </main>
 
-<!-- Footer -->
 <footer>
   <p>© 2026 Evolution Fit IA. Feito no Brasil.</p>
   <p style="margin-top:0.5rem"><a href="#">Termos de uso</a> &nbsp;·&nbsp; <a href="#">Privacidade</a></p>
