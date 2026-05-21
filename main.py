@@ -1,9 +1,11 @@
 import logging
+import os
 
 import sqlalchemy
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pythonjsonlogger import jsonlogger
 
@@ -49,6 +51,13 @@ app.include_router(whatsapp.router, prefix="/webhook")
 app.include_router(hotmart.router, prefix="/webhook")
 app.include_router(admin.router, prefix="/admin")
 
+
+@app.get("/landing", include_in_schema=False)
+@app.get("/landing/", include_in_schema=False)
+async def serve_landing():
+    return FileResponse("static/landing/index.html")
+
+
 app.mount("/landing", StaticFiles(directory="static/landing", html=True), name="landing")
 
 
@@ -57,6 +66,11 @@ async def health():
     try:
         with engine.connect() as conn:
             conn.execute(sqlalchemy.text("SELECT 1"))
-        return {"status": "ok", "details": {"database": "ok"}}
+        db_status = "ok"
     except Exception as e:
-        return {"status": "degraded", "details": {"database": str(e)}}
+        db_status = str(e)
+    static_ok = os.path.isfile("static/landing/index.html")
+    return {
+        "status": "ok" if db_status == "ok" else "degraded",
+        "details": {"database": db_status, "landing_page": "ok" if static_ok else "missing"},
+    }
