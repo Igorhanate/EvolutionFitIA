@@ -4,7 +4,7 @@
 
 ## Product Overview
 **One-liner:** Personal trainer e nutricionista com inteligência artificial disponível 24h pelo WhatsApp.
-**What it does:** O Evolution Fit IA entrega treinos e dietas personalizadas, análise de refeições por foto, acompanhamento de evolução e hábitos — tudo pelo WhatsApp, sem baixar nenhum app adicional. A IA opera 24 horas por dia, 7 dias por semana, substituindo consultas presenciais com personal trainer e nutricionista a uma fração do custo.
+**What it does:** O Evolution Fit AI entrega treinos e dietas personalizadas, análise de refeições por foto, acompanhamento de evolução e hábitos — tudo pelo WhatsApp, sem baixar nenhum app adicional. A IA opera 24 horas por dia, 7 dias por semana, substituindo consultas presenciais com personal trainer e nutricionista a uma fração do custo.
 **Product category:** Personal trainer e nutricionista IA / saúde e bem-estar digital
 **Product type:** SaaS (assinatura recorrente via WhatsApp)
 **Business model:** Assinatura mensal com planos trimestrais e anuais. Plataforma de vendas: Cakto.

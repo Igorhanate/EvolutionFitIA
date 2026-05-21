@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Evolution Fit IA",
+    title="Evolution Fit AI",
     description="SaaS fitness no WhatsApp com IA",
     version="1.0.0",
     lifespan=lifespan,

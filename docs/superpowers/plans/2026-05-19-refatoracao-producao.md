@@ -267,7 +267,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Evolution Fit IA",
+    title="Evolution Fit AI",
     description="SaaS fitness no WhatsApp com IA",
     version="1.0.0",
     lifespan=lifespan,
@@ -624,7 +624,7 @@ async def send_message(phone: str, text: str) -> None:
 
 async def send_no_subscription_message(phone: str) -> None:
     text = (
-        "Olá! Para acessar o *Evolution Fit IA*, você precisa de uma assinatura ativa.\n\n"
+        "Olá! Para acessar o *Evolution Fit AI*, você precisa de uma assinatura ativa.\n\n"
         "Escolha seu plano:\n\n"
         f"*Trimestral* — R$ 39,99 (3 meses)\n{settings.PAYMENT_LINK_TRIMESTRAL}\n\n"
         f"*Anual* — R$ 29,99/mês (12 meses)\n{settings.PAYMENT_LINK_ANUAL}\n\n"
@@ -636,7 +636,7 @@ async def send_no_subscription_message(phone: str) -> None:
 async def send_welcome_message(phone: str, nome: str | None) -> None:
     primeiro_nome = (nome or "").split()[0] if nome else "você"
     text = (
-        f"Olá, *{primeiro_nome}*! Bem-vindo(a) ao *Evolution Fit IA*! 💪\n\n"
+        f"Olá, *{primeiro_nome}*! Bem-vindo(a) ao *Evolution Fit AI*! 💪\n\n"
         "Sua assinatura foi ativada com sucesso.\n\n"
         "Sou o *Evo*, seu personal trainer e nutricionista virtual.\n\n"
         "Me conta: qual é o seu *objetivo principal*?\n"
