@@ -1,12 +1,10 @@
+import os
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.config import settings
 from app.database import Base
-
-# Registra todos os models
 import app.models  # noqa: F401
 
 config = context.config
@@ -14,8 +12,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Sobrescreve a URL do alembic.ini com a variável de ambiente
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Migrations only need DATABASE_URL — avoid importing full Settings which
+# requires META_*, Hotmart, etc. vars that may not be set during migration runs.
+database_url = os.environ.get("DATABASE_URL", "driver://user:pass@localhost/dbname")
+config.set_main_option("sqlalchemy.url", database_url)
 
 target_metadata = Base.metadata
 
