@@ -243,6 +243,25 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 
 ---
 
+## Status atual (2026-05-21)
+
+### ✅ Concluído
+- Migração completa de Evolution API → Meta Cloud API
+- Webhook configurado e testado: `POST /webhook/whatsapp` recebe eventos da Meta corretamente
+- Deploy no Render estável (commit `bcc5be0`)
+- App Meta: **Evolution Fit Ai** (ID `2038319580456035`)
+- WABA ID: `1518787246362458` — subscrita ao app
+- Webhook URL: `https://evolutionfit-api.onrender.com/webhook/whatsapp`
+- Token de verificação: `evfit-webhook-verify-2026`
+
+### ⚠️ Pendente para ir ao ar
+1. **Número definitivo:** comprar chip novo (~R$10), não instalar WhatsApp, adicionar no painel Meta → WhatsApp → Gerenciamento de números → atualizar `META_PHONE_NUMBER_ID` no Render
+2. **Token Meta permanente:** o `META_ACCESS_TOKEN` atual expira em ~24h — gerar token permanente via Meta for Developers → Configurações do app → Usuários do sistema → Gerar token (escopos: `whatsapp_business_messaging`, `whatsapp_business_management`)
+3. **Variáveis Hotmart:** configurar antes de ativar vendas
+4. **OpenAI API Key:** necessário para transcrição de áudio
+
+---
+
 ## Infraestrutura
 
 - **FastAPI:** Render (free tier, Docker). `alembic upgrade head` no startup. Push em `master` dispara deploy automático.
@@ -250,16 +269,18 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 - **Banco:** PostgreSQL no Render (free tier).
 - **Scheduler:** APScheduler in-process (sem Redis). No Render free tier pode ter cold start — o lembrete de 20h pode ser perdido se o serviço estiver dormindo.
 
+**Nota sobre migrations:** `alembic/env.py` e `app/database.py` leem `DATABASE_URL` diretamente de `os.environ` (via `load_dotenv`) sem importar o `Settings` completo. Isso permite que `alembic upgrade head` rode no startup sem exigir todas as variáveis da aplicação.
+
 ## Variáveis de ambiente no Render
 
 | Variável | Status |
 |----------|--------|
-| `DATABASE_URL` | ✅ configurada |
+| `DATABASE_URL` | ✅ configurada (fromDatabase) |
 | `ANTHROPIC_API_KEY` | ✅ configurada |
-| `META_PHONE_NUMBER_ID` | ⚠️ **pendente** — preencher após criar número na Meta |
-| `META_ACCESS_TOKEN` | ⚠️ **pendente** — token permanente do sistema |
-| `META_WEBHOOK_VERIFY_TOKEN` | ⚠️ **pendente** — token livre que você define |
-| `META_APP_SECRET` | ⚠️ **pendente** — App Secret do painel Meta |
+| `META_PHONE_NUMBER_ID` | ⚠️ número de teste — atualizar com chip definitivo |
+| `META_ACCESS_TOKEN` | ⚠️ expira em ~24h — gerar token permanente |
+| `META_WEBHOOK_VERIFY_TOKEN` | ✅ configurada (`evfit-webhook-verify-2026`) |
+| `META_APP_SECRET` | ✅ configurada |
 | `ADMIN_API_KEY` | ✅ configurada |
 | `OPENAI_API_KEY` | ⚠️ pendente — necessário para transcrição de áudio |
 | `HOTMART_WEBHOOK_SECRET` | ⚠️ pendente — configurar antes de ativar vendas |
