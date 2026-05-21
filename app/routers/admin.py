@@ -1,8 +1,11 @@
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.middleware.auth import require_admin_key
+from app.models.assinatura import Assinatura
 from app.models.conversa import Conversa
 from app.models.dieta import Dieta
 from app.models.foto_composicao import FotoComposicao
@@ -193,6 +196,43 @@ def get_fotos(user_id: int, db: Session = Depends(get_db)):
         }
         for f in fotos
     ]
+
+
+@router.post("/subscriptions/grant", summary="Concede assinatura manual a um número")
+def grant_subscription(
+    telefone: str = Query(..., description="Número no formato 5511999999999"),
+    plano: str = Query("anual", description="trimestral ou anual"),
+    dias: int = Query(365, description="Duração em dias"),
+    db: Session = Depends(get_db),
+):
+    if plano not in ("trimestral", "anual"):
+        raise HTTPException(status_code=400, detail="plano deve ser 'trimestral' ou 'anual'")
+    user = db.query(Usuario).filter(Usuario.telefone == telefone).first()
+    if not user:
+        user = Usuario(telefone=telefone)
+        db.add(user)
+        db.flush()
+    hoje = date.today()
+    sub = Assinatura(
+        user_id=user.id,
+        plano=plano,
+        data_inicio=hoje,
+        data_fim=hoje + timedelta(days=dias),
+        status="ativo",
+        hotmart_transaction_id=f"manual-{telefone}-{hoje}",
+    )
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+    return {
+        "ok": True,
+        "user_id": user.id,
+        "telefone": user.telefone,
+        "plano": sub.plano,
+        "data_inicio": sub.data_inicio.isoformat(),
+        "data_fim": sub.data_fim.isoformat(),
+        "status": sub.status,
+    }
 
 
 def _get_user_or_404(user_id: int, db: Session) -> Usuario:
