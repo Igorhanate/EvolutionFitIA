@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.schemas.whatsapp import MetaWebhookPayload
-from app.services import audio_service, claude_service, media_service, subscription_service, whatsapp_service
+from app.services import claude_service, media_service, subscription_service, whatsapp_service
 
 logger = logging.getLogger(__name__)
 
@@ -76,16 +76,12 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
                     image_b64 = base64.b64encode(raw_bytes).decode()
 
         elif payload.is_audio():
-            media_id = payload.get_audio_id()
-            if media_id:
-                result = await media_service.get_media_bytes(media_id)
-                if result:
-                    raw_bytes, audio_mimetype = result
-                    audio_transcricao = await audio_service.transcrever_audio(raw_bytes, audio_mimetype)
-            if audio_transcricao:
-                text = audio_transcricao
-            else:
-                logger.warning("audio_transcription_failed", extra={"phone": phone})
+            await whatsapp_service.send_message(
+                phone,
+                "No momento processo apenas mensagens de *texto* e *fotos*. 📝📷\n\n"
+                "Em breve a funcionalidade de áudio estará disponível! 🎤",
+            )
+            return {"status": "ok"}
 
         if not text and not image_b64:
             return {"status": "ignored"}
