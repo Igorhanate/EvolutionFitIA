@@ -95,7 +95,7 @@ def gerar_card_evolucao(
     ax_h.axis("off")
 
     primeiro = (user_nome or "").split()[0] if user_nome else "Atleta"
-    ax_h.text(0.0, 0.80, "EVOLUTION FIT IA",
+    ax_h.text(0.0, 0.80, "EVOLUTION FIT AI",
               transform=ax_h.transAxes, fontsize=15, fontweight="bold",
               color=_ACCENT, va="center", ha="left")
     ax_h.text(0.0, 0.18, f"Evolução de Desempenho — {primeiro}",

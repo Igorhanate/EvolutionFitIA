@@ -158,7 +158,7 @@ CONFIRMACAO_SIM = {"sim", "s", "yes", "confirmo", "pode", "ok", "isso", "certeza
 CONFIRMACAO_NAO = {"não", "nao", "n", "no", "cancela", "cancelar", "errei", "errado", "errada", "equivocado"}
 
 MENU_TEXT = (
-    "🏋️ *EVOLUTION FIT IA — Menu Principal*\n\n"
+    "🏋️ *EVOLUTION FIT AI — Menu Principal*\n\n"
     "O que você quer fazer hoje?\n\n"
     "*1.* Criar treino personalizado\n"
     "*2.* Criar dieta personalizada\n"

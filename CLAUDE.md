@@ -246,21 +246,24 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 ## Status atual (2026-05-21)
 
 ### ✅ Concluído
-- Migração completa de Evolution API → Meta Cloud API
-- Webhook configurado e testado: `POST /webhook/whatsapp` recebe eventos da Meta corretamente
-- Deploy no Render estável
-- App Meta: **Evolution Fit Ai** (ID `2038319580456035`)
+- Bot **respondendo no WhatsApp via Meta Cloud API** — funcionando em produção
+- Número definitivo **+55 11 5304-3378** (ID `1191798997340349`) conectado e funcionando
+- Webhook configurado e assinado: `POST /webhook/whatsapp` recebe eventos da Meta corretamente
+- App Meta: **Evolution Fit AI** (ID `2038319580456035`)
 - WABA ID: `1518787246362458` — subscrita ao app
 - Webhook URL: `https://evolutionfit-api.onrender.com/webhook/whatsapp`
 - Token de verificação: `evfit-webhook-verify-2026`
-- **Token Meta permanente configurado** no Render (`META_ACCESS_TOKEN`) — não expira
-- **Áudio desativado temporariamente** — responde educadamente que só processa texto e fotos; reativar quando `OPENAI_API_KEY` for configurada
+- Token Meta permanente configurado no Render (`META_ACCESS_TOKEN`) — não expira
+- Landing page no ar: `https://evolutionfit-api.onrender.com/landing`
+- Nome do produto atualizado para **Evolution Fit AI** em todos os arquivos
+- Endpoint admin `POST /admin/subscriptions/grant` para ativar assinaturas manualmente
+- **Áudio desativado temporariamente** — responde que só processa texto e fotos; reativar quando `OPENAI_API_KEY` for configurada
+- **Twilio:** conta a ser cancelada — não será mais utilizada (substituída pela Meta Cloud API)
 
-### ⚠️ Pendente para ir ao ar
-1. **Número definitivo:** número Twilio aguardando aprovação — quando aprovado, atualizar `META_PHONE_NUMBER_ID` no Render
-2. **Plataforma de vendas (Cakto):** Hotmart substituída pela Cakto — próximo passo é criar landing page para cadastrar produto na Cakto e configurar webhook de pagamento
-3. **Variáveis Cakto no Render:** substituir as vars `HOTMART_*` por equivalentes da Cakto após integração
-4. **OpenAI API Key:** necessário para reativar transcrição de áudio
+### ⚠️ Pendente
+1. **Plataforma de vendas (Cakto):** configurar produto na Cakto e webhook de pagamento; substituir vars `HOTMART_*` por equivalentes Cakto no Render
+2. **Links de pagamento:** atualizar `PAYMENT_LINK_TRIMESTRAL` e `PAYMENT_LINK_ANUAL` com links reais da Cakto
+3. **OpenAI API Key:** necessário para reativar transcrição de áudio
 
 ---
 
@@ -279,15 +282,15 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 |----------|--------|
 | `DATABASE_URL` | ✅ configurada (fromDatabase) |
 | `ANTHROPIC_API_KEY` | ✅ configurada |
-| `META_PHONE_NUMBER_ID` | ⚠️ número de teste — atualizar quando Twilio for aprovado |
+| `META_PHONE_NUMBER_ID` | ✅ `1191798997340349` — número definitivo +55 11 5304-3378 |
 | `META_ACCESS_TOKEN` | ✅ token permanente configurado |
 | `META_WEBHOOK_VERIFY_TOKEN` | ✅ configurada (`evfit-webhook-verify-2026`) |
 | `META_APP_SECRET` | ✅ configurada |
 | `ADMIN_API_KEY` | ✅ configurada |
 | `OPENAI_API_KEY` | ⚠️ pendente — necessário para reativar transcrição de áudio |
-| `HOTMART_WEBHOOK_SECRET` | ⚠️ substituir por Cakto — remover após integração |
-| `HOTMART_OFFER_ID_*` | ⚠️ substituir por Cakto |
-| `PAYMENT_LINK_*` | ⚠️ atualizar com links da Cakto |
+| `HOTMART_WEBHOOK_SECRET` | ⚠️ pendente — substituir por Cakto |
+| `HOTMART_OFFER_ID_*` | ⚠️ pendente — substituir por Cakto |
+| `PAYMENT_LINK_*` | ⚠️ pendente — atualizar com links reais da Cakto |
 
 ## Logs
 
