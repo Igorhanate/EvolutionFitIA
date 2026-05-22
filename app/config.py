@@ -18,12 +18,14 @@ class Settings(BaseSettings):
 
     ADMIN_API_KEY: str
 
-    HOTMART_WEBHOOK_SECRET: str
-    HOTMART_OFFER_ID_TRIMESTRAL: str
-    HOTMART_OFFER_ID_ANUAL: str
+    KIWIFY_WEBHOOK_TOKEN: str = ""
 
-    PAYMENT_LINK_TRIMESTRAL: str
-    PAYMENT_LINK_ANUAL: str
+    HOTMART_WEBHOOK_SECRET: str = ""
+    HOTMART_OFFER_ID_TRIMESTRAL: str = ""
+    HOTMART_OFFER_ID_ANUAL: str = ""
+
+    PAYMENT_LINK_TRIMESTRAL: str = ""
+    PAYMENT_LINK_ANUAL: str = ""
 
     ALLOWED_ORIGINS: str = "https://evolutionfit-api.onrender.com"
 

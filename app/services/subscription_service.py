@@ -110,6 +110,22 @@ def activate_subscription(
     return user
 
 
+def cancel_subscription_by_phone(phone: str, db: Session) -> None:
+    telefone = normalize_phone(phone)
+    user = db.query(Usuario).filter(Usuario.telefone == telefone).first()
+    if not user:
+        return
+    today = date.today()
+    subs = (
+        db.query(Assinatura)
+        .filter(Assinatura.user_id == user.id, Assinatura.status == "ativo", Assinatura.data_fim >= today)
+        .all()
+    )
+    for sub in subs:
+        sub.status = "cancelado"
+    db.commit()
+
+
 def validate_hotmart_webhook(body: bytes, token_header: str | None) -> bool:
     if not token_header:
         return False

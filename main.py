@@ -11,7 +11,7 @@ from pythonjsonlogger import jsonlogger
 
 from app.config import settings
 from app.database import engine
-from app.routers import admin, hotmart, whatsapp
+from app.routers import admin, hotmart, kiwify, whatsapp
 
 
 def _setup_logging() -> None:
@@ -49,6 +49,7 @@ app.add_middleware(
 
 app.include_router(whatsapp.router, prefix="/webhook")
 app.include_router(hotmart.router, prefix="/webhook")
+app.include_router(kiwify.router, prefix="/webhook")
 app.include_router(admin.router, prefix="/admin")
 
 
