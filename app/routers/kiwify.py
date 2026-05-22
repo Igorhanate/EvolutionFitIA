@@ -69,7 +69,7 @@ async def kiwify_webhook(
     order_status = data.get("order_status") or data.get("status") or ""
 
     # Compra aprovada ou renovação de assinatura
-    if order_status in ("paid", "complete", "approved") or order_status == "":
+    if order_status in ("paid", "complete", "approved"):
         try:
             phone, nome, email, order_id = _extract_fields(data)
 
