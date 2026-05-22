@@ -23,7 +23,12 @@ PLAN_DURATIONS: dict[str, int] = {
 
 
 def normalize_phone(phone: str) -> str:
-    return "".join(filter(str.isdigit, phone))
+    digits = "".join(filter(str.isdigit, phone))
+    # Celular brasileiro sem o nono dígito: 55 + DDD (2 dig) + 8 dig começando em 6-9 = 12 dig.
+    # Kiwify às vezes omite o 9; WhatsApp sempre envia com 9. Canoniza para 13 dígitos.
+    if len(digits) == 12 and digits.startswith("55") and digits[4] in "6789":
+        digits = digits[:4] + "9" + digits[4:]
+    return digits
 
 
 def get_or_create_user(telefone: str, db: Session) -> Usuario:
