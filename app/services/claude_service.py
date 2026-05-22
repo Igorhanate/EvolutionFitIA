@@ -1220,7 +1220,7 @@ async def process_message(
 
     # 0. /menu command and menu item selection (intercept before everything else)
     stripped = message_text.strip()
-    if stripped.lower() == "/menu":
+    if stripped.lower() in ("/menu", "#menu"):
         conversa.estado_pendente = {"tipo": "aguardando_menu"}
         db.add(conversa)
         db.commit()
