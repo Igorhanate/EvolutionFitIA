@@ -49,6 +49,8 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
         logger.warning("invalid_webhook_json")
         return {"status": "rejected"}
 
+    logger.info("webhook_raw_payload", extra={"payload": body})  # TEMP: diagnóstico
+
     try:
         payload = MetaWebhookPayload(**body)
 
