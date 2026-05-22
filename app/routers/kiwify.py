@@ -48,6 +48,7 @@ async def kiwify_webhook(
     db: Session = Depends(get_db),
 ):
     body = await request.body()
+    logger.info("kiwify_raw_payload", extra={"payload": body.decode("utf-8", errors="replace"), "plano": plano})  # TEMP: diagnóstico
 
     if not _validate_token(token, plano):
         logger.warning("Webhook Kiwify com token inválido")
