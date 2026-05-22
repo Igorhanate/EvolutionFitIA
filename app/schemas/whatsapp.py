@@ -20,6 +20,12 @@ class MetaMediaContent(BaseModel):
     caption: str | None = None
 
 
+class MetaDocumentContent(BaseModel):
+    id: str | None = None
+    mime_type: str | None = None
+    filename: str | None = None
+
+
 class MetaMessage(BaseModel):
     model_config = {"populate_by_name": True}
 
@@ -30,6 +36,7 @@ class MetaMessage(BaseModel):
     text: MetaTextContent | None = None
     image: MetaMediaContent | None = None
     audio: MetaMediaContent | None = None
+    document: MetaDocumentContent | None = None
 
 
 class MetaValue(BaseModel):
@@ -124,3 +131,23 @@ class MetaWebhookPayload(BaseModel):
         if msg and msg.audio and msg.audio.mime_type:
             return msg.audio.mime_type
         return "audio/ogg; codecs=opus"
+
+    def is_document(self) -> bool:
+        msg = self._get_message()
+        return bool(msg and msg.type == "document")
+
+    def get_document_id(self) -> str | None:
+        msg = self._get_message()
+        return msg.document.id if msg and msg.document else None
+
+    def get_document_filename(self) -> str:
+        msg = self._get_message()
+        if msg and msg.document and msg.document.filename:
+            return msg.document.filename
+        return "arquivo"
+
+    def get_document_mimetype(self) -> str:
+        msg = self._get_message()
+        if msg and msg.document and msg.document.mime_type:
+            return msg.document.mime_type
+        return "application/octet-stream"

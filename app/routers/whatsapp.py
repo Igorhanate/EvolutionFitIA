@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.schemas.whatsapp import MetaWebhookPayload
-from app.services import claude_service, media_service, subscription_service, whatsapp_service
+from app.services import claude_service, file_reader, media_service, subscription_service, whatsapp_service
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,29 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
                 "Em breve a funcionalidade de áudio estará disponível! 🎤",
             )
             return {"status": "ok"}
+
+        elif payload.is_document():
+            media_id = payload.get_document_id()
+            doc_mimetype = payload.get_document_mimetype()
+            doc_filename = payload.get_document_filename()
+            if media_id:
+                result = await media_service.get_media_bytes(media_id)
+                if result:
+                    raw_bytes, _ = result
+                    extracted = file_reader.extrair_texto(raw_bytes, doc_mimetype, doc_filename)
+                    if extracted:
+                        text = f"[Arquivo recebido: {doc_filename}]\n\n{extracted}"
+                        logger.info(
+                            "document_extracted",
+                            extra={"phone": phone, "filename": doc_filename, "chars": len(extracted)},
+                        )
+                    else:
+                        await whatsapp_service.send_message(
+                            phone,
+                            f"Recebi o arquivo *{doc_filename}*, mas não consigo ler esse tipo de documento. 📄\n\n"
+                            "Envie em formato *PDF* ou *Excel (.xlsx)*.",
+                        )
+                        return {"status": "ok"}
 
         if not text and not image_b64:
             return {"status": "ignored"}

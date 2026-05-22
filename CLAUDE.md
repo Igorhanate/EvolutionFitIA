@@ -44,6 +44,7 @@ POST /webhook/whatsapp
   → check_active_subscription()
   → [se áudio] responde "só texto e fotos por enquanto" e retorna (transcrição desativada)
   → [se imagem] media_service.get_media_bytes(media_id) → image_b64
+  → [se documento Excel/PDF] media_service.get_media_bytes(media_id) → file_reader.extrair_texto() → injeta em text com prefixo "[Arquivo recebido: NOME]"
   → claude_service.process_message()
   → whatsapp_service.send_message()
 ```
@@ -71,7 +72,7 @@ Todos os handlers retornam HTTP 200 mesmo em erro (sem retentativas da Meta).
 }
 ```
 
-Tipos suportados: `text`, `image`, `audio`. Status updates (sem `messages[]`) são ignorados via `is_message_event()`.
+Tipos suportados: `text`, `image`, `audio`, `document`. Status updates (sem `messages[]`) são ignorados via `is_message_event()`.
 
 ### Fluxo Hotmart (compra aprovada)
 
@@ -99,7 +100,7 @@ Deduplicação por `hotmart_transaction_id`.
 | `confirmar_exercicio` | Variação de carga >20% aguarda confirmação |
 | `confirmar_refeicao` | Análise de foto de alimento aguarda "sim/não" |
 | `coleta_fotos` | Coleta de 3 fotos para análise corporal em andamento |
-| `aguardando_menu` | Usuário chamou /menu, aguarda número 1–11 |
+| `aguardando_menu` | Usuário chamou /menu, aguarda número 1–12 |
 
 ### Ferramentas Claude (TOOLS — 13 tools)
 
@@ -113,16 +114,24 @@ Deduplicação por `hotmart_transaction_id`.
 | `cadastrar_treino_proprio` | Salva treino externo como Treino (`origem: "proprio"`) |
 | `iniciar_coleta_fotos_corpo` | Inicia fluxo de coleta de 3 fotos |
 | `registrar_agua` | Acumula consumo de água do dia (ml) |
-| `registrar_habito_fumar` | Registra fumou/não-fumou; mantém streak |
-| `registrar_habito_alcool` | Registra bebeu/não-bebeu álcool; mantém streak |
+| `registrar_habito_fumar` | Registra fumou/não-fumou; mantém contador de dias sem fumar |
+| `registrar_habito_alcool` | Registra bebeu/não-bebeu álcool; mantém contador de dias sem beber |
 | `registrar_tomei_suplementos` | Marca suplementos como tomados no dia |
 | `registrar_suplementos_usuario` | Salva lista de suplementos para personalizar lembretes |
 | `TOOLS_ANALISE_CORPO` | Subset com só `registrar_analise_foto` — usado na chamada de 3 fotos |
 
 ### /menu command
 
-`/menu` → lista 11 opções → usuário responde número → ação. Item 6 gera PNG e envia via `send_image`.  
-O menu mostra contadores de hábitos do dia no rodapé quando há dados (água, streaks, suplementos).
+`/menu` → lista 12 opções em 4 categorias (Treino, Nutrição, Medidas & Corpo, Hábitos Diários) → usuário responde número → ação. Item 10 gera PNG e envia via `send_image`.  
+O menu mostra contadores de hábitos do dia no rodapé quando há dados (água, dias sem fumar/beber, suplementos).
+
+**Opções do menu:**
+- **Treino:** 1 Criar treino personalizado · 2 Cadastrar treino do personal · 3 Registrar cargas/séries · 4 Evolução de força (1RM)
+- **Nutrição:** 5 Criar dieta personalizada · 6 Cadastrar dieta do nutricionista · 7 Analisar refeição por foto
+- **Medidas & Corpo:** 8 Registrar peso e medidas · 9 Análise de composição corporal (fotos) · 10 Painel de evolução 📊
+- **Hábitos Diários:** 11 Registrar água e suplementos · 12 Acompanhar dias sem álcool / sem fumar
+
+**Tipos de treino suportados (item 1 e `cadastrar_treino_proprio`):** musculação/academia, calistenia, yoga, pilates, corrida/endurance, treino híbrido, treino funcional, CrossFit, mobilidade — adapta exercícios e equipamentos ao tipo e local informados (nem todo treino é em academia).
 
 ### Fluxo de imagens
 
@@ -140,6 +149,22 @@ O menu mostra contadores de hábitos do dia no rodapé quando há dados (água, 
 - Bot envia `🎤 _Áudio transcrito:_ "..."` antes de responder
 - Texto transcrito entra no fluxo normal (tools, menu, confirmações, etc.)
 - `OPENAI_API_KEY` vazia → áudio ignorado silenciosamente
+
+### Fluxo de documentos (Excel / PDF)
+
+- `payload.is_document()` detecta `type == "document"` no payload Meta
+- Download via `media_service.get_media_bytes(media_id)` (mesmo mecanismo das imagens)
+- Extração de texto: `file_reader.extrair_texto(bytes, mimetype, filename)` — roteia para `ler_excel` ou `ler_pdf`
+  - **Excel (.xlsx / .xls):** `pandas.ExcelFile` com engine `openpyxl`; itera abas, serializa como texto tabular
+  - **PDF:** `pypdf.PdfReader`; extrai texto página a página
+  - **Imagens enviadas como documento:** não extraídas aqui — devem ser enviadas como tipo `image` para usar Claude Vision
+- Texto extraído é injetado em `text` com prefixo `[Arquivo recebido: NOME]\n\n<conteúdo>`
+- O fluxo normal de `process_message` processa o texto: Claude detecta treino/dieta externa e chama `cadastrar_treino_proprio` / `cadastrar_dieta_propria`
+- Formato não suportado → mensagem orientando o usuário a usar PDF ou Excel
+
+### Criação de dieta — dados de composição corporal
+
+Ao criar dieta (item 5 ou via chat), o Evo solicita ativamente medidas corporais (cintura, quadril, braço, coxa) e análise de composição corporal estimada por foto (% gordura). Esses dados são **opcionais**, mas aumentam a precisão do cálculo de calorias e macros — o peso isolado não distingue massa magra de gordura. Se o usuário já tiver medidas ou fotos de composição no contexto, o Evo usa esses valores automaticamente.
 
 ---
 
@@ -193,7 +218,7 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 |----------|---------|-----------|
 | `GET /` | `main.py` | Health check (banco) |
 | `GET /webhook/whatsapp` | `app/routers/whatsapp.py` | Verificação do webhook Meta (hub.challenge) |
-| `POST /webhook/whatsapp` | `app/routers/whatsapp.py` | Mensagens WhatsApp (texto, imagem, áudio) |
+| `POST /webhook/whatsapp` | `app/routers/whatsapp.py` | Mensagens WhatsApp (texto, imagem, áudio, documento Excel/PDF) |
 | `POST /webhook/hotmart` | `app/routers/hotmart.py` | Compras aprovadas |
 | `GET /admin/users` | `app/routers/admin.py` | Lista usuários — `X-Admin-Key` |
 | `GET /admin/users/{id}/treinos\|dietas\|conversa` | admin | Histórico |
@@ -217,6 +242,7 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `habito_service.py` | Água, streaks fumar/álcool, suplementos, contexto de hábitos |
 | `scheduler_service.py` | APScheduler — lembrete de suplementação às 20h |
 | `audio_service.py` | Transcrição via OpenAI Whisper |
+| `file_reader.py` | Extração de texto de Excel (.xlsx/.xls) e PDF enviados pelo usuário |
 | `media_service.py` | Download de mídia via Meta Cloud API (GET graph.facebook.com/{media_id}) |
 | `card_service.py` | Geração de PNG dark-theme (matplotlib) para item 6 do menu |
 | `whatsapp_service.py` | Envio de texto e imagem via Meta Cloud API (retry 3x) |

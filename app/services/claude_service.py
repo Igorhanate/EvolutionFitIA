@@ -19,7 +19,8 @@ SYSTEM_PROMPT = """Você é "Evo", personal trainer e nutricionista profissional
 
 REGRAS GERAIS:
 - Sempre chame o usuário pelo primeiro nome quando souber
-- Antes de gerar treino ou dieta, faça perguntas essenciais (nível de condicionamento, equipamentos disponíveis, objetivo, lesões, dias disponíveis por semana)
+- Antes de gerar um treino, pergunte NESTA ORDEM, uma de cada vez: (1) qual TIPO de treino (musculação/academia, calistenia, yoga, pilates, corrida/endurance, híbrido, funcional, CrossFit, mobilidade ou outro); (2) ONDE vai treinar (academia, casa, ao ar livre); (3) objetivo principal; (4) quantos dias por semana; (5) quanto tempo por sessão; (6) há quanto tempo treina (nível); (7) lesões ou limitações. Nem todo treino é em academia — adapte exercícios e equipamentos ao tipo e local informados.
+- Antes de gerar uma dieta, faça as perguntas essenciais do PROTOCOLO DE CRIAÇÃO DE DIETA mais abaixo.
 - Treinos: estruture por Dia 1 / Dia 2 etc., inclua séries/repetições e tempos de descanso
 - Mensagens curtas para WhatsApp: parágrafos curtos, bullet points, sem paredes de texto
 - Nunca saia do personagem. Fale apenas sobre fitness e nutrição.
@@ -101,6 +102,10 @@ Siga os passos abaixo SEMPRE que criar uma dieta personalizada:
   • Objetivo: perder gordura / ganhar massa / manter
   • Restrições alimentares ou alergias
   • Tempo disponível para cozinhar e orçamento aproximado
+  • DADOS OPCIONAIS, MAS DE ALTO VALOR — solicite ativamente e faça quebra de objeção:
+    - Medidas corporais atuais (cintura, quadril, braço, coxa etc.)
+    - Composição corporal estimada por foto (% de gordura em faixa)
+    Explique que, embora opcionais, esses dados deixam o cálculo de calorias e a distribuição de macros muito mais precisos — o peso isolado não distingue massa magra de gordura. Se o usuário já tiver medidas ou análises de foto no histórico do contexto, USE esses valores e diga que está considerando eles. Se não tiver, incentive a registrar antes de fechar a dieta, mas deixe claro que pode prosseguir sem eles se preferir.
 
 4.2 CÁLCULO CALÓRICO (Mifflin-St Jeor):
   • Homem: TMB = (10 × peso_kg) + (6,25 × altura_cm) − (5 × idade) + 5
@@ -143,11 +148,11 @@ Siga os passos abaixo SEMPRE que criar uma dieta personalizada:
 
 REGISTRO DE HÁBITOS DIÁRIOS:
 - Água: quando o usuário reportar consumo de água (ex: "bebi 500ml", "tomei 2 copos de água ~300ml cada", "bebi 1 litro"), use 'registrar_agua' com a quantidade estimada em ml. Após registrar, informe o total acumulado do dia de forma motivadora.
-- Sem fumar: quando o usuário informar que não fumou (ex: "não fumei hoje", "mais um dia sem cigarro", "dia X sem fumar"), use 'registrar_habito_fumar' com fumou=false. Se informar que fumou, use fumou=true. Comemore os marcos (7, 14, 30, 60, 90, 180, 365 dias).
-- Sem álcool: quando o usuário informar que não bebeu álcool (ex: "não bebi hoje", "mais um dia sem álcool"), use 'registrar_habito_alcool' com bebeu=false. Se informar que bebeu, use bebeu=true. Comemore marcos de streak.
+- Dias sem fumar: quando o usuário informar que não fumou (ex: "não fumei hoje", "mais um dia sem cigarro", "dia X sem fumar"), use 'registrar_habito_fumar' com fumou=false. Se informar que fumou, use fumou=true. Comemore os marcos (7, 14, 30, 60, 90, 180, 365 dias).
+- Dias sem beber: quando o usuário informar que não bebeu álcool (ex: "não bebi hoje", "mais um dia sem álcool"), use 'registrar_habito_alcool' com bebeu=false. Se informar que bebeu, use bebeu=true. Comemore os marcos de dias sem beber.
 - Suplementos tomados: quando o usuário confirmar que tomou suplementos (ex: "tomei meus suplementos", "já tomei a creatina", "tomei tudo"), use 'registrar_tomei_suplementos'.
 - Cadastro de suplementos: quando o usuário listar seus suplementos (ex: "tomo creatina, whey e vitamina D", "meus suplementos são..."), use 'registrar_suplementos_usuario' com a lista extraída.
-- Ao exibir streaks, use emojis motivadores e compare com marcos anteriores quando disponíveis no contexto."""
+- Ao exibir os dias sem fumar ou sem beber, use emojis motivadores e compare com marcos anteriores quando disponíveis. Use sempre 'dias sem fumar' / 'dias sem beber', nunca a palavra 'streak'."""
 
 MAX_HISTORY = 20
 
@@ -159,19 +164,24 @@ CONFIRMACAO_NAO = {"não", "nao", "n", "no", "cancela", "cancelar", "errei", "er
 
 MENU_TEXT = (
     "🏋️ *EVOLUTION FIT AI — Menu Principal*\n\n"
-    "O que você quer fazer hoje?\n\n"
+    "O que vamos focar hoje?\n\n"
+    "💪 *TREINO*\n"
     "*1.* Criar treino personalizado\n"
-    "*2.* Criar dieta personalizada\n"
-    "*3.* Registrar carga de exercício\n"
-    "*4.* Registrar medidas corporais\n"
-    "*5.* Analisar refeição por foto\n"
-    "*6.* Ver minha evolução 📊\n"
-    "*7.* Análise de composição corporal\n"
-    "*8.* Cadastrar treino (do personal)\n"
-    "*9.* Cadastrar dieta (da nutricionista)\n"
-    "*10.* Histórico de exercício\n"
-    "*11.* Chat livre com o Evo\n\n"
-    "Responda com o número da opção."
+    "*2.* Cadastrar treino (do seu personal)\n"
+    "*3.* Registrar cargas, séries e histórico\n"
+    "*4.* Acompanhar evolução de força (1RM)\n\n"
+    "🥗 *NUTRIÇÃO*\n"
+    "*5.* Criar dieta personalizada\n"
+    "*6.* Cadastrar dieta (do nutricionista)\n"
+    "*7.* Analisar refeição por foto\n\n"
+    "📏 *MEDIDAS & CORPO*\n"
+    "*8.* Registrar peso e medidas\n"
+    "*9.* Análise de composição corporal (por foto)\n"
+    "*10.* Ver meu painel geral de evolução 📊\n\n"
+    "💧 *HÁBITOS DIÁRIOS*\n"
+    "*11.* Registrar água e suplementos\n"
+    "*12.* Acompanhar hábitos (dias sem álcool / sem fumar)\n\n"
+    "Responda com o número da opção desejada:"
 )
 
 TOOLS = [
@@ -1066,34 +1076,78 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session) -
 
     primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
 
-    if item == 1:
+    # 💪 TREINO
+    if item == 1:  # Criar treino personalizado
         return (
             f"Vamos criar seu treino personalizado, {primeiro_nome}! 💪\n\n"
-            "Me conta:\n"
-            "• Qual é seu *objetivo principal*? (ganhar massa / perder gordura / condicionamento)\n"
-            "• Quantos *dias por semana* você pode treinar?\n"
-            "• Tem *equipamentos disponíveis*? (academia / halteres em casa / sem equipamento)\n"
-            "• Tem alguma *lesão ou restrição* que devo considerar?"
+            "Primeiro, me diz: *qual tipo de treino* você quer?\n"
+            "• Musculação (academia)\n"
+            "• Calistenia\n"
+            "• Yoga\n"
+            "• Pilates\n"
+            "• Corrida / endurance\n"
+            "• Treino híbrido\n"
+            "• Treino funcional\n"
+            "• CrossFit\n"
+            "• Mobilidade\n"
+            "_(ou outro — é só dizer)_\n\n"
+            "Depois eu te pergunto o resto: onde vai treinar, seu objetivo, dias por semana, "
+            "tempo por sessão, há quanto tempo treina e se tem alguma lesão. 😉"
         )
 
-    if item == 2:
+    if item == 2:  # Cadastrar treino (do personal)
         return (
-            f"Vamos criar sua dieta personalizada, {primeiro_nome}! 🥗\n\n"
-            "Preciso de alguns dados:\n"
-            "• *Idade*, *sexo* (H/M), *altura* (cm), *peso* (kg)\n"
-            "• *Nível de atividade*: sedentário / leve (1-3x/sem) / moderado (3-5x/sem) / intenso (6-7x/sem)\n"
-            "• *Objetivo*: perder gordura / ganhar massa / manter\n"
-            "• *Restrições alimentares* ou alergias?"
+            "Me manda o *treino do seu personal* e eu cadastro no sistema! 💪\n\n"
+            "Pode ser em qualquer formato: texto, lista de exercícios, planilha copiada...\n\n"
+            "Após cadastrar, você registra suas cargas normalmente e acompanha a evolução de 1RM."
         )
 
-    if item == 3:
+    if item == 3:  # Registrar cargas, séries e histórico
         return (
             "Para registrar sua carga, me manda o exercício com séries, repetições e peso. 📝\n\n"
             "Exemplo: *Supino reto 4x8 100kg*\n\n"
             "Posso registrar vários exercícios em sequência!"
         )
 
-    if item == 4:
+    if item == 4:  # Acompanhar evolução de força (1RM)
+        return (
+            "Qual exercício você quer ver a evolução? 📈\n\n"
+            "Me manda o nome do exercício e mostro o histórico de 1RM ao longo do tempo!\n\n"
+            "Exemplo: *supino reto*, *agachamento*, *remada curvada*..."
+        )
+
+    # 🥗 NUTRIÇÃO
+    if item == 5:  # Criar dieta personalizada
+        return (
+            f"Vamos criar sua dieta personalizada, {primeiro_nome}! 🥗\n\n"
+            "Preciso de alguns dados:\n"
+            "• *Idade*, *sexo* (H/M), *altura* (cm), *peso* (kg)\n"
+            "• *Nível de atividade*: sedentário / leve (1-3x/sem) / moderado (3-5x/sem) / intenso (6-7x/sem)\n"
+            "• *Objetivo*: perder gordura / ganhar massa / manter\n"
+            "• *Restrições alimentares* ou alergias?\n\n"
+            "📏 *Para uma dieta muito mais precisa* (opcional, mas faz diferença real):\n"
+            "• Suas *medidas corporais* atuais (cintura, quadril, braço...)\n"
+            "• Uma *análise de composição corporal por foto* (opção *9* do menu)\n\n"
+            "_Quanto mais eu souber do seu corpo hoje, mais certeiro fica o cálculo de calorias e macros — "
+            "não é obrigatório, mas recomendo bastante pra você ter o melhor resultado._ 💪"
+        )
+
+    if item == 6:  # Cadastrar dieta (do nutricionista)
+        return (
+            "Me manda a *dieta da sua nutricionista* e eu cadastro no sistema! 🥗\n\n"
+            "Pode ser em qualquer formato: texto, cardápio semanal, metas de macros...\n\n"
+            "Após cadastrar, o balanço diário aparecerá nas análises de refeição por foto."
+        )
+
+    if item == 7:  # Analisar refeição por foto
+        return (
+            "Manda uma *foto da sua refeição* e eu analiso as calorias e macros! 📸🍽️\n\n"
+            "Funciona com: pratos, marmitas, lanches, bebidas, embalagens...\n\n"
+            "_Limite: 6 análises por dia._"
+        )
+
+    # 📏 MEDIDAS & CORPO
+    if item == 8:  # Registrar peso e medidas
         return (
             "Me manda suas medidas corporais para eu registrar! 📏\n\n"
             "Formato (manda só as que tiver):\n"
@@ -1103,30 +1157,7 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session) -
             "*Braço:* 35cm"
         )
 
-    if item == 5:
-        return (
-            "Manda uma *foto da sua refeição* e eu analiso as calorias e macros! 📸🍽️\n\n"
-            "Funciona com: pratos, marmitas, lanches, bebidas, embalagens...\n\n"
-            "_Limite: 6 análises por dia._"
-        )
-
-    if item == 6:
-        evolucao = exercicio_service.get_evolucao_sessao(user.id, db)
-        stats = card_service.get_last_session_stats(user.id, db)
-        try:
-            png_bytes = card_service.gerar_card_evolucao(user.nome, evolucao, stats)
-            if phone:
-                await ws.send_image(phone, png_bytes)
-            return (
-                f"Aqui está seu *card de evolução*, {primeiro_nome}! 📊\n\n"
-                f"Sessões registradas: *{stats['sessoes']}*\n"
-                f"Última sessão: *{stats['exercicios']} exercícios* ({stats['duracao']})"
-            )
-        except Exception as e:
-            logger.error("card_generation_error", extra={"user_id": user.id, "error": str(e)})
-            return "Ops, tive um problema ao gerar seu card. Tente novamente em instantes."
-
-    if item == 7:
+    if item == 9:  # Análise de composição corporal (por foto)
         return (
             f"Vou analisar sua composição corporal, {primeiro_nome}! 📸\n\n"
             "Preciso de *3 fotos* suas:\n"
@@ -1136,32 +1167,37 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session) -
             "Pode mandar a primeira foto de *frente* agora!"
         )
 
-    if item == 8:
+    if item == 10:  # Ver meu painel geral de evolução
+        evolucao = exercicio_service.get_evolucao_sessao(user.id, db)
+        stats = card_service.get_last_session_stats(user.id, db)
+        try:
+            png_bytes = card_service.gerar_card_evolucao(user.nome, evolucao, stats)
+            if phone:
+                await ws.send_image(phone, png_bytes)
+            return (
+                f"Aqui está seu *painel de evolução*, {primeiro_nome}! 📊\n\n"
+                f"Sessões registradas: *{stats['sessoes']}*\n"
+                f"Última sessão: *{stats['exercicios']} exercícios* ({stats['duracao']})"
+            )
+        except Exception as e:
+            logger.error("card_generation_error", extra={"user_id": user.id, "error": str(e)})
+            return "Ops, tive um problema ao gerar seu painel. Tente novamente em instantes."
+
+    # 💧 HÁBITOS DIÁRIOS
+    if item == 11:  # Registrar água e suplementos
         return (
-            "Me manda o *treino do seu personal* e eu cadastro no sistema! 💪\n\n"
-            "Pode ser em qualquer formato: texto, lista de exercícios, planilha copiada...\n\n"
-            "Após cadastrar, você registra suas cargas normalmente e acompanha a evolução de 1RM."
+            f"Bora registrar seus hábitos de hoje, {primeiro_nome}! 💧💊\n\n"
+            "💧 *Água*: me diz quanto bebeu (ex: *bebi 500ml*, *tomei 2 copos*, *1 litro*)\n\n"
+            "💊 *Suplementos*: me diz que tomou (ex: *tomei a creatina*, *tomei tudo*)\n\n"
+            "_Se ainda não cadastrou seus suplementos, me manda a lista (ex: \"tomo creatina, whey e vitamina D\")._"
         )
 
-    if item == 9:
+    if item == 12:  # Acompanhar hábitos (dias sem álcool / sem fumar)
         return (
-            "Me manda a *dieta da sua nutricionista* e eu cadastro no sistema! 🥗\n\n"
-            "Pode ser em qualquer formato: texto, cardápio semanal, metas de macros...\n\n"
-            "Após cadastrar, o balanço diário aparecerá nas análises de refeição por foto."
-        )
-
-    if item == 10:
-        return (
-            "Qual exercício você quer ver a evolução? 📈\n\n"
-            "Me manda o nome do exercício e mostro o histórico de 1RM ao longo do tempo!\n\n"
-            "Exemplo: *supino reto*, *agachamento*, *remada curvada*..."
-        )
-
-    if item == 11:
-        return (
-            f"Olá, {primeiro_nome}! Pode me perguntar qualquer coisa sobre *treino*, "
-            f"*nutrição*, *recuperação* ou qualquer assunto fitness. 💪\n\n"
-            "Estou aqui para ajudar!"
+            f"Vamos acompanhar seus hábitos, {primeiro_nome}! 🔥\n\n"
+            "🚬 *Dias sem fumar*: me avisa quando passar o dia (ex: *não fumei hoje*, *mais um dia sem cigarro*)\n\n"
+            "🍺 *Dias sem beber*: me avisa também (ex: *não bebi hoje*, *mais um dia sem álcool*)\n\n"
+            "Eu vou contando seus dias e comemoro junto com você os marcos importantes! 💪"
         )
 
     return "Opção inválida. Digite */menu* para ver as opções disponíveis."
@@ -1191,7 +1227,7 @@ async def process_message(
         return _build_menu_text(user.id, db)
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_menu":
-        if stripped.isdigit() and 1 <= int(stripped) <= 11:
+        if stripped.isdigit() and 1 <= int(stripped) <= 12:
             conversa.estado_pendente = None
             db.add(conversa)
             db.flush()
