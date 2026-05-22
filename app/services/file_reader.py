@@ -26,7 +26,7 @@ def ler_excel(file_bytes: bytes, filename: str = "") -> str:
                 parts.append(sheet_text)
         return "\n\n".join(parts)
     except Exception as e:
-        logger.error("excel_read_error", extra={"filename": filename, "error": str(e)})
+        logger.error("excel_read_error", extra={"doc_filename": filename, "error": str(e)})
         return f"[Erro ao ler Excel: {e}]"
 
 
@@ -39,7 +39,7 @@ def ler_pdf(file_bytes: bytes, filename: str = "") -> str:
         pages = [page.extract_text() or "" for page in reader.pages]
         return "\n\n".join(p for p in pages if p.strip())
     except Exception as e:
-        logger.error("pdf_read_error", extra={"filename": filename, "error": str(e)})
+        logger.error("pdf_read_error", extra={"doc_filename": filename, "error": str(e)})
         return f"[Erro ao ler PDF: {e}]"
 
 

@@ -90,7 +90,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             doc_mimetype = payload.get_document_mimetype()
             doc_filename = payload.get_document_filename()
             if not media_id:
-                logger.warning("document_no_media_id", extra={"phone": phone, "filename": doc_filename})
+                logger.warning("document_no_media_id", extra={"phone": phone, "doc_filename": doc_filename})
                 await whatsapp_service.send_message(
                     phone,
                     f"Recebi o arquivo *{doc_filename}*, mas não consegui identificá-lo. 📄\n\n"
@@ -112,7 +112,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
                 text = f"[Arquivo recebido: {doc_filename}]\n\n{extracted}"
                 logger.info(
                     "document_extracted",
-                    extra={"phone": phone, "filename": doc_filename, "chars": len(extracted)},
+                    extra={"phone": phone, "doc_filename": doc_filename, "chars": len(extracted)},
                 )
             else:
                 await whatsapp_service.send_message(
