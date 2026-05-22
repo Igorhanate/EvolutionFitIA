@@ -85,16 +85,15 @@ async def send_no_subscription_message(phone: str) -> None:
 
 
 async def send_welcome_message(phone: str, nome: str | None) -> None:
-    primeiro_nome = (nome or "").split()[0] if nome else "você"
+    primeiro_nome = (nome or "").split()[0] if nome else ""
+    saudacao = f"Olá, {primeiro_nome}! 💪" if primeiro_nome else "Olá! 💪"
     text = (
-        f"Olá, *{primeiro_nome}*! Bem-vindo(a) ao *Evolution Fit AI*! 💪\n\n"
-        "Sua assinatura foi ativada com sucesso.\n\n"
-        "Sou o *Evo*, seu personal trainer e nutricionista virtual.\n\n"
-        "Me conta: qual é o seu *objetivo principal*?\n"
-        "• Perda de gordura\n"
-        "• Ganho de massa muscular\n"
-        "• Condicionamento físico\n"
-        "• Outro\n\n"
-        "A partir daí crio seu treino e dieta 100% personalizados!"
+        f"{saudacao}\n"
+        "Bem-vindo ao *Evolution Fit AI*!\n\n"
+        "Sua assinatura foi ativada.\n\n"
+        "Preparado para mudar de verdade?\n\n"
+        "Sou o *Evo*, crio seu treino e dieta 100% personalizados!\n\n"
+        "Vamos construir o corpo que você merece.\n\n"
+        "Digite */menu* e vamos começar!"
     )
     await send_message(phone, text)
