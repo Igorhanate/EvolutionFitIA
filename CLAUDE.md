@@ -253,7 +253,8 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 - WABA ID: `1518787246362458` — subscrita ao app
 - Webhook URL: `https://evolutionfit-api.onrender.com/webhook/whatsapp`
 - Token de verificação: `evfit-webhook-verify-2026`
-- Token Meta permanente configurado no Render (`META_ACCESS_TOKEN`) — não expira
+- Token Meta **permanente** configurado no Render (`META_ACCESS_TOKEN`) — token de usuário do sistema, não expira
+- Integração Kiwify implementada: `POST /webhook/kiwify?plano=anual|trimestral` — ativa assinatura e envia boas-vindas automaticamente
 - Landing page no ar: `https://evolutionfit-api.onrender.com/landing`
 - Nome do produto atualizado para **Evolution Fit AI** em todos os arquivos
 - Endpoint admin `POST /admin/subscriptions/grant` para ativar assinaturas manualmente

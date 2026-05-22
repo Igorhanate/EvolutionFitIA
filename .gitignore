@@ -10,3 +10,4 @@ build/
 .pytest_cache/
 .mypy_cache/
 *.log
+twilio_2FA_recovery_code.txt
