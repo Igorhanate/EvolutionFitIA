@@ -261,8 +261,8 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 - **Twilio:** conta a ser cancelada — não será mais utilizada (substituída pela Meta Cloud API)
 
 ### ⚠️ Pendente
-1. **Plataforma de vendas (Cakto):** configurar produto na Cakto e webhook de pagamento; substituir vars `HOTMART_*` por equivalentes Cakto no Render
-2. **Links de pagamento:** atualizar `PAYMENT_LINK_TRIMESTRAL` e `PAYMENT_LINK_ANUAL` com links reais da Cakto
+1. **Plataforma de vendas (Kiwify):** configurar produto na Kiwify e webhook de pagamento; substituir vars `HOTMART_*` por equivalentes Kiwify no Render
+2. **Links de pagamento:** atualizar `PAYMENT_LINK_TRIMESTRAL` e `PAYMENT_LINK_ANUAL` com links reais da Kiwify
 3. **OpenAI API Key:** necessário para reativar transcrição de áudio
 
 ---
@@ -288,9 +288,9 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `META_APP_SECRET` | ✅ configurada |
 | `ADMIN_API_KEY` | ✅ configurada |
 | `OPENAI_API_KEY` | ⚠️ pendente — necessário para reativar transcrição de áudio |
-| `HOTMART_WEBHOOK_SECRET` | ⚠️ pendente — substituir por Cakto |
-| `HOTMART_OFFER_ID_*` | ⚠️ pendente — substituir por Cakto |
-| `PAYMENT_LINK_*` | ⚠️ pendente — atualizar com links reais da Cakto |
+| `HOTMART_WEBHOOK_SECRET` | ⚠️ pendente — substituir por Kiwify |
+| `HOTMART_OFFER_ID_*` | ⚠️ pendente — substituir por Kiwify |
+| `PAYMENT_LINK_*` | ⚠️ pendente — atualizar com links reais da Kiwify |
 
 ## Logs
 

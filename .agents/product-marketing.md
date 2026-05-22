@@ -7,7 +7,7 @@
 **What it does:** O Evolution Fit AI entrega treinos e dietas personalizadas, análise de refeições por foto, acompanhamento de evolução e hábitos — tudo pelo WhatsApp, sem baixar nenhum app adicional. A IA opera 24 horas por dia, 7 dias por semana, substituindo consultas presenciais com personal trainer e nutricionista a uma fração do custo.
 **Product category:** Personal trainer e nutricionista IA / saúde e bem-estar digital
 **Product type:** SaaS (assinatura recorrente via WhatsApp)
-**Business model:** Assinatura mensal com planos trimestrais e anuais. Plataforma de vendas: Cakto.
+**Business model:** Assinatura mensal com planos trimestrais e anuais. Plataforma de vendas: Kiwify.
 - Trimestral: R$29,99/mês
 - Anual: R$19,99/mês (melhor custo-benefício)
 
@@ -117,6 +117,6 @@
 | Personalização | Treinos e dietas montados para o objetivo, equipamentos e rotina do usuário |
 
 ## Goals
-**Business goal:** Tornar-se o personal trainer e nutricionista IA mais acessível do Brasil, com crescimento via Cakto.
-**Conversion action:** Assinar o plano (trimestral ou anual) via link da Cakto.
+**Business goal:** Tornar-se o personal trainer e nutricionista IA mais acessível do Brasil, com crescimento via Kiwify.
+**Conversion action:** Assinar o plano (trimestral ou anual) via link da Kiwify.
 **Current metrics:** (a preencher)
