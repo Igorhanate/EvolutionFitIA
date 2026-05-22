@@ -44,8 +44,11 @@ def ler_pdf(file_bytes: bytes, filename: str = "") -> str:
 
 
 def extrair_texto(file_bytes: bytes, mimetype: str, filename: str = "") -> str | None:
-    if mimetype in EXCEL_MIMETYPES:
+    fname = filename.lower()
+    is_generic_mime = mimetype in ("application/octet-stream", "")
+
+    if mimetype in EXCEL_MIMETYPES or (is_generic_mime and fname.endswith((".xlsx", ".xls"))):
         return ler_excel(file_bytes, filename)
-    if mimetype in PDF_MIMETYPES:
+    if mimetype in PDF_MIMETYPES or (is_generic_mime and fname.endswith(".pdf")):
         return ler_pdf(file_bytes, filename)
     return None

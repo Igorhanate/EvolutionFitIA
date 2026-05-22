@@ -87,24 +87,38 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             media_id = payload.get_document_id()
             doc_mimetype = payload.get_document_mimetype()
             doc_filename = payload.get_document_filename()
-            if media_id:
-                result = await media_service.get_media_bytes(media_id)
-                if result:
-                    raw_bytes, _ = result
-                    extracted = file_reader.extrair_texto(raw_bytes, doc_mimetype, doc_filename)
-                    if extracted:
-                        text = f"[Arquivo recebido: {doc_filename}]\n\n{extracted}"
-                        logger.info(
-                            "document_extracted",
-                            extra={"phone": phone, "filename": doc_filename, "chars": len(extracted)},
-                        )
-                    else:
-                        await whatsapp_service.send_message(
-                            phone,
-                            f"Recebi o arquivo *{doc_filename}*, mas não consigo ler esse tipo de documento. 📄\n\n"
-                            "Envie em formato *PDF* ou *Excel (.xlsx)*.",
-                        )
-                        return {"status": "ok"}
+            if not media_id:
+                logger.warning("document_no_media_id", extra={"phone": phone, "filename": doc_filename})
+                await whatsapp_service.send_message(
+                    phone,
+                    f"Recebi o arquivo *{doc_filename}*, mas não consegui identificá-lo. 📄\n\n"
+                    "Tente enviar novamente.",
+                )
+                return {"status": "ok"}
+            result = await media_service.get_media_bytes(media_id)
+            if not result:
+                logger.error("document_download_failed", extra={"phone": phone, "media_id": media_id})
+                await whatsapp_service.send_message(
+                    phone,
+                    f"Recebi o arquivo *{doc_filename}*, mas houve um erro ao baixá-lo. 📄\n\n"
+                    "Aguarde alguns instantes e tente enviar novamente.",
+                )
+                return {"status": "ok"}
+            raw_bytes, _ = result
+            extracted = file_reader.extrair_texto(raw_bytes, doc_mimetype, doc_filename)
+            if extracted:
+                text = f"[Arquivo recebido: {doc_filename}]\n\n{extracted}"
+                logger.info(
+                    "document_extracted",
+                    extra={"phone": phone, "filename": doc_filename, "chars": len(extracted)},
+                )
+            else:
+                await whatsapp_service.send_message(
+                    phone,
+                    f"Recebi o arquivo *{doc_filename}*, mas não consigo ler esse tipo de documento. 📄\n\n"
+                    "Envie em formato *PDF* ou *Excel (.xlsx)*.",
+                )
+                return {"status": "ok"}
 
         if not text and not image_b64:
             return {"status": "ignored"}
