@@ -18,7 +18,8 @@ class Settings(BaseSettings):
 
     ADMIN_API_KEY: str
 
-    KIWIFY_WEBHOOK_TOKEN: str = ""
+    KIWIFY_WEBHOOK_TOKEN_ANUAL: str = ""
+    KIWIFY_WEBHOOK_TOKEN_TRIMESTRAL: str = ""
 
     HOTMART_WEBHOOK_SECRET: str = ""
     HOTMART_OFFER_ID_TRIMESTRAL: str = ""

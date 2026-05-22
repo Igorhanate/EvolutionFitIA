@@ -13,10 +13,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Kiwify"])
 
 
-def _validate_token(token: str | None) -> bool:
+def _validate_token(token: str | None, plano: str) -> bool:
     if not token:
         return False
-    return token == settings.KIWIFY_WEBHOOK_TOKEN
+    expected = (
+        settings.KIWIFY_WEBHOOK_TOKEN_ANUAL
+        if plano == "anual"
+        else settings.KIWIFY_WEBHOOK_TOKEN_TRIMESTRAL
+    )
+    return token == expected
 
 
 def _extract_fields(data: dict) -> tuple[str | None, str | None, str | None, str | None]:
@@ -44,7 +49,7 @@ async def kiwify_webhook(
 ):
     body = await request.body()
 
-    if not _validate_token(token):
+    if not _validate_token(token, plano):
         logger.warning("Webhook Kiwify com token inválido")
         return {"status": "ok"}
 
