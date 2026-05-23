@@ -355,3 +355,20 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [ ] Confirmar com a Maria que está usando normalmente.
 - [ ] Possível registro duplicado da Maria no banco (conta antiga, telefone 12 dígitos) — limpar via rota admin.
 - [ ] Lembrete: assinatura anual do criador expira ~maio/2027.
+
+### Treino — novos refinos
+- [ ] Ao criar treino, perguntar o sexo da pessoa.
+- [ ] Variação grande de peso/séries vs histórico: questionar o usuário ("registrei X, seu último foi Y, está certo?") e seguir só se confirmado.
+- [ ] Registro de carga POR EXERCÍCIO (não só por treino): considerar dados do mesmo exercício entre treinos diferentes APENAS quando ele for o 1º exercício da sessão em ambos os treinos.
+
+### Mídia / biblioteca (exigem hospedar arquivos)
+- [ ] Banco de GIFs de execução de cada exercício; cliente pergunta "como é esse exercício?" e recebe o GIF (e a máquina, se usar).
+- [ ] Banco de fotos realistas de aparelhos; cliente pergunta qual é o aparelho e recebe a foto.
+- [ ] Fotos de corpos estilo manequim para o cliente escolher o objetivo de corpo ideal.
+
+### Grande (viabilidade a discutir)
+- [ ] Análise de vídeo de execução: cliente grava o exercício e a IA aponta o que melhorar (definir formato do feedback — escrito? anotando o vídeo?). Projeto complexo, avaliar viabilidade antes.
+
+### Skills de domínio (qualidade do conteúdo gerado)
+- [ ] Skill de NUTRIÇÃO especialista (referência: mcpmarket nutritional-specialist + ISSN Position Stand) para melhorar dietas geradas.
+- [ ] Skill de TREINOS especialista (referências: Schoenfeld, Israetel, Krieger; volume/descanso/progressão do protocolo Igor Hanate) para melhorar treinos gerados.
