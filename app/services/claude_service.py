@@ -26,7 +26,7 @@ Sempre termine pedindo: 'Responda com o número da opção.' Quando o usuário r
 
 REGRAS GERAIS:
 - Sempre chame o usuário pelo primeiro nome quando souber
-- Antes de gerar um treino, pergunte NESTA ORDEM, uma de cada vez: (1) qual TIPO de treino (musculação/academia, calistenia, yoga, pilates, corrida/endurance, híbrido, funcional, CrossFit, mobilidade ou outro); (2) ONDE vai treinar (academia, casa, ao ar livre); (3) objetivo principal; (4) quantos dias por semana; (5) quanto tempo por sessão; (6) há quanto tempo treina (nível); (7) lesões ou limitações. Nem todo treino é em academia — adapte exercícios e equipamentos ao tipo e local informados.
+- Antes de gerar um treino, pergunte NESTA ORDEM, uma de cada vez: (1) qual TIPO de treino (musculação/academia, calistenia, yoga, pilates, corrida/endurance, híbrido, funcional, CrossFit, mobilidade ou outro); (2) ONDE vai treinar (academia, casa, ao ar livre); (3) objetivo principal; (4) quantos dias por semana; (5) quanto tempo por sessão; (6) há quanto tempo treina (nível); (7) lesões ou limitações; (8) em qual horário costuma treinar — se for academia em horário de pico (6h–9h ou 17h–20h), evite exercícios que dependem de polias duplas, cross e aparelhos muito disputados, priorizando halteres, barras e máquinas menos concorridas; (9) "Você sente dor ou desconforto ao fazer algum exercício específico?" — se o cliente citar algum, NÃO inclua esse exercício no treino; se o cliente pedir para incluir um exercício que ele mesmo citou como problemático, confirme: "Você mencionou desconforto nesse exercício — tem certeza que quer incluí-lo?". Essa pergunta é feita a cada nova criação de treino, independente de conversas anteriores. Nem todo treino é em academia — adapte exercícios e equipamentos ao tipo e local informados.
 - Antes de gerar uma dieta, faça as perguntas essenciais do PROTOCOLO DE CRIAÇÃO DE DIETA mais abaixo.
 - Treinos: estruture por Dia 1 / Dia 2 etc., inclua séries/repetições e tempos de descanso
 - Mensagens curtas para WhatsApp: parágrafos curtos, bullet points, sem paredes de texto
@@ -36,10 +36,11 @@ REGRAS GERAIS:
 
 REGISTRO DE EXERCÍCIOS:
 - Quando o usuário reportar carga, séries e repetições de um exercício, use SEMPRE a ferramenta 'registrar_exercicio'
-- Após o registro, informe o 1RM estimado de forma motivadora e compare com o histórico quando disponível
+- Após registrar cada exercício, confirme brevemente que foi salvo (ex: "Supino registrado ✅") — NÃO exiba o 1RM neste momento
 - Se o resultado da ferramenta indicar AGUARDANDO_CONFIRMACAO, explique a variação ao usuário e aguarde confirmação antes de prosseguir
-- Nenhuma fórmula de 1RM é 100% precisa para todos — mencione isso quando exibir o valor
-- Ao exibir evolução, destaque o progresso e motive o usuário
+- O 1RM é calculado e armazenado internamente, mas só deve ser EXIBIDO em dois momentos: (a) quando o cliente pedir explicitamente ("qual meu 1RM no supino?", "como está meu 1RM?"); (b) ao final do treino, quando o cliente sinalizar que terminou ("terminei", "acabei", "isso foi tudo", "fim do treino")
+- Ao final do treino, apresente o RESUMO MOTIVADOR da sessão: (1) 1RM do exercício PRINCIPAL (o composto mais pesado, a seu critério) com evolução vs sessão anterior se disponível; (2) MÉDIA dos 1RMs de todos os exercícios da sessão; (3) evolução individual de cada exercício que tiver campo "anterior:" no contexto da sessão — formato: "Supino: +3kg vs 15/05". Use os campos "1RM≈" (hoje) e "anterior:" (sessão prévia) que aparecem no contexto automático da sessão para calcular os deltas. Mencione que os valores são estimativas.
+- Ao exibir 1RM e evolução, motive o usuário destacando o progresso
 
 MEDIDAS CORPORAIS:
 - Quando o usuário reportar peso e/ou medidas (cintura, quadril, pescoço, braço, coxa, panturrilha), use SEMPRE a ferramenta 'registrar_medidas'
@@ -88,6 +89,7 @@ CADASTRO DE TREINO PRÓPRIO:
 - Reconheça frases como: "esse é meu treino", "meu personal me passou esse treino", "quero registrar meu treino"
 - Extraia o nome do treino e liste os exercícios identificados
 - Após cadastrar, informe que o registro de cargas e acompanhamento de 1RM funcionarão normalmente para todos os exercícios do treino
+- IMPORTANTE — ao CADASTRAR um treino pronto (opção 2 do menu), NÃO faça perguntas de objetivo, nível, dias por semana, horário ou qualquer outra coleta de dados. O treino já existe — apenas confirme o tipo se for ambíguo e registre imediatamente. Fazer essas perguntas no cadastro é péssima experiência de usuário.
 
 ARQUIVOS ENVIADOS COMO DOCUMENTO (PDF / EXCEL):
 - Quando a mensagem começar com "[Arquivo recebido: NOME]", o sistema já extraiu e converteu o conteúdo do arquivo para texto — o que vem a seguir É o conteúdo legível.
@@ -495,7 +497,13 @@ def _sessao_context_str(user_id: int, sessao_data: date, db: Session) -> str | N
     linhas = [f"Treino de hoje ({sessao_data.strftime('%d/%m/%Y')}):"]
     for r in registros:
         rm_str = f" | 1RM≈{r.rm_estimado}kg" if r.rm_estimado else ""
-        linhas.append(f"  {r.posicao_sessao}º {r.exercicio_display}: {r.series}x{r.repeticoes} @ {r.carga_kg}kg{rm_str}")
+        # historico[0] é o registro de hoje (já flushed); historico[1] é a sessão anterior
+        historico = exercicio_service.get_historico_exercicio(user_id, r.exercicio, r.posicao_sessao, db, limite=2)
+        anterior_str = ""
+        if len(historico) > 1 and historico[1].rm_estimado:
+            prev = historico[1]
+            anterior_str = f" | anterior: {prev.rm_estimado}kg ({prev.sessao_data.strftime('%d/%m')})"
+        linhas.append(f"  {r.posicao_sessao}º {r.exercicio_display}: {r.series}x{r.repeticoes} @ {r.carga_kg}kg{rm_str}{anterior_str}")
     return "\n".join(linhas)
 
 
@@ -541,11 +549,9 @@ def _handle_confirmacao(
             carga_kg=carga,
             db=db,
         )
-        rm_str = _fmt_rm(exercicio_service.calcular_rm(carga, reps))
         return (
             f"[SISTEMA] Usuário confirmou o registro de '{exercicio}': "
             f"{series}x{reps} @ {carga}kg (posição {posicao} na sessão). "
-            f"{rm_str}. "
             f"Variação de {variacao_pct:+.0f}% em relação ao último ({ultima_carga}kg) foi aceita."
         )
     elif resposta == "nao":
@@ -672,23 +678,11 @@ def _process_tool_registrar(
         db=db,
     )
 
-    rm_result = exercicio_service.calcular_rm(carga, reps)
-    rm_str = _fmt_rm(rm_result)
-
-    evolucao_str = ""
-    if historico and registro.rm_estimado and historico[0].rm_estimado:
-        diff = registro.rm_estimado - historico[0].rm_estimado
-        sinal = "+" if diff >= 0 else ""
-        evolucao_str = (
-            f" Evolução de 1RM vs sessão anterior (mesma posição): "
-            f"{sinal}{diff:.1f}kg ({historico[0].sessao_data.strftime('%d/%m')})."
-        )
-    elif not historico:
-        evolucao_str = " Primeiro registro deste exercício nesta posição — referência criada."
+    primeiro_vez_str = " Primeiro registro deste exercício nesta posição — referência criada." if not historico else ""
 
     return (
         f"REGISTRADO: '{exercicio_display}' — posição {posicao} na sessão, "
-        f"{series}x{reps} @ {carga}kg. {rm_str}.{evolucao_str}"
+        f"{series}x{reps} @ {carga}kg.{primeiro_vez_str}"
     )
 
 
