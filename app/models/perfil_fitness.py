@@ -28,6 +28,8 @@ class PerfilFitness(Base):
     tipo_treino_padrao: Mapped[str | None] = mapped_column(String(30), nullable=True)
     local_treino_padrao: Mapped[str | None] = mapped_column(String(30), nullable=True)
     horario_treino_padrao: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    dias_semana_padrao: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    tempo_sessao_padrao: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Especificos de dieta
     restricoes_alimentares: Mapped[str | None] = mapped_column(Text, nullable=True)

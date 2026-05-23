@@ -9,7 +9,7 @@ from app.models.conversa import Conversa
 from app.models.dieta import Dieta
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service, habito_service, nutricao_service
+from app.services import exercicio_service, habito_service, nutricao_service, perfil_service
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +177,79 @@ DIETA_KEYWORDS = {"dieta", "alimentação", "alimentacao", "nutrição", "nutric
 
 CONFIRMACAO_SIM = {"sim", "s", "yes", "confirmo", "pode", "ok", "isso", "certeza", "certo", "salva", "salvar", "confirmar"}
 CONFIRMACAO_NAO = {"não", "nao", "n", "no", "cancela", "cancelar", "errei", "errado", "errada", "equivocado"}
+
+ETAPAS_TREINO: list[tuple[str, str]] = [
+    (
+        "tipo_treino",
+        "*Qual tipo de treino* você quer?\n\n"
+        "1️⃣ 🏋️ Musculação (academia)\n"
+        "2️⃣ 🤸 Calistenia\n"
+        "3️⃣ 🧘 Yoga\n"
+        "4️⃣ 🩰 Pilates\n"
+        "5️⃣ 🏃 Corrida / endurance\n"
+        "6️⃣ ⚡ Treino híbrido\n"
+        "7️⃣ 🔥 Treino funcional\n"
+        "8️⃣ 🏅 CrossFit\n"
+        "9️⃣ 🌿 Mobilidade\n\n"
+        "_(ou outro — é só dizer)_\n\n"
+        "Responda com o número da opção."
+    ),
+    (
+        "local",
+        "*Onde você vai treinar?*\n\n"
+        "1️⃣ 🏢 Academia\n"
+        "2️⃣ 🏠 Em casa\n"
+        "3️⃣ 🌳 Ao ar livre\n\n"
+        "Responda com o número da opção."
+    ),
+    (
+        "objetivo",
+        "*Qual é o seu objetivo principal?*\n\n"
+        "1️⃣ 💪 Ganhar massa muscular\n"
+        "2️⃣ 🔥 Perder gordura\n"
+        "3️⃣ ⚖️ Manter o peso\n"
+        "4️⃣ 🏃 Melhorar condicionamento\n\n"
+        "Responda com o número da opção."
+    ),
+    (
+        "dias_semana",
+        "*Quantos dias por semana* você vai treinar?\n\n"
+        "_(ex: 3, 4, 5)_"
+    ),
+    (
+        "tempo_sessao",
+        "*Quanto tempo* você tem por sessão?\n\n"
+        "_(ex: 45 minutos, 1 hora)_"
+    ),
+    (
+        "nivel",
+        "*Há quanto tempo você treina?*\n\n"
+        "1️⃣ 🌱 Iniciante (menos de 6 meses)\n"
+        "2️⃣ 📈 Intermediário (6 meses a 2 anos)\n"
+        "3️⃣ 💪 Avançado (mais de 2 anos)\n\n"
+        "Responda com o número da opção."
+    ),
+    (
+        "lesoes",
+        "Você tem alguma *lesão ou limitação* física que devo considerar?\n\n"
+        "_(ex: joelho, ombro, lombar — ou responda *nenhuma*)_"
+    ),
+    (
+        "horario",
+        "*Em qual horário* você costuma treinar?\n\n"
+        "1️⃣ 🌅 Manhã (antes das 9h)\n"
+        "2️⃣ 🌄 Manhã em horário de pico (6h–9h)\n"
+        "3️⃣ ☀️ Tarde\n"
+        "4️⃣ 🌆 Noite em horário de pico (17h–20h)\n"
+        "5️⃣ 🌙 Noite (após 20h)\n\n"
+        "Responda com o número da opção."
+    ),
+    (
+        "dor_desconforto",
+        "Última pergunta! Você sente *dor ou desconforto* ao fazer algum exercício específico?\n\n"
+        "_(ex: agachamento livre, supino — ou responda *nenhum*)_"
+    ),
+]
 
 MENU_TEXT = (
     "🏋️ *EVOLUTION FIT AI — Menu Principal*\n\n"
@@ -1057,6 +1130,156 @@ def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Coleta estruturada de treino
+# ---------------------------------------------------------------------------
+
+def _iniciar_coleta_treino(user: Usuario, conversa: Conversa, db: Session) -> str:
+    primeiro_nome = (user.nome or "").split()[0] if user.nome else ""
+    conversa.estado_pendente = {
+        "tipo": "criando_treino",
+        "etapa_idx": 0,
+        "dados": {chave: None for chave, _ in ETAPAS_TREINO},
+        "criado_em": datetime.utcnow().isoformat(),
+    }
+    db.add(conversa)
+    db.commit()
+    return (
+        "Vamos criar seu treino personalizado"
+        + (f", {primeiro_nome}" if primeiro_nome else "")
+        + "! 💪\n\n"
+        + ETAPAS_TREINO[0][1]
+    )
+
+
+async def _handle_coleta_treino(
+    conversa: Conversa,
+    message_text: str,
+    user: Usuario,
+    db: Session,
+) -> str:
+    estado = conversa.estado_pendente
+    dados = dict(estado.get("dados", {}))
+    etapa_idx = int(estado.get("etapa_idx", 0))
+
+    chave, _ = ETAPAS_TREINO[etapa_idx]
+    dados[chave] = message_text.strip() or "não informado"
+    etapa_idx += 1
+
+    if etapa_idx >= len(ETAPAS_TREINO):
+        return await _gerar_treino_de_dados(dados, user, conversa, db)
+
+    conversa.estado_pendente = {
+        "tipo": "criando_treino",
+        "etapa_idx": etapa_idx,
+        "dados": dados,
+        "criado_em": estado.get("criado_em"),
+    }
+    _, pergunta = ETAPAS_TREINO[etapa_idx]
+    return pergunta
+
+
+async def _gerar_treino_de_dados(
+    dados: dict,
+    user: Usuario,
+    conversa: Conversa,
+    db: Session,
+) -> str:
+    primeiro_nome = (user.nome or "").split()[0] if user.nome else None
+
+    tipo_map = {
+        "1": "Musculação (academia)", "2": "Calistenia", "3": "Yoga",
+        "4": "Pilates", "5": "Corrida / endurance", "6": "Treino híbrido",
+        "7": "Treino funcional", "8": "CrossFit", "9": "Mobilidade",
+    }
+    local_map = {"1": "Academia", "2": "Em casa", "3": "Ao ar livre"}
+    obj_map = {
+        "1": "Ganhar massa muscular", "2": "Perder gordura",
+        "3": "Manter o peso",         "4": "Melhorar condicionamento",
+    }
+    nivel_map = {
+        "1": "Iniciante (menos de 6 meses)",
+        "2": "Intermediário (6 meses a 2 anos)",
+        "3": "Avançado (mais de 2 anos)",
+    }
+    horario_map = {
+        "1": "Manhã (antes das 9h, fora do pico)",
+        "2": "Manhã em horário de pico (6h–9h)",
+        "3": "Tarde",
+        "4": "Noite em horário de pico (17h–20h)",
+        "5": "Noite (após 20h)",
+    }
+
+    def _dec(val: str | None, mapa: dict) -> str:
+        v = (val or "").strip()
+        return mapa.get(v, v) if v else "não informado"
+
+    tipo    = _dec(dados.get("tipo_treino"),      tipo_map)
+    local   = _dec(dados.get("local"),            local_map)
+    obj     = _dec(dados.get("objetivo"),         obj_map)
+    nivel   = _dec(dados.get("nivel"),            nivel_map)
+    horario = _dec(dados.get("horario"),          horario_map)
+    dias    = dados.get("dias_semana")   or "não informado"
+    tempo   = dados.get("tempo_sessao") or "não informado"
+    lesoes  = dados.get("lesoes")        or "nenhuma"
+    dor     = dados.get("dor_desconforto") or "nenhum"
+
+    nome_str = f" para {primeiro_nome}" if primeiro_nome else ""
+    prompt = (
+        f"Crie um treino personalizado{nome_str} com os seguintes dados coletados:\n\n"
+        f"• Tipo de treino: {tipo}\n"
+        f"• Local: {local}\n"
+        f"• Objetivo: {obj}\n"
+        f"• Dias por semana: {dias}\n"
+        f"• Tempo por sessão: {tempo}\n"
+        f"• Nível/experiência: {nivel}\n"
+        f"• Lesões ou limitações: {lesoes}\n"
+        f"• Horário habitual: {horario}\n"
+        f"• Dor ou desconforto em exercícios específicos: {dor}\n\n"
+        "Gere o treino completo seguindo seu protocolo de criação de treino."
+    )
+
+    system_with_cache = [
+        {
+            "type": "text",
+            "text": SYSTEM_PROMPT + (f"\n\nNome do usuário: {primeiro_nome}" if primeiro_nome else ""),
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+    try:
+        response = await client.messages.create(
+            model=settings.CLAUDE_MODEL,
+            max_tokens=2500,
+            system=system_with_cache,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        reply = next((b.text for b in response.content if hasattr(b, "text")), "")
+    except anthropic.APIError as e:
+        logger.error("gerar_treino_error", extra={"user_id": user.id, "error": str(e)})
+        return "Desculpe, tive um problema ao gerar seu treino. Pode tentar novamente em instantes."
+
+    # Salva dados no perfil (valores decodificados)
+    perfil = perfil_service.get_or_create_perfil(user.id, db)
+    if tipo    != "não informado": perfil.tipo_treino_padrao    = tipo
+    if local   != "não informado": perfil.local_treino_padrao   = local
+    if obj     != "não informado": perfil.objetivo_padrao       = obj
+    if nivel   != "não informado": perfil.nivel_experiencia     = nivel
+    if lesoes  != "nenhuma":       perfil.lesoes                = lesoes
+    if horario != "não informado": perfil.horario_treino_padrao = horario
+    if dias    != "não informado": perfil.dias_semana_padrao    = dias
+    if tempo   != "não informado": perfil.tempo_sessao_padrao   = tempo
+    db.flush()
+
+    # Persiste o treino gerado
+    db.add(Treino(user_id=user.id, conteudo={"texto": reply, "gerado_em": datetime.utcnow().isoformat()}))
+
+    # Limpa estado
+    conversa.estado_pendente = None
+
+    return reply
+
+
+# ---------------------------------------------------------------------------
 # Menu principal
 # ---------------------------------------------------------------------------
 
@@ -1078,7 +1301,7 @@ def _build_menu_text(user_id: int, db: Session) -> str:
         text += "\n\n📊 *Seus hábitos hoje:*\n" + "\n".join(habito_parts)
     return text
 
-async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session) -> str:
+async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, conversa: Conversa) -> str:
     from app.services import card_service
     from app.services import whatsapp_service as ws
 
@@ -1086,21 +1309,7 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session) -
 
     # 💪 TREINO
     if item == 1:  # Criar treino personalizado
-        return (
-            f"Vamos criar seu treino personalizado, {primeiro_nome}! 💪\n\n"
-            "Primeiro, me diz: *qual tipo de treino* você quer?\n\n"
-            "1️⃣ 🏋️ Musculação (academia)\n"
-            "2️⃣ 🤸 Calistenia\n"
-            "3️⃣ 🧘 Yoga\n"
-            "4️⃣ 🩰 Pilates\n"
-            "5️⃣ 🏃 Corrida / endurance\n"
-            "6️⃣ ⚡ Treino híbrido\n"
-            "7️⃣ 🔥 Treino funcional\n"
-            "8️⃣ 🏅 CrossFit\n"
-            "9️⃣ 🌿 Mobilidade\n\n"
-            "_(ou outro — é só dizer)_\n\n"
-            "Responda com o número da opção."
-        )
+        return _iniciar_coleta_treino(user, conversa, db)
 
     if item == 2:  # Cadastrar treino (do personal)
         return (
@@ -1238,7 +1447,7 @@ async def process_message(
             conversa.estado_pendente = None
             db.add(conversa)
             db.flush()
-            return await _handle_menu_item(int(stripped), user, phone, db)
+            return await _handle_menu_item(int(stripped), user, phone, db, conversa)
         else:
             conversa.estado_pendente = None
 
@@ -1266,7 +1475,17 @@ async def process_message(
         db.commit()
         return foto_response
 
-    # 3. Trata confirmações pendentes (exercício e refeição)
+    # 3. Coleta estruturada de treino — intercepta antes do fluxo geral
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "criando_treino":
+        reply = await _handle_coleta_treino(conversa, message_text, user, db)
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
+
+    # 4. Trata confirmações pendentes (exercício e refeição)
     ctx_confirmacao = (
         _handle_confirmacao(conversa, message_text, user, sessao_data, db)
         or _handle_confirmacao_refeicao(conversa, message_text, user, db)
