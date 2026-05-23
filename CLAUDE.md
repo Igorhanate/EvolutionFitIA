@@ -101,6 +101,7 @@ Deduplicação por `hotmart_transaction_id`.
 | `confirmar_refeicao` | Análise de foto de alimento aguarda "sim/não" |
 | `coleta_fotos` | Coleta de 3 fotos para análise corporal em andamento |
 | `aguardando_menu` | Usuário chamou /menu, aguarda número 1–12 |
+| `criando_treino` | Coleta estruturada de 9 perguntas para criar treino personalizado |
 
 ### Ferramentas Claude (TOOLS — 13 tools)
 
@@ -187,7 +188,9 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `usuarios` | `telefone` (único, só dígitos) | `ultima_mensagem_id` para dedup |
 | `assinaturas` | `hotmart_transaction_id` | plano: `trimestral` (90d) / `anual` (365d) |
 | `conversas` | `user_id` (único) | JSON `{role, content, timestamp}` + `estado_pendente` |
-| `treinos` / `dietas` | `user_id` | auto-gerados por keywords; `origem:"proprio"` se externo |
+| `treinos` / `dietas` | `user_id` | gerados pelo fluxo de coleta (opção 1) ou por keywords; `origem:"proprio"` se externo |
+| `perfis_fitness` | `user_id` (único) | perfil persistente; valores canônicos curtos (ex: "intermediario", "musculacao") |
+| `mensagens_processadas` | `message_id` (PRIMARY KEY) | dedup atômico de webhooks; substitui `ultima_mensagem_id` |
 | `registros_exercicio` | `user_id + sessao_data + posicao_sessao` | 1RM por Epley/Brzycki/Lander |
 | `medidas_corporais` | `user_id + data_medicao` | peso + circunferências (nullable) |
 | `fotos_composicao` | `user_id` | só `gordura_estimada_pct` + texto; foto não armazenada |
@@ -198,7 +201,7 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 
 ### Migrations Alembic
 
-`001` → `002` → `003` → `004` → `005` → `006` → `007` — **HEAD = 007**
+`001` → `002` → `003` → `004` → `005` → `006` → `007` → `008` → `009` → `010` — **HEAD = 010**
 
 | # | O que cria |
 |---|------------|
@@ -209,6 +212,9 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | 005 | `registros_refeicao` |
 | 006 | `metas_nutricionais` |
 | 007 | `habitos_dia` + `perfis_habitos` |
+| 008 | `perfis_fitness` (perfil persistente do cliente) |
+| 009 | `dias_semana_padrao` + `tempo_sessao_padrao` em `perfis_fitness` |
+| 010 | `mensagens_processadas` (dedup atômico de webhooks) |
 
 ---
 
@@ -329,7 +335,22 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 23/05/2026)
+- Coleta estruturada de criação de treino (etapa 2a): bot conduz as 9 perguntas via estado "criando_treino", salva no perfil e gera o treino com 1 chamada à IA.
+- Perfil persistente do cliente: tabela perfis_fitness (migração 008) + campos dias/tempo (migração 009). Salva valores canônicos curtos (ex: "intermediario", "musculacao") para reaproveitar depois.
+- Webhook assíncrono: responde HTTP 200 imediatamente e processa em BackgroundTask (corrige a demora de até 3 min que causava reenvio da Meta e fluxo errático).
+- Dedup atômico de webhook: tabela mensagens_processadas (migração 010) com message_id PRIMARY KEY (substitui o ultima_mensagem_id que tinha race condition).
+- Correção: salvamento do perfil estourava VARCHAR(20) com textos longos; agora salva códigos curtos + trunca texto livre.
+
+---
+
 ## PENDÊNCIAS / ROADMAP (melhorias a fazer)
+
+### Treino — pendências imediatas (continuação da etapa 2)
+- [ ] Remover o salvamento de treino por palavra-chave (Lugar C em process_message) que gera registros falsos (perguntas/confirmações salvas como treino). Fazer agora que a etapa 2a salva corretamente.
+- [ ] Limpar os ~50 treinos falsos já existentes no banco (mistura de planos reais + perguntas + confirmações) — com cuidado, via rota controlada.
+- [ ] Etapa 2b: reaproveitamento de perfil no 2º treino em diante (mostrar resumo "algo mudou?", confirmar variáveis, pular dados estáveis — não repetir perguntas).
+- [ ] Etapa 3: replicar a coleta estruturada para DIETA (fluxo separado), reaproveitando o perfil.
 
 ### Experiência de uso (prioridade)
 - [ ] Bot repetitivo: faz a mesma pergunta várias vezes ao criar treino e dieta. Corrigir para não repetir.
