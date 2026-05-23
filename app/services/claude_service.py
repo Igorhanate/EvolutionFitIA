@@ -1186,6 +1186,7 @@ async def _gerar_treino_de_dados(
 ) -> str:
     primeiro_nome = (user.nome or "").split()[0] if user.nome else None
 
+    # Maps descritivos — usados APENAS no prompt (Claude e cliente veem texto longo)
     tipo_map = {
         "1": "Musculação (academia)", "2": "Calistenia", "3": "Yoga",
         "4": "Pilates", "5": "Corrida / endurance", "6": "Treino híbrido",
@@ -1209,10 +1210,34 @@ async def _gerar_treino_de_dados(
         "5": "Noite (após 20h)",
     }
 
+    # Maps canônicos — usados APENAS para salvar no perfil (dentro dos limites VARCHAR)
+    tipo_canon = {
+        "1": "musculacao", "2": "calistenia", "3": "yoga",
+        "4": "pilates",    "5": "corrida",    "6": "hibrido",
+        "7": "funcional",  "8": "crossfit",   "9": "mobilidade",
+    }
+    local_canon   = {"1": "academia",      "2": "casa",           "3": "ar_livre"}
+    obj_canon     = {
+        "1": "ganhar_massa", "2": "perder_gordura",
+        "3": "manter",       "4": "condicionamento",
+    }
+    nivel_canon   = {"1": "iniciante", "2": "intermediario", "3": "avancado"}
+    horario_canon = {
+        "1": "manha", "2": "manha_pico", "3": "tarde",
+        "4": "noite_pico", "5": "noite",
+    }
+
     def _dec(val: str | None, mapa: dict) -> str:
         v = (val or "").strip()
         return mapa.get(v, v) if v else "não informado"
 
+    def _canon(val: str | None, mapa: dict, maxlen: int) -> str | None:
+        v = (val or "").strip()
+        if not v:
+            return None
+        return mapa.get(v, v[:maxlen])
+
+    # Valores descritivos para o prompt (sem alteração)
     tipo    = _dec(dados.get("tipo_treino"),      tipo_map)
     local   = _dec(dados.get("local"),            local_map)
     obj     = _dec(dados.get("objetivo"),         obj_map)
@@ -1222,6 +1247,16 @@ async def _gerar_treino_de_dados(
     tempo   = dados.get("tempo_sessao") or "não informado"
     lesoes  = dados.get("lesoes")        or "nenhuma"
     dor     = dados.get("dor_desconforto") or "nenhum"
+
+    # Valores canônicos para salvar no perfil (curtos, dentro dos limites de coluna)
+    tipo_p    = _canon(dados.get("tipo_treino"), tipo_canon,    30)
+    local_p   = _canon(dados.get("local"),       local_canon,   30)
+    obj_p     = _canon(dados.get("objetivo"),    obj_canon,     30)
+    nivel_p   = _canon(dados.get("nivel"),       nivel_canon,   20)
+    horario_p = _canon(dados.get("horario"),     horario_canon, 20)
+    dias_p    = (dados.get("dias_semana")  or "").strip()[:10] or None
+    tempo_p   = (dados.get("tempo_sessao") or "").strip()[:20] or None
+    lesoes_p  = dados.get("lesoes") or None  # TEXT — sem limite de tamanho
 
     nome_str = f" para {primeiro_nome}" if primeiro_nome else ""
     prompt = (
@@ -1258,16 +1293,16 @@ async def _gerar_treino_de_dados(
         logger.error("gerar_treino_error", extra={"user_id": user.id, "error": str(e)})
         return "Desculpe, tive um problema ao gerar seu treino. Pode tentar novamente em instantes."
 
-    # Salva dados no perfil (valores decodificados)
+    # Salva valores canônicos (curtos) no perfil — nunca estoura nenhuma coluna VARCHAR
     perfil = perfil_service.get_or_create_perfil(user.id, db)
-    if tipo    != "não informado": perfil.tipo_treino_padrao    = tipo
-    if local   != "não informado": perfil.local_treino_padrao   = local
-    if obj     != "não informado": perfil.objetivo_padrao       = obj
-    if nivel   != "não informado": perfil.nivel_experiencia     = nivel
-    if lesoes  != "nenhuma":       perfil.lesoes                = lesoes
-    if horario != "não informado": perfil.horario_treino_padrao = horario
-    if dias    != "não informado": perfil.dias_semana_padrao    = dias
-    if tempo   != "não informado": perfil.tempo_sessao_padrao   = tempo
+    if tipo_p:    perfil.tipo_treino_padrao    = tipo_p
+    if local_p:   perfil.local_treino_padrao   = local_p
+    if obj_p:     perfil.objetivo_padrao       = obj_p
+    if nivel_p:   perfil.nivel_experiencia     = nivel_p
+    if lesoes_p and lesoes_p != "nenhuma": perfil.lesoes = lesoes_p
+    if horario_p: perfil.horario_treino_padrao = horario_p
+    if dias_p:    perfil.dias_semana_padrao    = dias_p
+    if tempo_p:   perfil.tempo_sessao_padrao   = tempo_p
     db.flush()
 
     # Persiste o treino gerado
