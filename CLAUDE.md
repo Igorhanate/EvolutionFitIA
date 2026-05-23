@@ -326,3 +326,32 @@ JSON estruturado via `pythonjsonlogger`:
 logger.info("event_name", extra={"user_id": ..., "key": "value"})
 logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ```
+
+---
+
+## PENDÊNCIAS / ROADMAP (melhorias a fazer)
+
+### Experiência de uso (prioridade)
+- [ ] Bot repetitivo: faz a mesma pergunta várias vezes ao criar treino e dieta. Corrigir para não repetir.
+
+### Refinos de funcionalidade
+- [ ] Lembrete de suplementos/vitaminas junto à refeição que os inclui (ex: creatina no café, vitamina D no jantar). NÃO criar lembrete exclusivo de remédio temporário.
+- [ ] Dietas: mostrar medidas sempre em 2 unidades — gramas E colheres de sopa.
+
+### Rápidos
+- [ ] Remover o limite de 6 análises de refeição por foto por dia.
+
+### Grandes (sessão dedicada)
+- [ ] Treino guiado ao vivo: treino completo -> cliente "estou pronto" -> bot manda exercício a exercício -> cliente reporta carga/reps -> bot indica descanso (aquecimento 1 min, válidas caso a caso) e próxima série.
+- [ ] Integração com wearables (Garmin/Apple Watch/Samsung/Xiaomi/Amazfit/Huawei): projeto à parte. Avaliar focar 1 plataforma (Garmin) ou usar leitura de arquivo exportado do relógio.
+
+### Lançamento
+- [ ] Render plano Free "dorme" com inatividade (1a mensagem lenta ~50s). Avaliar plano pago antes do lançamento.
+- [ ] Teste de compra nova de ponta a ponta com número que nunca comprou.
+- [ ] Validar valor pago no webhook Kiwify (segurança extra).
+- [ ] Migrar memória de dor/desconforto para o banco de dados (hoje é só por conversa).
+
+### Limpeza / acompanhamento
+- [ ] Confirmar com a Maria que está usando normalmente.
+- [ ] Possível registro duplicado da Maria no banco (conta antiga, telefone 12 dígitos) — limpar via rota admin.
+- [ ] Lembrete: assinatura anual do criador expira ~maio/2027.
