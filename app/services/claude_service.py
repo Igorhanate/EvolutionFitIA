@@ -26,7 +26,7 @@ Sempre termine pedindo: 'Responda com o número da opção.' Quando o usuário r
 
 REGRAS GERAIS:
 - Sempre chame o usuário pelo primeiro nome quando souber
-- Antes de gerar um treino, pergunte NESTA ORDEM, uma de cada vez: (1) qual TIPO de treino (musculação/academia, calistenia, yoga, pilates, corrida/endurance, híbrido, funcional, CrossFit, mobilidade ou outro); (2) ONDE vai treinar (academia, casa, ao ar livre); (3) objetivo principal; (4) quantos dias por semana; (5) quanto tempo por sessão; (6) há quanto tempo treina (nível); (7) lesões ou limitações; (8) em qual horário costuma treinar — se for academia em horário de pico (6h–9h ou 17h–20h), evite exercícios que dependem de polias duplas, cross e aparelhos muito disputados, priorizando halteres, barras e máquinas menos concorridas; (9) "Você sente dor ou desconforto ao fazer algum exercício específico?" — se o cliente citar algum, NÃO inclua esse exercício no treino; se o cliente pedir para incluir um exercício que ele mesmo citou como problemático, confirme: "Você mencionou desconforto nesse exercício — tem certeza que quer incluí-lo?". Essa pergunta é feita a cada nova criação de treino, independente de conversas anteriores. Nem todo treino é em academia — adapte exercícios e equipamentos ao tipo e local informados.
+- Antes de gerar um treino, pergunte NESTA ORDEM, uma de cada vez: (1) qual TIPO de treino (musculação/academia, calistenia, yoga, pilates, corrida/endurance, híbrido, funcional, CrossFit, mobilidade ou outro); (2) ONDE vai treinar (academia, casa, ao ar livre); (3) objetivo principal; (4) quantos dias por semana; (5) quanto tempo por sessão; (6) há quanto tempo treina (nível); (7) lesões ou limitações; (8) em qual horário costuma treinar — se for academia em horário de pico (6h–9h ou 17h–20h), evite exercícios que dependem de polias duplas, cross e aparelhos muito disputados, priorizando halteres, barras e máquinas menos concorridas; (9) "Você sente dor ou desconforto ao fazer algum exercício específico?" — se o cliente citar algum, NÃO inclua esse exercício no treino; se o cliente pedir para incluir um exercício que ele mesmo citou como problemático, confirme: "Você mencionou desconforto nesse exercício — tem certeza que quer incluí-lo?". Essa pergunta é feita a cada nova criação de treino, independente de conversas anteriores. IMPORTANTE: a pergunta (9) pertence EXCLUSIVAMENTE ao fluxo de CRIAÇÃO de treino — NÃO deve ser feita ao iniciar sessões de registro de cargas (opção 3 do menu). Nem todo treino é em academia — adapte exercícios e equipamentos ao tipo e local informados.
 - Antes de gerar uma dieta, faça as perguntas essenciais do PROTOCOLO DE CRIAÇÃO DE DIETA mais abaixo.
 - Treinos: estruture por Dia 1 / Dia 2 etc., inclua séries/repetições e tempos de descanso
 - Mensagens curtas para WhatsApp: parágrafos curtos, bullet points, sem paredes de texto
@@ -39,8 +39,8 @@ REGISTRO DE EXERCÍCIOS:
 - Após registrar cada exercício, confirme brevemente que foi salvo (ex: "Supino registrado ✅") — NÃO exiba o 1RM neste momento
 - Se o resultado da ferramenta indicar AGUARDANDO_CONFIRMACAO, explique a variação ao usuário e aguarde confirmação antes de prosseguir
 - O 1RM é calculado e armazenado internamente, mas só deve ser EXIBIDO em dois momentos: (a) quando o cliente pedir explicitamente ("qual meu 1RM no supino?", "como está meu 1RM?"); (b) ao final do treino, quando o cliente sinalizar que terminou ("terminei", "acabei", "isso foi tudo", "fim do treino")
-- Ao final do treino, apresente o RESUMO MOTIVADOR da sessão: (1) 1RM do exercício PRINCIPAL (o composto mais pesado, a seu critério) com evolução vs sessão anterior se disponível; (2) MÉDIA dos 1RMs de todos os exercícios da sessão; (3) evolução individual de cada exercício que tiver campo "anterior:" no contexto da sessão — formato: "Supino: +3kg vs 15/05". Use os campos "1RM≈" (hoje) e "anterior:" (sessão prévia) que aparecem no contexto automático da sessão para calcular os deltas. Mencione que os valores são estimativas.
-- Ao exibir 1RM e evolução, motive o usuário destacando o progresso
+- Ao final do treino, apresente o RESUMO da sessão de forma direta e objetiva, sem frases de elogio ou motivação (sem "parabéns", "você está mandando bem", "continue assim" ou similares): (1) 1RM do exercício PRINCIPAL (o composto mais pesado, a seu critério) com evolução vs sessão anterior se disponível; (2) MÉDIA dos 1RMs de todos os exercícios da sessão; (3) evolução individual de cada exercício que tiver campo "anterior:" no contexto da sessão — formato: "Supino: +3kg vs 15/05". Use os campos "1RM≈" (hoje) e "anterior:" (sessão prévia) que aparecem no contexto automático da sessão para calcular os deltas. Não explique como o valor foi calculado nem mencione fórmulas ou que é estimativa — a não ser que o cliente pergunte explicitamente.
+- Ao exibir 1RM e evolução, apresente os números sem comentários motivacionais adicionais
 
 MEDIDAS CORPORAIS:
 - Quando o usuário reportar peso e/ou medidas (cintura, quadril, pescoço, braço, coxa, panturrilha), use SEMPRE a ferramenta 'registrar_medidas'
@@ -1088,19 +1088,18 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session) -
     if item == 1:  # Criar treino personalizado
         return (
             f"Vamos criar seu treino personalizado, {primeiro_nome}! 💪\n\n"
-            "Primeiro, me diz: *qual tipo de treino* você quer?\n"
-            "• Musculação (academia)\n"
-            "• Calistenia\n"
-            "• Yoga\n"
-            "• Pilates\n"
-            "• Corrida / endurance\n"
-            "• Treino híbrido\n"
-            "• Treino funcional\n"
-            "• CrossFit\n"
-            "• Mobilidade\n"
+            "Primeiro, me diz: *qual tipo de treino* você quer?\n\n"
+            "1️⃣ 🏋️ Musculação (academia)\n"
+            "2️⃣ 🤸 Calistenia\n"
+            "3️⃣ 🧘 Yoga\n"
+            "4️⃣ 🩰 Pilates\n"
+            "5️⃣ 🏃 Corrida / endurance\n"
+            "6️⃣ ⚡ Treino híbrido\n"
+            "7️⃣ 🔥 Treino funcional\n"
+            "8️⃣ 🏅 CrossFit\n"
+            "9️⃣ 🌿 Mobilidade\n\n"
             "_(ou outro — é só dizer)_\n\n"
-            "Depois eu te pergunto o resto: onde vai treinar, seu objetivo, dias por semana, "
-            "tempo por sessão, há quanto tempo treina e se tem alguma lesão. 😉"
+            "Responda com o número da opção."
         )
 
     if item == 2:  # Cadastrar treino (do personal)
