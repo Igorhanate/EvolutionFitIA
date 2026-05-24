@@ -335,6 +335,15 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 24/05/2026)
+- Removido o salvamento de treino por keyword (gerava registros falsos). Dieta mantém keyword até a Etapa 3.
+- Bug A (salvamento) confirmado resolvido: treino gerado com sucesso é salvo; adicionada guarda contra reply vazio. Confirmado em produção.
+- Descoberto que o .env local aponta para banco LOCAL (cópia parada); produção é o banco do Render. Toda verificação real deve ser feita em produção (via rota admin).
+- Criada rota admin POST /admin/treinos/delete com dry-run (padrão) + backup antes de apagar + restrição por user_id + lista explícita de ids.
+- Limpeza de produção: apagados 75 treinos-lixo do user 1 (perguntas, confirmações, deflexões salvas por engano pelo antigo keyword). Backup salvo. Sobraram ~27 reais + 10 do grupo D a revisar.
+- ADMIN_API_KEY rotacionada (a anterior havia sido exposta).
+- .gitignore agora ignora dumps (treinos.json, backups).
+
 ## HISTÓRICO DE MUDANÇAS (sessão de 23/05/2026)
 - Coleta estruturada de criação de treino (etapa 2a): bot conduz as 9 perguntas via estado "criando_treino", salva no perfil e gera o treino com 1 chamada à IA.
 - Perfil persistente do cliente: tabela perfis_fitness (migração 008) + campos dias/tempo (migração 009). Salva valores canônicos curtos (ex: "intermediario", "musculacao") para reaproveitar depois.
@@ -351,6 +360,12 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [ ] Limpar os ~50 treinos falsos já existentes no banco (mistura de planos reais + perguntas + confirmações) — com cuidado, via rota controlada.
 - [ ] Etapa 2b: reaproveitamento de perfil no 2º treino em diante (mostrar resumo "algo mudou?", confirmar variáveis, pular dados estáveis — não repetir perguntas).
 - [ ] Etapa 3: replicar a coleta estruturada para DIETA (fluxo separado), reaproveitando o perfil.
+
+### Treino — pendências (continuação)
+- [ ] Bug B: a IA não enxerga os treinos salvos — ao perguntar "qual meu treino?", responde que não tem acesso. Resolver injetando um resumo do treino mais recente no contexto, OU criando uma tool de consulta.
+- [ ] Revisar e limpar o grupo D (10 treinos id 89,61,59,57,48,34,32,96,95,94 — confirmações que listam exercícios; verificar se são duplicatas antes de apagar).
+- [ ] Etapa 2b: reaproveitar perfil no 2º treino (não repetir perguntas).
+- [ ] Etapa 3: coleta estruturada de DIETA + remover keyword de dieta.
 
 ### Experiência de uso (prioridade)
 - [ ] Bot repetitivo: faz a mesma pergunta várias vezes ao criar treino e dieta. Corrigir para não repetir.
@@ -393,3 +408,6 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ### Skills de domínio (qualidade do conteúdo gerado)
 - [ ] Skill de NUTRIÇÃO especialista (referência: mcpmarket nutritional-specialist + ISSN Position Stand) para melhorar dietas geradas.
 - [ ] Skill de TREINOS especialista (referências: Schoenfeld, Israetel, Krieger; volume/descanso/progressão do protocolo Igor Hanate) para melhorar treinos gerados.
+
+### Segurança / operação
+- [ ] Configurar alerta de saldo baixo / recarga automática de créditos no Console da Anthropic (o bot parou hoje porque os créditos zeraram).
