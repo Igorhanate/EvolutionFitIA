@@ -580,6 +580,83 @@ def _sessao_context_str(user_id: int, sessao_data: date, db: Session) -> str | N
     return "\n".join(linhas)
 
 
+def _titulo_treino(texto: str, maxlen: int = 60) -> str:
+    """Primeira linha não-vazia do treino, limpa de marcadores markdown e emojis, truncada."""
+    for linha in (texto or "").splitlines():
+        limpa = linha.strip().lstrip("#").strip()
+        # remove caracteres fora do BMP latino comum (emojis, símbolos) mantendo texto legível
+        limpa = "".join(c for c in limpa if c.isalnum() or c in " -–—|/(),.:%+&'\"").strip()
+        if limpa:
+            return limpa[:maxlen].strip()
+    return "treino sem título"
+
+
+def _corpo_excerpt(texto: str, n: int = 200) -> str:
+    """Excerpt do CORPO do treino, pulando a primeira linha não-vazia (título)."""
+    linhas = (texto or "").splitlines()
+    corpo_linhas = []
+    titulo_visto = False
+    for linha in linhas:
+        if not titulo_visto:
+            if linha.strip():
+                titulo_visto = True
+            continue
+        corpo_linhas.append(linha)
+    corpo = " ".join(" ".join(corpo_linhas).split())
+    if not corpo:  # treino de uma linha só — usa o texto inteiro como fallback
+        corpo = " ".join((texto or "").split())
+    return corpo[:n]
+
+
+def _treinos_context_str(user_id: int, db: Session) -> str | None:
+    moldura = (
+        "[SISTEMA] Treinos salvos do usuário (USE ESTA INFORMAÇÃO SOMENTE SE O USUÁRIO "
+        "PERGUNTAR SOBRE O TREINO DELE. NÃO mencione o treino espontaneamente nem puxe o "
+        "assunto se ele não perguntou):"
+    )
+
+    treinos = (
+        db.query(Treino)
+        .filter(Treino.user_id == user_id)
+        .order_by(Treino.criado_em.desc())
+        .limit(8)
+        .all()
+    )
+
+    reais = []
+    for t in treinos:
+        cont = t.conteudo if isinstance(t.conteudo, dict) else {}
+        texto = cont.get("texto", "") if isinstance(cont, dict) else ""
+        origem = cont.get("origem") if isinstance(cont, dict) else None
+        if origem == "proprio" or len(texto or "") >= 400:
+            reais.append((t, texto, origem))
+
+    if not reais:
+        return (
+            "[SISTEMA] O usuário ainda não tem nenhum treino salvo. Se ele perguntar sobre "
+            "treino, responda honestamente que ainda não há treino criado e ofereça criar um."
+        )
+
+    linhas = [moldura]
+
+    t0, texto0, origem0 = reais[0]
+    data0 = t0.criado_em.strftime("%d/%m/%Y") if t0.criado_em else "data desconhecida"
+    titulo0 = _titulo_treino(texto0)
+    marca0 = " (cadastrado pelo personal)" if origem0 == "proprio" else ""
+    excerpt0 = _corpo_excerpt(texto0, 200)
+    linhas.append(f"- Mais recente ({data0}): \"{titulo0}\"{marca0} — {excerpt0}")
+
+    anteriores = reais[1:4]
+    if anteriores:
+        partes_ant = []
+        for t, texto, origem in anteriores:
+            data = t.criado_em.strftime("%d/%m") if t.criado_em else "??"
+            partes_ant.append(f"\"{_titulo_treino(texto)}\" ({data})")
+        linhas.append("- Anteriores: " + ", ".join(partes_ant))
+
+    return "\n".join(linhas)
+
+
 # ---------------------------------------------------------------------------
 # Processamento de confirmação pendente
 # ---------------------------------------------------------------------------
@@ -1551,6 +1628,7 @@ async def process_message(
     ctx_sessao = _sessao_context_str(user.id, sessao_data, db)
     ctx_nutricao = nutricao_service.build_nutricao_context(user.id, db)
     ctx_habitos = habito_service.build_habito_context(user.id, db)
+    ctx_treinos = _treinos_context_str(user.id, db)
 
     # Se há coleta de fotos ativa e o usuário mandou texto, lembra o Claude
     ctx_coleta = None
@@ -1564,7 +1642,7 @@ async def process_message(
                 "Responda a mensagem de texto normalmente, mas ao final lembre de aguardar a próxima foto."
             )
 
-    partes_ctx = [p for p in [ctx_sessao, ctx_nutricao, ctx_habitos, ctx_confirmacao, ctx_coleta] if p]
+    partes_ctx = [p for p in [ctx_sessao, ctx_nutricao, ctx_habitos, ctx_treinos, ctx_confirmacao, ctx_coleta] if p]
     if partes_ctx:
         injecao = "\n\n".join(partes_ctx)
         history = [
