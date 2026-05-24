@@ -1,6 +1,10 @@
-from datetime import date, timedelta
+import json
+import os
+import tempfile
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -232,6 +236,107 @@ def grant_subscription(
         "data_inicio": sub.data_inicio.isoformat(),
         "data_fim": sub.data_fim.isoformat(),
         "status": sub.status,
+    }
+
+
+class DeleteTreinosRequest(BaseModel):
+    user_id: int
+    ids: list[int]
+    dry_run: bool = True
+
+
+def _treino_preview(t: Treino, n: int = 150) -> dict:
+    cont = t.conteudo if isinstance(t.conteudo, dict) else {}
+    texto = cont.get("texto", "") if isinstance(cont, dict) else str(t.conteudo)
+    return {
+        "id": t.id,
+        "criado_em": t.criado_em.isoformat() if t.criado_em else None,
+        "texto_preview": (texto or "")[:n],
+    }
+
+
+@router.post("/treinos/delete", summary="Deleta treinos por lista explícita de IDs (dry-run por padrão)")
+def delete_treinos(payload: DeleteTreinosRequest, db: Session = Depends(get_db)):
+    """
+    Deleção SEGURA de treinos. Proteções:
+    - Só apaga treinos cujo id está EXPLICITAMENTE em `ids` (nunca por filtro/heurística).
+    - Só apaga treinos que pertençam a `user_id` (ids de outro usuário são ignorados e reportados).
+    - `dry_run` é TRUE por padrão: nesse modo nada é apagado, só retorna o preview para revisão.
+    - Em `dry_run=false`, faz BACKUP do conteúdo completo ANTES de apagar.
+    - Lista de ids vazia => no-op.
+    """
+    # Segurança (5): lista vazia => não faz nada
+    if not payload.ids:
+        return {
+            "dry_run": payload.dry_run,
+            "user_id": payload.user_id,
+            "message": "Lista de ids vazia — nenhuma ação tomada.",
+            "encontrados": [],
+            "nao_encontrados": [],
+            "total": 0,
+        }
+
+    # Garante que o usuário existe
+    _get_user_or_404(payload.user_id, db)
+
+    # Segurança (5 e 6): só treinos cujo id está na lista E que pertençam ao user_id
+    treinos = (
+        db.query(Treino)
+        .filter(Treino.user_id == payload.user_id, Treino.id.in_(payload.ids))
+        .order_by(Treino.criado_em.desc())
+        .all()
+    )
+    encontrados_ids = {t.id for t in treinos}
+    # ids pedidos que não existem OU não pertencem a esse usuário (ignorados)
+    nao_encontrados = [i for i in payload.ids if i not in encontrados_ids]
+
+    # MODO DRY-RUN (3) — padrão: NÃO apaga nada
+    if payload.dry_run:
+        return {
+            "dry_run": True,
+            "user_id": payload.user_id,
+            "seriam_apagados": len(treinos),
+            "encontrados": [_treino_preview(t) for t in treinos],
+            "nao_encontrados": nao_encontrados,
+        }
+
+    # MODO REAL (4) — só com dry_run=false explícito
+    # 4.1 BACKUP do conteúdo completo ANTES de apagar
+    backup = [
+        {
+            "id": t.id,
+            "user_id": t.user_id,
+            "conteudo": t.conteudo,
+            "criado_em": t.criado_em.isoformat() if t.criado_em else None,
+        }
+        for t in treinos
+    ]
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    backup_path = os.path.join(
+        tempfile.gettempdir(), f"backup_treinos_deletados_{timestamp}.json"
+    )
+    with open(backup_path, "w", encoding="utf-8") as f:
+        json.dump(backup, f, ensure_ascii=False, indent=2)
+
+    # 4.2 SÓ DEPOIS do backup, apaga — apenas os ids encontrados desse usuário
+    ids_a_apagar = sorted(encontrados_ids)
+    apagados = (
+        db.query(Treino)
+        .filter(Treino.user_id == payload.user_id, Treino.id.in_(ids_a_apagar))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+
+    return {
+        "dry_run": False,
+        "user_id": payload.user_id,
+        "total_apagados": apagados,
+        "ids_apagados": ids_a_apagar,
+        "nao_encontrados": nao_encontrados,
+        "backup_path": backup_path,
+        # Backup também no corpo: o disco do Render é efêmero (some em restart/redeploy),
+        # então retornamos o conteúdo aqui para você capturar imediatamente.
+        "backup": backup,
     }
 
 
