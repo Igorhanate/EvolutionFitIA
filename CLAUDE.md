@@ -343,6 +343,8 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - Limpeza de produção: apagados 75 treinos-lixo do user 1 (perguntas, confirmações, deflexões salvas por engano pelo antigo keyword). Backup salvo. Sobraram ~27 reais + 10 do grupo D a revisar.
 - ADMIN_API_KEY rotacionada (a anterior havia sido exposta).
 - .gitignore agora ignora dumps (treinos.json, backups).
+- Bug B RESOLVIDO: criado _treinos_context_str que injeta um resumo dos treinos salvos no contexto da IA (treino mais recente com excerpt do corpo + até 3 títulos anteriores), com filtro anti-lixo (origem=="proprio" ou len>=400), nota honesta no caso vazio, e moldura para a IA só falar de treino quando perguntada. Testado em produção: "qual meu treino?" agora responde com o treino real; conversa normal não puxa treino espontaneamente; criação de treino segue funcionando. FLUXO DE TREINO COMPLETO (criar → salvar → consultar).
+- .gitignore ampliado para dryrun.json, delecao_resultado.json, *_resultado.json.
 
 ## HISTÓRICO DE MUDANÇAS (sessão de 23/05/2026)
 - Coleta estruturada de criação de treino (etapa 2a): bot conduz as 9 perguntas via estado "criando_treino", salva no perfil e gera o treino com 1 chamada à IA.
@@ -362,7 +364,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [ ] Etapa 3: replicar a coleta estruturada para DIETA (fluxo separado), reaproveitando o perfil.
 
 ### Treino — pendências (continuação)
-- [ ] Bug B: a IA não enxerga os treinos salvos — ao perguntar "qual meu treino?", responde que não tem acesso. Resolver injetando um resumo do treino mais recente no contexto, OU criando uma tool de consulta.
+- [x] Bug B: RESOLVIDO em 24/05 — IA enxerga os treinos via _treinos_context_str.
 - [ ] Revisar e limpar o grupo D (10 treinos id 89,61,59,57,48,34,32,96,95,94 — confirmações que listam exercícios; verificar se são duplicatas antes de apagar).
 - [ ] Etapa 2b: reaproveitar perfil no 2º treino (não repetir perguntas).
 - [ ] Etapa 3: coleta estruturada de DIETA + remover keyword de dieta.
