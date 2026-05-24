@@ -1293,6 +1293,14 @@ async def _gerar_treino_de_dados(
         logger.error("gerar_treino_error", extra={"user_id": user.id, "error": str(e)})
         return "Desculpe, tive um problema ao gerar seu treino. Pode tentar novamente em instantes."
 
+    # Reply vazio sem exceção (resposta da IA sem bloco de texto): trata como falha —
+    # não salva treino vazio e pede para tentar novamente.
+    if not reply.strip():
+        logger.error("gerar_treino_reply_vazio", extra={"user_id": user.id})
+        return "Desculpe, tive um problema ao gerar seu treino. Pode tentar novamente em instantes."
+
+    # A partir daqui o reply é válido: o salvamento do perfil e do treino é garantido antes do return.
+
     # Salva valores canônicos (curtos) no perfil — nunca estoura nenhuma coluna VARCHAR
     perfil = perfil_service.get_or_create_perfil(user.id, db)
     if tipo_p:    perfil.tipo_treino_padrao    = tipo_p
