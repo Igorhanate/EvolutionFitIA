@@ -1691,8 +1691,6 @@ async def process_message(
     conversa.mensagens = mensagens
     db.add(conversa)
 
-    if _contains_keywords(reply, TREINO_KEYWORDS):
-        db.add(Treino(user_id=user.id, conteudo={"texto": reply, "gerado_em": datetime.utcnow().isoformat()}))
     if _contains_keywords(reply, DIETA_KEYWORDS):
         db.add(Dieta(user_id=user.id, conteudo={"texto": reply, "gerado_em": datetime.utcnow().isoformat()}))
 
