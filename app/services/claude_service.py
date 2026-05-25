@@ -559,7 +559,7 @@ TOOLS = [
             "Quando o alvo estiver claro, chame IMEDIATAMENTE — NÃO peça confirmação prévia nem diga 'tem certeza?', "
             "porque o próprio fluxo desta ferramenta já lista os itens e pede a confirmação no momento certo. "
             "Só pergunte ANTES de chamar se o TIPO (treino/dieta/suplemento) estiver genuinamente ambíguo. "
-            "Por enquanto só 'suplemento' está implementado. "
+            "'Suplemento' e 'treino' implementados; 'dieta' em breve. "
             "NÃO use para apagar dados — use iniciar_exclusao_registro para isso. "
             "NÃO use para editar dados corporais (peso, idade, sexo) — esses têm fluxo próprio."
         ),
@@ -988,6 +988,35 @@ def _iniciar_edicao_suplemento(user: Usuario, conversa: Conversa, db: Session) -
     return "\n".join(linhas)
 
 
+def _iniciar_edicao_treino(user: Usuario, conversa: Conversa, db: Session) -> str:
+    """Lista treinos para edição (um item de cada vez). Se vazio, não cria estado."""
+    treinos = treino_service.listar_treinos(user.id, db)
+    if not treinos:
+        return "Você não tem nenhum treino salvo para editar. 🙂"
+
+    ids = [t.id for t in treinos]
+    labels = [_label_treino(t) for t in treinos]
+    nomes = []
+    for t in treinos:
+        cont = t.conteudo if isinstance(t.conteudo, dict) else {}
+        nomes.append(cont.get("nome") or _titulo_treino(cont.get("texto", "")))
+
+    conversa.estado_pendente = {
+        "tipo": "editando_registro",
+        "alvo": "treino",
+        "etapa": "aguardando_escolha",
+        "ids": ids,
+        "labels": labels,
+        "nomes": nomes,
+    }
+
+    linhas = ["Qual *treino* você quer editar?\n"]
+    for i, label in enumerate(labels, start=1):
+        linhas.append(f"*{i}.* {label}")
+    linhas.append("\nResponda com o *número*, ou *cancelar* para desistir.")
+    return "\n".join(linhas)
+
+
 async def _handle_editar_registro(
     conversa: Conversa,
     message_text: str,
@@ -1025,6 +1054,29 @@ async def _handle_editar_registro(
                 "old_nome": old_nome,
             }
             return f"Qual o novo nome para *{old_nome}*? (ou *cancelar*)"
+        elif alvo == "treino":
+            ids = estado.get("ids", [])
+            labels = estado.get("labels", [])
+            nomes = estado.get("nomes", [])
+            total = len(ids)
+            # Aceita só UM número — sem múltiplos, sem "todos"
+            posicoes = _parse_posicoes(texto, total)
+            if not posicoes or len(posicoes) != 1:
+                conversa.estado_pendente = None
+                return "Edição cancelada — não entendi o número. Nada foi alterado."
+            pos = posicoes[0]
+            old_id = ids[pos - 1]
+            old_label = labels[pos - 1] if pos - 1 < len(labels) else f"treino {old_id}"
+            old_nome = nomes[pos - 1] if pos - 1 < len(nomes) else old_label
+            conversa.estado_pendente = {
+                "tipo": "editando_registro",
+                "alvo": "treino",
+                "etapa": "aguardando_novo_valor",
+                "old_id": old_id,
+                "old_label": old_label,
+                "old_nome": old_nome,
+            }
+            return f"Me manda a versão nova do treino *{old_label}* (cole o texto do treino). Ou *cancelar*."
         else:
             conversa.estado_pendente = None
             return "Edição cancelada. Tipo não suportado."
@@ -1043,6 +1095,30 @@ async def _handle_editar_registro(
             habito_service.registrar_suplementos_usuario(user.id, itens, db)
             conversa.estado_pendente = None
             return f"Pronto! *{old_nome}* virou *{novo_nome}*. ✅"
+        elif alvo == "treino":
+            novo_texto = texto
+            if not novo_texto.strip():
+                conversa.estado_pendente = None
+                return "Edição cancelada — texto vazio. O treino original foi mantido."
+            old_id = estado.get("old_id")
+            old_label = estado.get("old_label", "treino")
+            old_nome = estado.get("old_nome", old_label)
+            # Salva PRIMEIRO — só apaga o antigo se o save não lançar exceção
+            try:
+                treino_service.cadastrar_treino_proprio(
+                    user_id=user.id,
+                    nome=old_nome,
+                    texto=novo_texto,
+                    db=db,
+                )
+            except Exception as e:
+                logger.error("editar_treino_save_error", extra={"user_id": user.id, "error": str(e)})
+                conversa.estado_pendente = None
+                return "Erro ao salvar o novo treino. O treino original foi mantido. Tente novamente."
+            if old_id:
+                treino_service.apagar_treinos(user.id, [old_id], db)
+            conversa.estado_pendente = None
+            return f"Treino *{old_label}* atualizado! ✅"
         else:
             conversa.estado_pendente = None
             return "Edição cancelada. Tipo não suportado."
@@ -1515,18 +1591,13 @@ def _process_tool_cadastrar_dieta(tool_input: dict, user: Usuario, db: Session) 
 
 
 def _process_tool_cadastrar_treino(tool_input: dict, user: Usuario, db: Session) -> str:
-    from datetime import datetime as dt
-    db.add(Treino(
+    treino_service.cadastrar_treino_proprio(
         user_id=user.id,
-        conteudo={
-            "texto": tool_input["texto_original"],
-            "nome": tool_input["nome_treino"],
-            "exercicios": tool_input.get("exercicios_extraidos", ""),
-            "origem": "proprio",
-            "gerado_em": dt.utcnow().isoformat(),
-        },
-    ))
-    db.flush()
+        nome=tool_input["nome_treino"],
+        texto=tool_input["texto_original"],
+        db=db,
+        exercicios=tool_input.get("exercicios_extraidos", ""),
+    )
     return (
         f"TREINO_CADASTRADO: '{tool_input['nome_treino']}' registrado com sucesso. "
         "Confirme e informe que pode reportar cargas normalmente para acompanhar evolução e 1RM."
@@ -2178,10 +2249,13 @@ async def process_message(
                     if alvo == "suplemento":
                         edicao_iniciada_msg = _iniciar_edicao_suplemento(user, conversa, db)
                         result = "EDICAO_INICIADA"
+                    elif alvo == "treino":
+                        edicao_iniciada_msg = _iniciar_edicao_treino(user, conversa, db)
+                        result = "EDICAO_INICIADA"
                     else:
                         edicao_iniciada_msg = (
-                            "Por enquanto só consigo editar *suplementos*. "
-                            "Edição de treino e dieta chega em breve! 🙂"
+                            "Por enquanto só consigo editar *suplementos* e *treinos*. "
+                            "Edição de dieta chega em breve! 🙂"
                         )
                         result = "EDICAO_TIPO_NAO_SUPORTADO"
                 else:

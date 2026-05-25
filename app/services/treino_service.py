@@ -1,3 +1,5 @@
+from datetime import datetime as dt
+
 from sqlalchemy.orm import Session
 
 from app.models.treino import Treino
@@ -20,6 +22,25 @@ def listar_treinos(user_id: int, db: Session) -> list[Treino]:
         .all()
     )
     return [t for t in treinos if _is_real(t)]
+
+
+def cadastrar_treino_proprio(
+    user_id: int, nome: str, texto: str, db: Session, exercicios: str = ""
+) -> Treino:
+    """Persiste um treino externo (origem='proprio'). Não faz commit — o chamador controla."""
+    t = Treino(
+        user_id=user_id,
+        conteudo={
+            "texto": texto,
+            "nome": nome,
+            "exercicios": exercicios,
+            "origem": "proprio",
+            "gerado_em": dt.utcnow().isoformat(),
+        },
+    )
+    db.add(t)
+    db.flush()
+    return t
 
 
 def apagar_treinos(user_id: int, ids: list[int], db: Session) -> int:
