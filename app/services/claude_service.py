@@ -169,7 +169,10 @@ REGISTRO DE HÁBITOS DIÁRIOS:
 - Dias sem beber: quando o usuário informar que não bebeu álcool (ex: "não bebi hoje", "mais um dia sem álcool"), use 'registrar_habito_alcool' com bebeu=false. Se informar que bebeu, use bebeu=true. Comemore os marcos de dias sem beber.
 - Suplementos tomados: quando o usuário confirmar que tomou suplementos (ex: "tomei meus suplementos", "já tomei a creatina", "tomei tudo"), use 'registrar_tomei_suplementos'.
 - Cadastro de suplementos: quando o usuário listar seus suplementos (ex: "tomo creatina, whey e vitamina D", "meus suplementos são..."), use 'registrar_suplementos_usuario' com a lista extraída.
-- Ao exibir os dias sem fumar ou sem beber, use emojis motivadores e compare com marcos anteriores quando disponíveis. Use sempre 'dias sem fumar' / 'dias sem beber', nunca a palavra 'streak'."""
+- Ao exibir os dias sem fumar ou sem beber, use emojis motivadores e compare com marcos anteriores quando disponíveis. Use sempre 'dias sem fumar' / 'dias sem beber', nunca a palavra 'streak'.
+
+EXCLUSÃO E EDIÇÃO DE REGISTROS:
+- Quando o usuário quiser APAGAR ou EDITAR treinos, dietas ou suplementos, chame IMEDIATAMENTE 'iniciar_exclusao_registro' ou 'iniciar_edicao_registro' — NÃO faça pergunta prévia do tipo 'tem certeza?' ou 'confirma?'. O próprio fluxo da ferramenta apresenta os itens e solicita a confirmação no momento certo. Só pergunte o tipo ANTES de chamar se ele estiver genuinamente ambíguo (ex: usuário disse apenas "apaga isso" sem especificar o quê)."""
 
 MAX_HISTORY = 20
 
@@ -527,8 +530,11 @@ TOOLS = [
         "description": (
             "Inicia o fluxo de exclusão de um registro do usuário. "
             "Use quando o usuário quiser APAGAR/EXCLUIR/DELETAR algo que ele salvou (ex: 'quero apagar meu treino', "
-            "'exclui esse treino', 'deletar treino'). Identifique o TIPO no 'alvo'. Se o usuário não deixar claro o tipo, "
-            "PERGUNTE antes de chamar esta ferramenta. Treino, dieta e suplemento implementados. "
+            "'exclui esse treino', 'deletar treino'). Identifique o TIPO no 'alvo'. "
+            "Quando o alvo estiver claro, chame IMEDIATAMENTE — NÃO peça confirmação prévia nem diga 'tem certeza?', "
+            "porque o próprio fluxo desta ferramenta já lista os itens e pede confirmação no momento certo. "
+            "Só pergunte ANTES de chamar se o TIPO (treino/dieta/suplemento) estiver genuinamente ambíguo. "
+            "Treino, dieta e suplemento implementados. "
             "NÃO use para editar dados corporais (peso, idade, sexo) — esses são editáveis, não apagáveis."
         ),
         "input_schema": {
@@ -549,7 +555,10 @@ TOOLS = [
             "Inicia o fluxo de edição de um registro do usuário. "
             "Use quando o usuário quiser EDITAR/ALTERAR/CORRIGIR/MUDAR algo que ele salvou "
             "(ex: 'quero editar meu suplemento', 'mudar nome do suplemento', 'corrigir minha dieta'). "
-            "Identifique o TIPO no 'alvo'. Se o usuário não deixar claro o tipo, PERGUNTE antes de chamar. "
+            "Identifique o TIPO no 'alvo'. "
+            "Quando o alvo estiver claro, chame IMEDIATAMENTE — NÃO peça confirmação prévia nem diga 'tem certeza?', "
+            "porque o próprio fluxo desta ferramenta já lista os itens e pede a confirmação no momento certo. "
+            "Só pergunte ANTES de chamar se o TIPO (treino/dieta/suplemento) estiver genuinamente ambíguo. "
             "Por enquanto só 'suplemento' está implementado. "
             "NÃO use para apagar dados — use iniciar_exclusao_registro para isso. "
             "NÃO use para editar dados corporais (peso, idade, sexo) — esses têm fluxo próprio."
@@ -2199,7 +2208,7 @@ async def process_message(
                 tools=TOOLS,
             )
 
-        if not (coleta_iniciada_msg or exclusao_iniciada_msg):
+        if not (coleta_iniciada_msg or exclusao_iniciada_msg or edicao_iniciada_msg):
             reply = next((b.text for b in response.content if hasattr(b, "text")), "")
 
     except anthropic.APIError as e:
