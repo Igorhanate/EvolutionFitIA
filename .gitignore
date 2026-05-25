@@ -12,6 +12,10 @@ build/
 *.log
 twilio_2FA_recovery_code.txt
 
+# Bases de dados externas / arquivos grandes — nunca commitar
+*.xlsx
+*.xls
+
 # Dumps de dados de produção — nunca commitar
 treinos.json
 backup_treinos_*.json

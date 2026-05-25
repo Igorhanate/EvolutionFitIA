@@ -443,5 +443,42 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [ ] Skill de NUTRIÇÃO especialista (referência: mcpmarket nutritional-specialist + ISSN Position Stand) para melhorar dietas geradas.
 - [ ] Skill de TREINOS especialista (referências: Schoenfeld, Israetel, Krieger; volume/descanso/progressão do protocolo Igor Hanate) para melhorar treinos gerados.
 
+### Base nutricional TACO (próximo grande passo)
+
+**Arquivo:** `Taco-4a-Edicao.xlsx` na raiz — aba principal `CMVCol taco3`, **597 alimentos** em **15 grupos**.
+
+**Colunas-chave** (tudo por 100g):
+
+| Col | Campo |
+|-----|-------|
+| 0 | ID TACO (número do alimento) |
+| 1 | Nome do alimento |
+| 3 | Energia (kcal) |
+| 5 | Proteína (g) |
+| 6 | Lipídeos/gordura (g) |
+| 8 | Carboidrato (g) |
+| 9 | Fibra alimentar (g) — 38% dos alimentos sem dado |
+
+Col 13 é duplicata de layout (mesma planilha diagramada em duas metades para impressão) — **ignorar**. Categoria de cada alimento não está em coluna própria: vem das **linhas-separador** (iterar mantendo `categoria_atual`).
+
+**Tratamento de sujeira na importação:**
+- `"Tr"` (traços, abaixo do limite de detecção) → `0.0`
+- `"*"` (dado não disponível) → `NULL` — **nunca inventar valor**
+- Carboidrato negativo (artefato de arredondamento de médias laboratoriais, 4 alimentos, máx −0.05g) → `0.0`
+- Nomes → `.strip()` (2 nomes com espaço no início)
+- kcal: guardar como float no banco, exibir arredondado a 1 casa decimal
+
+**Plano de implementação:**
+1. Criar model `AlimentoTACO` + tabela `alimentos_taco` (migração Alembic)
+2. Script de importação (`scripts/importar_taco.py`) que lê o Excel com `pandas`/`openpyxl` e popula a tabela aplicando o tratamento acima
+3. Funções de consulta em `nutricao_service`: busca por nome (ilike), retorno de macros por 100g e por porção informada
+
+**Para que serve:**
+- Fundação para edição inteligente de dieta (recalcular macros ao trocar itens)
+- Suporte à análise de refeição por foto (validação/complemento dos valores da IA)
+- Futura skill de nutrição especialista
+
+**TBCA:** NÃO usar por ora — tem restrição de uso comercial (exige autorização formal dos coordenadores da USP/UNICAMP). Avaliar somente com autorização em mãos.
+
 ### Segurança / operação
 - [ ] Configurar alerta de saldo baixo / recarga automática de créditos no Console da Anthropic (o bot parou hoje porque os créditos zeraram).
