@@ -387,6 +387,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [x] Apagar DIETAS pelo usuário via chat — FEITO 25/05.
 - [x] Apagar SUPLEMENTOS pelo usuário via chat — FEITO 25/05.
 - [ ] Replicar exclusão para REMÉDIO (não existe ainda como entidade no banco — bloqueado até implementar o modelo).
+- [ ] CADASTRAR REMÉDIOS (entidade nova — não existe model/tabela hoje): criar o modelo de remédio com uso PONTUAL (com data fim) ou RECORRENTE/contínuo, horário(s). Projeto próprio, MAIOR, porque se conecta ao sistema de LEMBRETES opt-in (que depende de disparo confiável — Render pago ou cron externo). Tratar depois do "editar".
 - [ ] EDITAR suplementos, treinos e dietas (pedido do usuário; provavelmente "apagar antigo + cadastrar novo" reusando os fluxos existentes).
 - [ ] Dados corporais (peso, idade, sexo): EDITÁVEIS, não apagáveis (decisão do dono).
 
