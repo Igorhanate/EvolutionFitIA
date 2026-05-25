@@ -16,6 +16,6 @@ twilio_2FA_recovery_code.txt
 treinos.json
 backup_treinos_*.json
 *_backup.json
-dryrun.json
+dryrun*.json
 delecao_resultado.json
 *_resultado.json
