@@ -388,7 +388,8 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [x] Apagar SUPLEMENTOS pelo usuário via chat — FEITO 25/05.
 - [ ] Replicar exclusão para REMÉDIO (não existe ainda como entidade no banco — bloqueado até implementar o modelo).
 - [ ] CADASTRAR REMÉDIOS (entidade nova — não existe model/tabela hoje): criar o modelo de remédio com uso PONTUAL (com data fim) ou RECORRENTE/contínuo, horário(s). Projeto próprio, MAIOR, porque se conecta ao sistema de LEMBRETES opt-in (que depende de disparo confiável — Render pago ou cron externo). Tratar depois do "editar".
-- [ ] EDITAR suplementos, treinos e dietas (pedido do usuário; provavelmente "apagar antigo + cadastrar novo" reusando os fluxos existentes).
+- [x] EDITAR SUPLEMENTO pelo usuário via chat — FEITO 25/05. Tool `iniciar_edicao_registro(alvo)` + estado `editando_registro` + `_handle_editar_registro` (etapas: aguardando_escolha → aguardando_novo_valor). Troca por posição (seguro com nomes duplicados). Fundação genérica pronta para treino e dieta.
+- [ ] EDITAR TREINO e DIETA (fundação genérica pronta; treino = cadastrar novo via serviço direto + apagar antigo; dieta = idem via nutricao_service.cadastrar_meta ou Claude bridge para extração de calorias).
 - [ ] Dados corporais (peso, idade, sexo): EDITÁVEIS, não apagáveis (decisão do dono).
 
 ### Lembretes (sistema novo opt-in) — depende de disparo confiável
