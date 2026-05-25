@@ -528,7 +528,7 @@ TOOLS = [
             "Inicia o fluxo de exclusão de um registro do usuário. "
             "Use quando o usuário quiser APAGAR/EXCLUIR/DELETAR algo que ele salvou (ex: 'quero apagar meu treino', "
             "'exclui esse treino', 'deletar treino'). Identifique o TIPO no 'alvo'. Se o usuário não deixar claro o tipo, "
-            "PERGUNTE antes de chamar esta ferramenta. Por enquanto só 'treino' está implementado. "
+            "PERGUNTE antes de chamar esta ferramenta. Treino, dieta e suplemento implementados. "
             "NÃO use para editar dados corporais (peso, idade, sexo) — esses são editáveis, não apagáveis."
         ),
         "input_schema": {
@@ -538,6 +538,29 @@ TOOLS = [
                     "type": "string",
                     "enum": ["treino", "dieta", "suplemento", "remedio"],
                     "description": "Tipo de registro que o usuário quer apagar",
+                },
+            },
+            "required": ["alvo"],
+        },
+    },
+    {
+        "name": "iniciar_edicao_registro",
+        "description": (
+            "Inicia o fluxo de edição de um registro do usuário. "
+            "Use quando o usuário quiser EDITAR/ALTERAR/CORRIGIR/MUDAR algo que ele salvou "
+            "(ex: 'quero editar meu suplemento', 'mudar nome do suplemento', 'corrigir minha dieta'). "
+            "Identifique o TIPO no 'alvo'. Se o usuário não deixar claro o tipo, PERGUNTE antes de chamar. "
+            "Por enquanto só 'suplemento' está implementado. "
+            "NÃO use para apagar dados — use iniciar_exclusao_registro para isso. "
+            "NÃO use para editar dados corporais (peso, idade, sexo) — esses têm fluxo próprio."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "alvo": {
+                    "type": "string",
+                    "enum": ["treino", "dieta", "suplemento", "remedio"],
+                    "description": "Tipo de registro que o usuário quer editar",
                 },
             },
             "required": ["alvo"],
@@ -930,6 +953,94 @@ async def _handle_apagar_registro(
     # Etapa desconhecida — aborta defensivamente
     conversa.estado_pendente = None
     return "Exclusão cancelada. Nada foi apagado."
+
+
+# ---------------------------------------------------------------------------
+# Edição de registros pelo usuário
+# ---------------------------------------------------------------------------
+
+def _iniciar_edicao_suplemento(user: Usuario, conversa: Conversa, db: Session) -> str:
+    """Lista suplementos para edição (um item de cada vez). Se vazio, não cria estado."""
+    itens = habito_service.get_suplementos_usuario(user.id, db) or []
+    if not itens:
+        return "Você não tem nenhum suplemento cadastrado para editar. 🙂"
+
+    conversa.estado_pendente = {
+        "tipo": "editando_registro",
+        "alvo": "suplemento",
+        "etapa": "aguardando_escolha",
+        "itens": itens,  # snapshot; posição N → itens[N-1]
+    }
+
+    linhas = ["Qual *suplemento* você quer editar?\n"]
+    for i, nome in enumerate(itens, start=1):
+        linhas.append(f"*{i}.* {nome}")
+    linhas.append("\nResponda com o *número*, ou *cancelar* para desistir.")
+    return "\n".join(linhas)
+
+
+async def _handle_editar_registro(
+    conversa: Conversa,
+    message_text: str,
+    user: Usuario,
+    db: Session,
+) -> str:
+    estado = conversa.estado_pendente
+    etapa = estado.get("etapa")
+    alvo = estado.get("alvo", "suplemento")
+    texto = (message_text or "").strip()
+    low = texto.lower()
+
+    # Cancelamento explícito em qualquer etapa — aborta sem alterar nada
+    if any(kw in low for kw in _CANCELAR_EXCLUSAO_KEYWORDS):
+        conversa.estado_pendente = None
+        return "Edição cancelada. Nada foi alterado. 👍"
+
+    if etapa == "aguardando_escolha":
+        if alvo == "suplemento":
+            itens = estado.get("itens", [])
+            total = len(itens)
+            # Aceita só UM número válido — sem "todos", sem múltiplos
+            posicoes = _parse_posicoes(texto, total)
+            if not posicoes or len(posicoes) != 1:
+                conversa.estado_pendente = None
+                return "Edição cancelada — não entendi o número. Nada foi alterado."
+            pos = posicoes[0]
+            old_nome = itens[pos - 1]
+            conversa.estado_pendente = {
+                "tipo": "editando_registro",
+                "alvo": "suplemento",
+                "etapa": "aguardando_novo_valor",
+                "itens": itens,    # snapshot completo para a troca
+                "pos": pos,        # 1-based
+                "old_nome": old_nome,
+            }
+            return f"Qual o novo nome para *{old_nome}*? (ou *cancelar*)"
+        else:
+            conversa.estado_pendente = None
+            return "Edição cancelada. Tipo não suportado."
+
+    if etapa == "aguardando_novo_valor":
+        if alvo == "suplemento":
+            novo_nome = texto
+            if not novo_nome:
+                conversa.estado_pendente = None
+                return "Edição cancelada — nome vazio. Nada foi alterado."
+            itens = list(estado.get("itens", []))  # cópia mutável do snapshot
+            pos = estado.get("pos", 1)
+            old_nome = estado.get("old_nome", "")
+            # Troca por posição — seguro mesmo com nomes duplicados na lista
+            itens[pos - 1] = novo_nome
+            habito_service.registrar_suplementos_usuario(user.id, itens, db)
+            conversa.estado_pendente = None
+            return f"Pronto! *{old_nome}* virou *{novo_nome}*. ✅"
+        else:
+            conversa.estado_pendente = None
+            return "Edição cancelada. Tipo não suportado."
+
+    # Etapa desconhecida — aborta defensivamente
+    conversa.estado_pendente = None
+    return "Edição cancelada. Nada foi alterado."
 
 
 # ---------------------------------------------------------------------------
@@ -1890,6 +2001,16 @@ async def process_message(
         db.commit()
         return reply
 
+    # 3.6 Fluxo de edição de registro — intercepta antes do fluxo geral (não chama a IA)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "editando_registro":
+        reply = await _handle_editar_registro(conversa, message_text, user, db)
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
+
     # 4. Trata confirmações pendentes (exercício e refeição)
     ctx_confirmacao = (
         _handle_confirmacao(conversa, message_text, user, sessao_data, db)
@@ -1979,11 +2100,13 @@ async def process_message(
         tool_iterations = 0
         coleta_iniciada_msg: str | None = None
         exclusao_iniciada_msg: str | None = None
+        edicao_iniciada_msg: str | None = None
         while response.stop_reason == "tool_use" and tool_iterations < 5:
             tool_iterations += 1
             tool_results = []
             coleta_iniciada_msg = None
             exclusao_iniciada_msg = None
+            edicao_iniciada_msg = None
 
             for block in response.content:
                 if block.type != "tool_use":
@@ -2041,6 +2164,17 @@ async def process_message(
                             "Exclusão de remédio chega em breve! 🙂"
                         )
                         result = "EXCLUSAO_TIPO_NAO_SUPORTADO"
+                elif block.name == "iniciar_edicao_registro":
+                    alvo = block.input.get("alvo")
+                    if alvo == "suplemento":
+                        edicao_iniciada_msg = _iniciar_edicao_suplemento(user, conversa, db)
+                        result = "EDICAO_INICIADA"
+                    else:
+                        edicao_iniciada_msg = (
+                            "Por enquanto só consigo editar *suplementos*. "
+                            "Edição de treino e dieta chega em breve! 🙂"
+                        )
+                        result = "EDICAO_TIPO_NAO_SUPORTADO"
                 else:
                     result = "Ferramenta desconhecida."
                 tool_results.append({
@@ -2049,9 +2183,9 @@ async def process_message(
                     "content": result,
                 })
 
-            # Se a coleta ou a exclusão foi iniciada, usa a mensagem pré-formatada sem chamar Claude novamente
-            if coleta_iniciada_msg or exclusao_iniciada_msg:
-                reply = coleta_iniciada_msg or exclusao_iniciada_msg
+            # Se a coleta, exclusão ou edição foi iniciada, usa a mensagem pré-formatada sem chamar Claude novamente
+            if coleta_iniciada_msg or exclusao_iniciada_msg or edicao_iniciada_msg:
+                reply = coleta_iniciada_msg or exclusao_iniciada_msg or edicao_iniciada_msg
                 break
 
             history.append({"role": "assistant", "content": response.content})
