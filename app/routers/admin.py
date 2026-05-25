@@ -19,7 +19,7 @@ from app.models.meta_nutricional import MetaNutricional
 from app.models.registro_refeicao import RegistroRefeicao
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service, nutricao_service
+from app.services import exercicio_service, nutricao_service, treino_service
 from app.services.subscription_service import check_active_subscription
 
 router = APIRouter(tags=["Admin"], dependencies=[Depends(require_admin_key)])
@@ -320,11 +320,7 @@ def delete_treinos(payload: DeleteTreinosRequest, db: Session = Depends(get_db))
 
     # 4.2 SÓ DEPOIS do backup, apaga — apenas os ids encontrados desse usuário
     ids_a_apagar = sorted(encontrados_ids)
-    apagados = (
-        db.query(Treino)
-        .filter(Treino.user_id == payload.user_id, Treino.id.in_(ids_a_apagar))
-        .delete(synchronize_session=False)
-    )
+    apagados = treino_service.apagar_treinos(payload.user_id, ids_a_apagar, db)
     db.commit()
 
     return {

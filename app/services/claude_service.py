@@ -9,7 +9,7 @@ from app.models.conversa import Conversa
 from app.models.dieta import Dieta
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service, habito_service, nutricao_service, perfil_service
+from app.services import exercicio_service, habito_service, nutricao_service, perfil_service, treino_service
 
 logger = logging.getLogger(__name__)
 
@@ -521,6 +521,27 @@ TOOLS = [
             "required": ["suplementos"],
         },
     },
+    {
+        "name": "iniciar_exclusao_registro",
+        "description": (
+            "Inicia o fluxo de exclusão de um registro do usuário. "
+            "Use quando o usuário quiser APAGAR/EXCLUIR/DELETAR algo que ele salvou (ex: 'quero apagar meu treino', "
+            "'exclui esse treino', 'deletar treino'). Identifique o TIPO no 'alvo'. Se o usuário não deixar claro o tipo, "
+            "PERGUNTE antes de chamar esta ferramenta. Por enquanto só 'treino' está implementado. "
+            "NÃO use para editar dados corporais (peso, idade, sexo) — esses são editáveis, não apagáveis."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "alvo": {
+                    "type": "string",
+                    "enum": ["treino", "dieta", "suplemento", "remedio"],
+                    "description": "Tipo de registro que o usuário quer apagar",
+                },
+            },
+            "required": ["alvo"],
+        },
+    },
 ]
 
 # Subset de tools para a chamada de análise das 3 fotos (exclui ferramentas de roteamento)
@@ -655,6 +676,106 @@ def _treinos_context_str(user_id: int, db: Session) -> str | None:
         linhas.append("- Anteriores: " + ", ".join(partes_ant))
 
     return "\n".join(linhas)
+
+
+# ---------------------------------------------------------------------------
+# Exclusão de registros pelo usuário (genérico; só TREINO implementado)
+# ---------------------------------------------------------------------------
+
+_CANCELAR_EXCLUSAO_KEYWORDS = {
+    "cancela", "cancelar", "deixa", "deixa pra la", "deixa pra lá",
+    "desiste", "desistir", "esquece", "esqueça", "nao quero", "não quero",
+}
+
+
+def _label_treino(t: Treino) -> str:
+    cont = t.conteudo if isinstance(t.conteudo, dict) else {}
+    texto = cont.get("texto", "") if isinstance(cont, dict) else ""
+    data = t.criado_em.strftime("%d/%m/%Y") if t.criado_em else "data desconhecida"
+    return f"{_titulo_treino(texto)} ({data})"
+
+
+def _iniciar_exclusao_treino(user: Usuario, conversa: Conversa, db: Session) -> str:
+    """Lista os treinos do usuário e arma o estado de exclusão. Se vazio, não cria estado."""
+    treinos = treino_service.listar_treinos(user.id, db)
+    if not treinos:
+        return "Você ainda não tem nenhum treino salvo para apagar. 🙂"
+
+    ids = [t.id for t in treinos]
+    labels = [_label_treino(t) for t in treinos]
+    conversa.estado_pendente = {
+        "tipo": "apagando_registro",
+        "alvo": "treino",
+        "etapa": "aguardando_escolha",
+        "ids": ids,        # snapshot na ordem exibida — posição N → ids[N-1]
+        "labels": labels,
+    }
+
+    linhas = ["Qual *treino* você quer apagar? 🗑️\n"]
+    for i, label in enumerate(labels, start=1):
+        linhas.append(f"*{i}.* {label}")
+    linhas.append("\nResponda com o *número* do treino, ou *cancelar* para desistir.")
+    return "\n".join(linhas)
+
+
+async def _handle_apagar_registro(
+    conversa: Conversa,
+    message_text: str,
+    user: Usuario,
+    db: Session,
+) -> str:
+    estado = conversa.estado_pendente
+    etapa = estado.get("etapa")
+    texto = (message_text or "").strip()
+    low = texto.lower()
+
+    # (c) Cancelamento explícito em qualquer etapa — aborta sem apagar
+    if any(kw in low for kw in _CANCELAR_EXCLUSAO_KEYWORDS):
+        conversa.estado_pendente = None
+        return "Exclusão cancelada. Nada foi apagado. 👍"
+
+    if etapa == "aguardando_escolha":
+        ids = estado.get("ids", [])
+        labels = estado.get("labels", [])
+        # (c) resposta não-numérica ou fora de faixa → aborta sem apagar
+        if not texto.isdigit():
+            conversa.estado_pendente = None
+            return "Exclusão cancelada — não entendi o número. Nada foi apagado."
+        n = int(texto)
+        if not (1 <= n <= len(ids)):
+            conversa.estado_pendente = None
+            return "Exclusão cancelada — número fora da lista. Nada foi apagado."
+        escolhido_id = ids[n - 1]
+        escolhido_label = labels[n - 1] if n - 1 < len(labels) else f"treino {escolhido_id}"
+        conversa.estado_pendente = {
+            "tipo": "apagando_registro",
+            "alvo": estado.get("alvo"),
+            "etapa": "aguardando_confirmacao",
+            "escolhido_id": escolhido_id,
+            "escolhido_label": escolhido_label,
+        }
+        return (
+            f"Confirma apagar o treino *{escolhido_label}*?\n\n"
+            "Responda *sim* para apagar de vez, ou *não* para cancelar."
+        )
+
+    if etapa == "aguardando_confirmacao":
+        escolhido_id = estado.get("escolhido_id")
+        escolhido_label = estado.get("escolhido_label", "")
+        resposta = _normalizar_confirmacao(texto)
+        conversa.estado_pendente = None  # encerra o fluxo em qualquer desfecho
+        # (b) só apaga com "sim" explícito; "nao"/ambíguo aborta
+        if resposta != "sim":
+            return "Exclusão cancelada. Nada foi apagado. 👍"
+        # (a) guarda por user_id dentro de apagar_treinos
+        apagados = treino_service.apagar_treinos(user.id, [escolhido_id], db)
+        if apagados:
+            return f"Pronto! Treino *{escolhido_label}* apagado com sucesso. ✅"
+        return "Esse treino não foi encontrado (talvez já tenha sido removido). Nada foi apagado."
+
+    # Etapa desconhecida — aborta defensivamente
+    conversa.estado_pendente = None
+    return "Exclusão cancelada. Nada foi apagado."
 
 
 # ---------------------------------------------------------------------------
@@ -1605,6 +1726,16 @@ async def process_message(
         db.commit()
         return reply
 
+    # 3.5 Fluxo de exclusão de registro — intercepta antes do fluxo geral (não chama a IA)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "apagando_registro":
+        reply = await _handle_apagar_registro(conversa, message_text, user, db)
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
+
     # 4. Trata confirmações pendentes (exercício e refeição)
     ctx_confirmacao = (
         _handle_confirmacao(conversa, message_text, user, sessao_data, db)
@@ -1693,10 +1824,12 @@ async def process_message(
         # 10. Loop de tool use (máximo 5 ferramentas por mensagem)
         tool_iterations = 0
         coleta_iniciada_msg: str | None = None
+        exclusao_iniciada_msg: str | None = None
         while response.stop_reason == "tool_use" and tool_iterations < 5:
             tool_iterations += 1
             tool_results = []
             coleta_iniciada_msg = None
+            exclusao_iniciada_msg = None
 
             for block in response.content:
                 if block.type != "tool_use":
@@ -1737,6 +1870,17 @@ async def process_message(
                     result = _process_tool_tomei_suplementos(user, db)
                 elif block.name == "registrar_suplementos_usuario":
                     result = _process_tool_suplementos_usuario(block.input, user, db)
+                elif block.name == "iniciar_exclusao_registro":
+                    alvo = block.input.get("alvo")
+                    if alvo == "treino":
+                        exclusao_iniciada_msg = _iniciar_exclusao_treino(user, conversa, db)
+                        result = "EXCLUSAO_INICIADA"
+                    else:
+                        exclusao_iniciada_msg = (
+                            "Por enquanto só consigo apagar *treinos*. "
+                            "Exclusão de dieta, suplemento e remédio chega em breve! 🙂"
+                        )
+                        result = "EXCLUSAO_TIPO_NAO_SUPORTADO"
                 else:
                     result = "Ferramenta desconhecida."
                 tool_results.append({
@@ -1745,9 +1889,9 @@ async def process_message(
                     "content": result,
                 })
 
-            # Se a coleta foi iniciada, usa a mensagem pré-formatada sem chamar Claude novamente
-            if coleta_iniciada_msg:
-                reply = coleta_iniciada_msg
+            # Se a coleta ou a exclusão foi iniciada, usa a mensagem pré-formatada sem chamar Claude novamente
+            if coleta_iniciada_msg or exclusao_iniciada_msg:
+                reply = coleta_iniciada_msg or exclusao_iniciada_msg
                 break
 
             history.append({"role": "assistant", "content": response.content})
@@ -1761,7 +1905,7 @@ async def process_message(
                 tools=TOOLS,
             )
 
-        if not coleta_iniciada_msg:
+        if not (coleta_iniciada_msg or exclusao_iniciada_msg):
             reply = next((b.text for b in response.content if hasattr(b, "text")), "")
 
     except anthropic.APIError as e:
