@@ -335,6 +335,12 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 25/05/2026 — continuação)
+- NOVO: usuário pode apagar as próprias DIETAS via chat. Fundação genérica de exclusão parametrizada por `alvo`: `_EXCLUSAO_CONFIG` mapeia tipo → (singular, plural, apagar_fn); `_handle_apagar_registro` agora serve treino e dieta sem duplicação. Adicionado `listar_dietas` + `apagar_dietas` em nutricao_service (hard-delete em `metas_nutricionais`, guarda user_id). A tabela `dietas` (keyword-lixo) é ignorada — só `MetaNutricional` é exposta. Dispatch da tool `iniciar_exclusao_registro` plugado para `alvo="dieta"`. Comportamento de treino preservado identicamente.
+- NOVO: usuário pode remover suplementos da lista via chat. `_iniciar_exclusao_suplemento` lê `PerfilHabitos.suplementos` (lista JSON, sem IDs de banco), exibe numerada. `_handle_apagar_registro` bifurca por `alvo=="suplemento"`: calcula `lista_restante` por posição (correto mesmo com nomes duplicados), regrava via `registrar_suplementos_usuario(user_id, lista_restante, db)`. Apagar todos → `[]` gravado corretamente. Treino e dieta preservados identicamente.
+- [x] Apagar DIETAS pelo usuário via chat — FEITO 25/05.
+- [x] Apagar SUPLEMENTOS pelo usuário via chat — FEITO 25/05.
+
 ## HISTÓRICO DE MUDANÇAS (sessão de 25/05/2026)
 - Segunda limpeza de produção concluída: apagados +28 treinos-lixo do user 1 (menus, coaching, confirmações com real preservado, 3 cópias redundantes de Perna). Banco do user 1 com 10 treinos reais e únicos. Limpeza do histórico 100% concluída.
 - Lembrete automático das 20h DESATIVADO (bloco add_job comentado em scheduler_service.py; função _enviar_lembretes_suplemento preservada). Será substituído por sistema de lembretes opt-in (contínuo/pontual/horário) quando a confiabilidade do disparo for resolvida (Render free dorme → scheduler in-process não dispara confiável; precisa Render pago ou cron externo).
@@ -378,7 +384,9 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ### Exclusão e edição de registros pelo usuário
 - [x] Apagar TREINOS pelo usuário via chat (lista numerada, múltiplos, "todos", confirmação) — FEITO 25/05.
-- [ ] Replicar exclusão para DIETA, SUPLEMENTO e REMÉDIO (fundação genérica já pronta: HANDLERS por tipo, parser multi-seleção, confirmação, travas. Falta listar_+apagar_ de cada tipo + plugar no dispatch).
+- [x] Apagar DIETAS pelo usuário via chat — FEITO 25/05.
+- [x] Apagar SUPLEMENTOS pelo usuário via chat — FEITO 25/05.
+- [ ] Replicar exclusão para REMÉDIO (não existe ainda como entidade no banco — bloqueado até implementar o modelo).
 - [ ] EDITAR suplementos, treinos e dietas (pedido do usuário; provavelmente "apagar antigo + cadastrar novo" reusando os fluxos existentes).
 - [ ] Dados corporais (peso, idade, sexo): EDITÁVEIS, não apagáveis (decisão do dono).
 
