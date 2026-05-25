@@ -393,6 +393,12 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ### Lembretes (sistema novo opt-in) — depende de disparo confiável
 - [ ] Lembretes opt-in: usuário ativa, informa o quê + se é contínuo ou pontual (remédio com data fim) + horário. Tabela de lembretes no banco. Lembrete pontual para sozinho ao fim do período. PRÉ-REQUISITO: disparo confiável (Render pago ou cron externo) — o scheduler in-process não dispara no free tier.
 
+**REGRAS OBRIGATÓRIAS do sistema de lembretes (válidas quando o sistema opt-in for construído):**
+- [ ] **OPT-IN ESTRITO:** lembrete só é enviado para quem PEDIU explicitamente para recebê-lo. NUNCA enviar lembrete automático/não solicitado a nenhum usuário. (O antigo job das 20h foi desativado em 25/05 justamente por violar isso.)
+- [ ] **Lembrete de suplemento só faz sentido se o usuário TEM suplemento cadastrado:** se a lista de suplementos estiver vazia, NÃO enviar lembrete de suplemento.
+- Ao ativar um lembrete, o usuário informa: o quê, se é uso CONTÍNUO ou PONTUAL (ex: remédio por X dias com data fim), e o HORÁRIO desejado. Lembrete pontual deve parar sozinho ao fim do período.
+- PRÉ-REQUISITO técnico: disparo confiável (Render pago ou cron externo) — o scheduler in-process não dispara no free tier (serviço dorme).
+
 ### Experiência de uso (prioridade)
 - [ ] Bot repetitivo: faz a mesma pergunta várias vezes ao criar treino e dieta. Corrigir para não repetir.
 
