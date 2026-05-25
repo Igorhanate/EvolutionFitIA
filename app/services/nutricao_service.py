@@ -141,6 +141,31 @@ def get_meta_ativa(user_id: int, db: Session) -> MetaNutricional | None:
     )
 
 
+def listar_dietas(user_id: int, db: Session) -> list[MetaNutricional]:
+    """Metas nutricionais do usuário, mais recentes primeiro. Toda meta foi criada conscientemente — sem filtro de lixo."""
+    return (
+        db.query(MetaNutricional)
+        .filter(MetaNutricional.user_id == user_id)
+        .order_by(MetaNutricional.criado_em.desc())
+        .all()
+    )
+
+
+def apagar_dietas(user_id: int, ids: list[int], db: Session) -> int:
+    """
+    Hard-delete das metas nutricionais cujo id está em `ids` E que pertençam a `user_id`.
+    Guarda de segurança: nunca apaga meta de outro usuário.
+    Não faz commit — o chamador controla a transação. Retorna quantos foram apagados.
+    """
+    if not ids:
+        return 0
+    return (
+        db.query(MetaNutricional)
+        .filter(MetaNutricional.user_id == user_id, MetaNutricional.id.in_(ids))
+        .delete(synchronize_session=False)
+    )
+
+
 def cadastrar_meta(
     user_id: int,
     nome: str,

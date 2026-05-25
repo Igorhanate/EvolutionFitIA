@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.conversa import Conversa
 from app.models.dieta import Dieta
+from app.models.meta_nutricional import MetaNutricional
 from app.models.treino import Treino
 from app.models.usuario import Usuario
 from app.services import exercicio_service, habito_service, nutricao_service, perfil_service, treino_service
@@ -720,6 +721,11 @@ def _label_treino(t: Treino) -> str:
     return f"{_titulo_treino(texto)} ({data})"
 
 
+def _label_dieta(meta: MetaNutricional) -> str:
+    data = meta.criado_em.strftime("%d/%m/%Y") if meta.criado_em else "data desconhecida"
+    return f"{meta.nome} ({data})"
+
+
 def _iniciar_exclusao_treino(user: Usuario, conversa: Conversa, db: Session) -> str:
     """Lista os treinos do usuário e arma o estado de exclusão. Se vazio, não cria estado."""
     treinos = treino_service.listar_treinos(user.id, db)
@@ -746,6 +752,39 @@ def _iniciar_exclusao_treino(user: Usuario, conversa: Conversa, db: Session) -> 
     return "\n".join(linhas)
 
 
+def _iniciar_exclusao_dieta(user: Usuario, conversa: Conversa, db: Session) -> str:
+    """Lista as dietas do usuário e arma o estado de exclusão. Se vazia, não cria estado."""
+    dietas = nutricao_service.listar_dietas(user.id, db)
+    if not dietas:
+        return "Você ainda não tem nenhuma dieta cadastrada para apagar. 🙂"
+
+    ids = [d.id for d in dietas]
+    labels = [_label_dieta(d) for d in dietas]
+    conversa.estado_pendente = {
+        "tipo": "apagando_registro",
+        "alvo": "dieta",
+        "etapa": "aguardando_escolha",
+        "ids": ids,
+        "labels": labels,
+    }
+
+    linhas = ["Qual *dieta* você quer apagar? 🗑️\n"]
+    for i, label in enumerate(labels, start=1):
+        linhas.append(f"*{i}.* {label}")
+    linhas.append(
+        "\nResponda com o *número* (ou vários: ex. *1, 3*), *todas* para apagar todas, "
+        "ou *cancelar* para desistir."
+    )
+    return "\n".join(linhas)
+
+
+# Configuração de exclusão por tipo: (singular, plural, função de apagar)
+_EXCLUSAO_CONFIG: dict[str, tuple[str, str, object]] = {
+    "treino": ("treino", "treinos", treino_service.apagar_treinos),
+    "dieta": ("dieta", "dietas", nutricao_service.apagar_dietas),
+}
+
+
 async def _handle_apagar_registro(
     conversa: Conversa,
     message_text: str,
@@ -754,8 +793,11 @@ async def _handle_apagar_registro(
 ) -> str:
     estado = conversa.estado_pendente
     etapa = estado.get("etapa")
+    alvo = estado.get("alvo", "treino")
     texto = (message_text or "").strip()
     low = texto.lower()
+
+    singular, plural, apagar_fn = _EXCLUSAO_CONFIG.get(alvo, ("registro", "registros", lambda *_: 0))
 
     # (c) Cancelamento explícito em qualquer etapa — aborta sem apagar
     if any(kw in low for kw in _CANCELAR_EXCLUSAO_KEYWORDS):
@@ -780,13 +822,13 @@ async def _handle_apagar_registro(
 
         escolhido_ids = [ids[p - 1] for p in posicoes]
         escolhido_labels = [
-            labels[p - 1] if p - 1 < len(labels) else f"treino {ids[p - 1]}" for p in posicoes
+            labels[p - 1] if p - 1 < len(labels) else f"{singular} {ids[p - 1]}" for p in posicoes
         ]
         todos = total > 0 and len(escolhido_ids) == total
 
         conversa.estado_pendente = {
             "tipo": "apagando_registro",
-            "alvo": estado.get("alvo"),
+            "alvo": alvo,
             "etapa": "aguardando_confirmacao",
             "escolhido_ids": escolhido_ids,
             "escolhido_labels": escolhido_labels,
@@ -797,17 +839,17 @@ async def _handle_apagar_registro(
         n = len(escolhido_ids)
         if todos:
             return (
-                f"⚠️ Isso vai apagar *TODOS* os seus {total} treinos e *NÃO tem como desfazer*:\n"
+                f"⚠️ Isso vai apagar *TODOS* os seus {total} {plural} e *NÃO tem como desfazer*:\n"
                 f"{lista_nominal}\n\n"
                 "Tem certeza? Responda *sim* para apagar tudo ou *não* para cancelar."
             )
         if n == 1:
             return (
-                f"Vou apagar este treino:\n{lista_nominal}\n\n"
+                f"Vou apagar este {singular}:\n{lista_nominal}\n\n"
                 "Confirma? Responda *sim* para apagar ou *não* para cancelar."
             )
         return (
-            f"Vou apagar estes {n} treinos:\n{lista_nominal}\n\n"
+            f"Vou apagar estes {n} {plural}:\n{lista_nominal}\n\n"
             "Confirma? Responda *sim* para apagar ou *não* para cancelar."
         )
 
@@ -818,12 +860,11 @@ async def _handle_apagar_registro(
         # (b) só apaga com "sim" explícito; "nao"/ambíguo aborta
         if resposta != "sim":
             return "Exclusão cancelada. Nada foi apagado. 👍"
-        # (a) guarda por user_id dentro de apagar_treinos; uma única chamada com a lista
-        apagados = treino_service.apagar_treinos(user.id, escolhido_ids, db)
+        apagados = apagar_fn(user.id, escolhido_ids, db)
         if apagados:
-            plural = "s" if apagados != 1 else ""
-            return f"Pronto! {apagados} treino{plural} apagado{plural}. ✅"
-        return "Esses treinos não foram encontrados (talvez já tenham sido removidos). Nada foi apagado."
+            sufixo = "s" if apagados != 1 else ""
+            return f"Pronto! {apagados} {singular}{sufixo} apagado{sufixo}. ✅"
+        return f"Esses {plural} não foram encontrados (talvez já tenham sido removidos). Nada foi apagado."
 
     # Etapa desconhecida — aborta defensivamente
     conversa.estado_pendente = None
@@ -1927,10 +1968,13 @@ async def process_message(
                     if alvo == "treino":
                         exclusao_iniciada_msg = _iniciar_exclusao_treino(user, conversa, db)
                         result = "EXCLUSAO_INICIADA"
+                    elif alvo == "dieta":
+                        exclusao_iniciada_msg = _iniciar_exclusao_dieta(user, conversa, db)
+                        result = "EXCLUSAO_INICIADA"
                     else:
                         exclusao_iniciada_msg = (
-                            "Por enquanto só consigo apagar *treinos*. "
-                            "Exclusão de dieta, suplemento e remédio chega em breve! 🙂"
+                            "Por enquanto só consigo apagar *treinos* e *dietas*. "
+                            "Exclusão de suplemento e remédio chega em breve! 🙂"
                         )
                         result = "EXCLUSAO_TIPO_NAO_SUPORTADO"
                 else:
