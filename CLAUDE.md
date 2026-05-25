@@ -335,6 +335,12 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 25/05/2026)
+- Segunda limpeza de produção concluída: apagados +28 treinos-lixo do user 1 (menus, coaching, confirmações com real preservado, 3 cópias redundantes de Perna). Banco do user 1 com 10 treinos reais e únicos. Limpeza do histórico 100% concluída.
+- Lembrete automático das 20h DESATIVADO (bloco add_job comentado em scheduler_service.py; função _enviar_lembretes_suplemento preservada). Será substituído por sistema de lembretes opt-in (contínuo/pontual/horário) quando a confiabilidade do disparo for resolvida (Render free dorme → scheduler in-process não dispara confiável; precisa Render pago ou cron externo).
+- Criado app/services/treino_service.py (listar_treinos com filtro real + apagar_treinos com guarda user_id+id). Rota admin /admin/treinos/delete refatorada para reusar apagar_treinos (guarda centralizada).
+- NOVO: usuário pode apagar os próprios treinos via chat. Tool iniciar_exclusao_registro(alvo) + estado "apagando_registro" + _handle_apagar_registro (step 3.5 em process_message). Fluxo seguro: lista numerada → escolha → confirmação → hard-delete. Suporta múltiplos ("1, 3, 4") e "todos" (com confirmação reforçada de irreversibilidade). Travas: só itens do próprio user, só apaga com "sim" explícito, cancelar/seleção inválida aborta (tudo-ou-nada). Testado em produção.
+
 ## HISTÓRICO DE MUDANÇAS (sessão de 24/05/2026)
 - Removido o salvamento de treino por keyword (gerava registros falsos). Dieta mantém keyword até a Etapa 3.
 - Bug A (salvamento) confirmado resolvido: treino gerado com sucesso é salvo; adicionada guarda contra reply vazio. Confirmado em produção.
@@ -369,6 +375,15 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [x] Limpeza completa (grupo D + lixo restante) — RESOLVIDO em 24/05, banco com 10 treinos reais.
 - [ ] Etapa 2b: reaproveitar perfil no 2º treino (não repetir perguntas).
 - [ ] Etapa 3: coleta estruturada de DIETA + remover keyword de dieta.
+
+### Exclusão e edição de registros pelo usuário
+- [x] Apagar TREINOS pelo usuário via chat (lista numerada, múltiplos, "todos", confirmação) — FEITO 25/05.
+- [ ] Replicar exclusão para DIETA, SUPLEMENTO e REMÉDIO (fundação genérica já pronta: HANDLERS por tipo, parser multi-seleção, confirmação, travas. Falta listar_+apagar_ de cada tipo + plugar no dispatch).
+- [ ] EDITAR suplementos, treinos e dietas (pedido do usuário; provavelmente "apagar antigo + cadastrar novo" reusando os fluxos existentes).
+- [ ] Dados corporais (peso, idade, sexo): EDITÁVEIS, não apagáveis (decisão do dono).
+
+### Lembretes (sistema novo opt-in) — depende de disparo confiável
+- [ ] Lembretes opt-in: usuário ativa, informa o quê + se é contínuo ou pontual (remédio com data fim) + horário. Tabela de lembretes no banco. Lembrete pontual para sozinho ao fim do período. PRÉ-REQUISITO: disparo confiável (Render pago ou cron externo) — o scheduler in-process não dispara no free tier.
 
 ### Experiência de uso (prioridade)
 - [ ] Bot repetitivo: faz a mesma pergunta várias vezes ao criar treino e dieta. Corrigir para não repetir.
