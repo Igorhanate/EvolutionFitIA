@@ -687,6 +687,31 @@ _CANCELAR_EXCLUSAO_KEYWORDS = {
     "desiste", "desistir", "esquece", "esqueça", "nao quero", "não quero",
 }
 
+_SELECIONAR_TODOS_KEYWORDS = {"todos", "todas", "tudo"}
+
+
+def _parse_posicoes(texto: str, total: int) -> list[int] | None:
+    """
+    Extrai posições (1..total) de uma string tipo '2', '1, 3, 4' ou '1 3 4'.
+    Ignora duplicados preservando a ordem. Retorna None se QUALQUER token não for
+    inteiro válido dentro da faixa (tudo-ou-nada — nunca seleção parcial).
+    """
+    tokens = texto.replace(",", " ").split()
+    if not tokens:
+        return None
+    posicoes: list[int] = []
+    vistos: set[int] = set()
+    for tok in tokens:
+        if not tok.isdigit():
+            return None
+        n = int(tok)
+        if not (1 <= n <= total):
+            return None
+        if n not in vistos:
+            vistos.add(n)
+            posicoes.append(n)
+    return posicoes
+
 
 def _label_treino(t: Treino) -> str:
     cont = t.conteudo if isinstance(t.conteudo, dict) else {}
@@ -714,7 +739,10 @@ def _iniciar_exclusao_treino(user: Usuario, conversa: Conversa, db: Session) -> 
     linhas = ["Qual *treino* você quer apagar? 🗑️\n"]
     for i, label in enumerate(labels, start=1):
         linhas.append(f"*{i}.* {label}")
-    linhas.append("\nResponda com o *número* do treino, ou *cancelar* para desistir.")
+    linhas.append(
+        "\nResponda com o *número* (ou vários: ex. *1, 3*), *todos* para apagar todos, "
+        "ou *cancelar* para desistir."
+    )
     return "\n".join(linhas)
 
 
@@ -737,41 +765,65 @@ async def _handle_apagar_registro(
     if etapa == "aguardando_escolha":
         ids = estado.get("ids", [])
         labels = estado.get("labels", [])
-        # (c) resposta não-numérica ou fora de faixa → aborta sem apagar
-        if not texto.isdigit():
-            conversa.estado_pendente = None
-            return "Exclusão cancelada — não entendi o número. Nada foi apagado."
-        n = int(texto)
-        if not (1 <= n <= len(ids)):
-            conversa.estado_pendente = None
-            return "Exclusão cancelada — número fora da lista. Nada foi apagado."
-        escolhido_id = ids[n - 1]
-        escolhido_label = labels[n - 1] if n - 1 < len(labels) else f"treino {escolhido_id}"
+        total = len(ids)
+
+        # "todos"/"todas"/"tudo" (como token isolado) → seleciona a lista inteira
+        palavras = set(low.replace(",", " ").split())
+        if palavras & _SELECIONAR_TODOS_KEYWORDS:
+            posicoes = list(range(1, total + 1))
+        else:
+            posicoes = _parse_posicoes(texto, total)
+            # (c) seleção não reconhecida / fora de faixa → aborta sem apagar nada (tudo-ou-nada)
+            if not posicoes:
+                conversa.estado_pendente = None
+                return "Exclusão cancelada — não entendi a seleção. Nada foi apagado."
+
+        escolhido_ids = [ids[p - 1] for p in posicoes]
+        escolhido_labels = [
+            labels[p - 1] if p - 1 < len(labels) else f"treino {ids[p - 1]}" for p in posicoes
+        ]
+        todos = total > 0 and len(escolhido_ids) == total
+
         conversa.estado_pendente = {
             "tipo": "apagando_registro",
             "alvo": estado.get("alvo"),
             "etapa": "aguardando_confirmacao",
-            "escolhido_id": escolhido_id,
-            "escolhido_label": escolhido_label,
+            "escolhido_ids": escolhido_ids,
+            "escolhido_labels": escolhido_labels,
+            "todos": todos,
         }
+
+        lista_nominal = "\n".join(f"• {l}" for l in escolhido_labels)
+        n = len(escolhido_ids)
+        if todos:
+            return (
+                f"⚠️ Isso vai apagar *TODOS* os seus {total} treinos e *NÃO tem como desfazer*:\n"
+                f"{lista_nominal}\n\n"
+                "Tem certeza? Responda *sim* para apagar tudo ou *não* para cancelar."
+            )
+        if n == 1:
+            return (
+                f"Vou apagar este treino:\n{lista_nominal}\n\n"
+                "Confirma? Responda *sim* para apagar ou *não* para cancelar."
+            )
         return (
-            f"Confirma apagar o treino *{escolhido_label}*?\n\n"
-            "Responda *sim* para apagar de vez, ou *não* para cancelar."
+            f"Vou apagar estes {n} treinos:\n{lista_nominal}\n\n"
+            "Confirma? Responda *sim* para apagar ou *não* para cancelar."
         )
 
     if etapa == "aguardando_confirmacao":
-        escolhido_id = estado.get("escolhido_id")
-        escolhido_label = estado.get("escolhido_label", "")
+        escolhido_ids = estado.get("escolhido_ids", [])
         resposta = _normalizar_confirmacao(texto)
         conversa.estado_pendente = None  # encerra o fluxo em qualquer desfecho
         # (b) só apaga com "sim" explícito; "nao"/ambíguo aborta
         if resposta != "sim":
             return "Exclusão cancelada. Nada foi apagado. 👍"
-        # (a) guarda por user_id dentro de apagar_treinos
-        apagados = treino_service.apagar_treinos(user.id, [escolhido_id], db)
+        # (a) guarda por user_id dentro de apagar_treinos; uma única chamada com a lista
+        apagados = treino_service.apagar_treinos(user.id, escolhido_ids, db)
         if apagados:
-            return f"Pronto! Treino *{escolhido_label}* apagado com sucesso. ✅"
-        return "Esse treino não foi encontrado (talvez já tenha sido removido). Nada foi apagado."
+            plural = "s" if apagados != 1 else ""
+            return f"Pronto! {apagados} treino{plural} apagado{plural}. ✅"
+        return "Esses treinos não foram encontrados (talvez já tenham sido removidos). Nada foi apagado."
 
     # Etapa desconhecida — aborta defensivamente
     conversa.estado_pendente = None
