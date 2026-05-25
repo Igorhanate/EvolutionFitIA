@@ -62,13 +62,14 @@ async def _enviar_lembretes_suplemento() -> None:
 
 def start_scheduler() -> None:
     scheduler = get_scheduler()
-    scheduler.add_job(
-        _enviar_lembretes_suplemento,
-        CronTrigger(hour=20, minute=0, timezone="America/Sao_Paulo"),
-        id="lembretes_suplemento",
-        replace_existing=True,
-        misfire_grace_time=600,
-    )
+    # Lembrete das 20h desativado a pedido do usuário (25/05). Sistema de lembretes opt-in (continuo/pontual/horario) entrará quando a confiabilidade do disparo for resolvida (Render pago ou cron externo).
+    # scheduler.add_job(
+    #     _enviar_lembretes_suplemento,
+    #     CronTrigger(hour=20, minute=0, timezone="America/Sao_Paulo"),
+    #     id="lembretes_suplemento",
+    #     replace_existing=True,
+    #     misfire_grace_time=600,
+    # )
     scheduler.start()
     logger.info("scheduler_started")
 
