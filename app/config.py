@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     CLAUDE_MODEL: str = "claude-sonnet-4-6"
 
     OPENAI_API_KEY: str = ""
+    USDA_API_KEY: str = ""
 
     META_PHONE_NUMBER_ID: str
     META_ACCESS_TOKEN: str
