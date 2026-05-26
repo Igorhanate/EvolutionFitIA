@@ -278,6 +278,11 @@ def build_nutricao_context(user_id: int, db: Session) -> str | None:
         if macros:
             meta_str += f" | {' '.join(macros)}"
         partes.append(meta_str)
+        if meta.texto_original:
+            txt = meta.texto_original
+            if len(txt) > 500:
+                txt = txt[:500] + "..."
+            partes.append(f"Cardápio/ajustes do plano: {txt}")
 
     return "\n".join(partes) if partes else None
 
