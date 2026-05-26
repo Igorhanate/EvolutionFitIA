@@ -20,7 +20,7 @@ SaaS de fitness via WhatsApp com IA. O usuário envia mensagens para o número *
 |---|---|
 | Linguagem | Python 3.12 (Dockerfile) |
 | Framework | FastAPI 0.115.5 + Uvicorn |
-| ORM / Migrations | SQLAlchemy 2.0.36 + Alembic 1.14.0 (HEAD = migration 010) |
+| ORM / Migrations | SQLAlchemy 2.0.36 + Alembic 1.14.0 (HEAD = migration 012) |
 | Banco | PostgreSQL — **produção: Render free tier** (DB local no `.env` é cópia parada) |
 | WhatsApp | **Meta Cloud API** (graph.facebook.com v19.0) |
 | Pagamento | **Kiwify** — integração implementada em `kiwify.py`; Hotmart router ainda existe como código morto legado |
@@ -38,7 +38,7 @@ SaaS de fitness via WhatsApp com IA. O usuário envia mensagens para o número *
 
 **58 arquivos `.py`** · **~5.700 linhas de código**
 
-Estrutura: `main.py` + `app/` (routers, services, models, schemas, middleware) + `alembic/versions/` (10 migrations) + `scripts/`.
+Estrutura: `main.py` + `app/` (routers, services, models, schemas, middleware) + `alembic/versions/` (12 migrations) + `alembic/seeds/` (seed TACO) + `scripts/`.
 
 ---
 
@@ -319,10 +319,11 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `metas_nutricionais` | `user_id` (`ativa=True`) | nova meta desativa anteriores |
 | `habitos_dia` | `user_id + data` (unique) | `agua_ml`, `fumou`, `bebeu_alcool`, `suplementos_tomados` |
 | `perfis_habitos` | `user_id` (único) | lista de suplementos + datas início de streak |
+| `alimentos_taco` | `taco_id` (index) | tabela de referência global, somente-leitura; 597 alimentos TACO 4ª Ed. |
 
 ### Migrations Alembic
 
-`001` → `002` → `003` → `004` → `005` → `006` → `007` → `008` → `009` → `010` — **HEAD = 010**
+`001` → `002` → `003` → `004` → `005` → `006` → `007` → `008` → `009` → `010` → `011` → `012` — **HEAD = 012**
 
 | # | O que cria |
 |---|------------|
@@ -336,6 +337,10 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | 008 | `perfis_fitness` (perfil persistente do cliente) |
 | 009 | `dias_semana_padrao` + `tempo_sessao_padrao` em `perfis_fitness` |
 | 010 | `mensagens_processadas` (dedup atômico de webhooks) |
+| 011 | `alimentos_taco` — tabela vazia (índices em taco_id, nome, categoria) |
+| 012 | popula `alimentos_taco` com 597 alimentos do seed `alembic/seeds/taco_seed.json` |
+
+**ATENÇÃO — autogenerate é INVIÁVEL neste projeto:** o banco PostgreSQL do Render é compartilhado com outra aplicação (Evolution API), que possui ~30 tabelas próprias (`Session`, `Contact`, `Instance`, `Message`, etc.). `alembic revision --autogenerate` geraria `drop_table` para todas elas. **Todas as migrações devem ser escritas manualmente**, seguindo o padrão das 001–012.
 
 ---
 
@@ -430,6 +435,8 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 
 **Nota sobre migrations:** `alembic/env.py` e `app/database.py` leem `DATABASE_URL` diretamente de `os.environ` (via `load_dotenv`) sem importar o `Settings` completo. Isso permite que `alembic upgrade head` rode no startup sem exigir todas as variáveis da aplicação.
 
+**Nota sobre o .dockerignore:** `scripts/` está listado no `.dockerignore` e **não entra na imagem Docker**. Qualquer arquivo que precise existir em produção (ex: seed de dados consumido por migration) NÃO pode ficar em `scripts/`. Dados consumidos por migrações ficam em `alembic/seeds/` (que entra na imagem via `COPY . .`).
+
 ## Variáveis de ambiente no Render
 
 | Variável | Status |
@@ -463,8 +470,8 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - REFATORAÇÃO: lógica de persistência de treino extraída para `treino_service.cadastrar_treino_proprio(user_id, nome, texto, db, exercicios="") → Treino`. Reusada em `_process_tool_cadastrar_treino` (sem mudança de comportamento) e no novo fluxo de edição.
 - `dryrun*.json` adicionado ao `.gitignore` (padrão glob, cobre futuros). `*.xlsx` e `*.xls` adicionados ao `.gitignore` (cobre `Taco-4a-Edicao.xlsx` e futuros).
 
-### Investigado (sem código alterado)
-- Inspecionada a base nutricional TACO (`Taco-4a-Edicao.xlsx`): 597 alimentos, 15 grupos, 3 abas. Mapeamento completo de colunas, sujeira catalogada (`"Tr"`, `"*"`, carboidratos negativos, nomes com espaço). Plano de importação documentado no CLAUDE.md (seção "Base nutricional TACO").
+### Investigado e implementado
+- Base nutricional TACO **IMPORTADA**: model `AlimentoTACO`, migrations 011 (cria tabela) e 012 (popula 597 alimentos). Seed em `alembic/seeds/taco_seed.json`. Validação cruzada 56/56 campos OK. Descoberta infra: banco compartilhado com Evolution API → autogenerate inviável; `scripts/` no .dockerignore → seed movido para `alembic/seeds/`.
 
 ### Decidido
 - **Edição de dieta**: Opção B aprovada (coleta explícita de calorias, sem depender da IA para extrair). Fluxo: lista → escolhe UM → text o → pergunta calorias → handler salva direto + apaga antigo. Mais segura e consistente com o padrão de suplemento/treino. **Pendente de implementação.**
@@ -472,7 +479,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ### Pendente (próxima sessão)
 - [ ] Implementar **edição de dieta** (Opção B, plano aprovado).
-- [ ] Implementar **model + tabela + script de importação** da base TACO.
+- [x] ~~Implementar **model + tabela + script de importação** da base TACO~~ — CONCLUÍDO 26/05.
 
 ---
 
@@ -584,35 +591,25 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [ ] Skill de NUTRIÇÃO especialista (referência: mcpmarket nutritional-specialist + ISSN Position Stand) para melhorar dietas geradas.
 - [ ] Skill de TREINOS especialista (referências: Schoenfeld, Israetel, Krieger; volume/descanso/progressão do protocolo Igor Hanate) para melhorar treinos gerados.
 
-### Base nutricional TACO (próximo grande passo)
+### Base nutricional TACO — ✅ CONCLUÍDA (26/05/2026)
 
-**Arquivo:** `Taco-4a-Edicao.xlsx` na raiz — aba principal `CMVCol taco3`, **597 alimentos** em **15 grupos**.
+**Arquivos:**
+- Model: `app/models/alimento_taco.py` → classe `AlimentoTACO`, tabela `alimentos_taco`
+- Script de parsing: `scripts/importar_taco.py` (standalone, só pandas — lê o Excel, grava seed)
+- Seed versionado: `alembic/seeds/taco_seed.json` (597 registros, UTF-8)
+- Migration 011: cria tabela `alimentos_taco` (índices em `taco_id`, `nome`, `categoria`)
+- Migration 012: popula com os 597 alimentos do seed
 
-**Colunas-chave** (tudo por 100g):
+**Estatísticas validadas contra o Excel (56/56 campos OK):**
+- 597 alimentos · 15 categorias
+- `"Tr"` → `0.0`: proteina_g=6, lipideos_g=30, fibra_g=7
+- `"*"` → `NULL`: kcal=4, proteina_g=4, lipideos_g=4, carboidrato_g=4, fibra_g=8
+- Carboidrato negativo → `0.0`: 4 alimentos (taco_id 288, 322, 337, 400; máx −0.045g)
+- 6 alimentos com kcal=NULL (4 via `"*"` + 2 sais via NaN — sal não tem calorias)
+- 235 alimentos sem fibra_g (39,4%)
+- 2 nomes com espaço no início (taco_id 224 e 227) — corrigidos por `.strip()`
 
-| Col | Campo |
-|-----|-------|
-| 0 | ID TACO (número do alimento) |
-| 1 | Nome do alimento |
-| 3 | Energia (kcal) |
-| 5 | Proteína (g) |
-| 6 | Lipídeos/gordura (g) |
-| 8 | Carboidrato (g) |
-| 9 | Fibra alimentar (g) — 38% dos alimentos sem dado |
-
-Col 13 é duplicata de layout (mesma planilha diagramada em duas metades para impressão) — **ignorar**. Categoria de cada alimento não está em coluna própria: vem das **linhas-separador** (iterar mantendo `categoria_atual`).
-
-**Tratamento de sujeira na importação:**
-- `"Tr"` (traços, abaixo do limite de detecção) → `0.0`
-- `"*"` (dado não disponível) → `NULL` — **nunca inventar valor**
-- Carboidrato negativo (artefato de arredondamento de médias laboratoriais, 4 alimentos, máx −0.05g) → `0.0`
-- Nomes → `.strip()` (2 nomes com espaço no início)
-- kcal: guardar como float no banco, exibir arredondado a 1 casa decimal
-
-**Plano de implementação:**
-1. Criar model `AlimentoTACO` + tabela `alimentos_taco` (migração Alembic)
-2. Script de importação (`scripts/importar_taco.py`) que lê o Excel com `pandas`/`openpyxl` e popula a tabela aplicando o tratamento acima
-3. Funções de consulta em `nutricao_service`: busca por nome (ilike), retorno de macros por 100g e por porção informada
+**Nota estrutural do Excel:** a categoria está na **col 0** das linhas-separador (não na col 1 como estava documentado). Col 13 é duplicata de layout — ignorada. Heurística de separador: col0 não-numérico, não-nan, não em `{'legenda','alimento'}`, não começa com `'número'`, não formado só por símbolos `*†‡§`.
 
 **Para que serve:**
 - Fundação para edição inteligente de dieta (recalcular macros ao trocar itens)
