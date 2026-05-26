@@ -182,6 +182,9 @@ DIETA_KEYWORDS = {"dieta", "alimentação", "alimentacao", "nutrição", "nutric
 CONFIRMACAO_SIM = {"sim", "s", "yes", "confirmo", "pode", "ok", "isso", "certeza", "certo", "salva", "salvar", "confirmar"}
 CONFIRMACAO_NAO = {"não", "nao", "n", "no", "cancela", "cancelar", "errei", "errado", "errada", "equivocado"}
 
+_ESCOPO_PLANO_KEYWORDS = {"plano", "salva", "salvar", "sempre", "fixo", "permanente", "todo dia"}
+_ESCOPO_HOJE_KEYWORDS = {"hoje", "agora", "só essa", "uma vez", "dessa vez", "só hoje"}
+
 ETAPAS_TREINO: list[tuple[str, str]] = [
     (
         "tipo_treino",
@@ -1173,6 +1176,35 @@ async def _handle_editar_registro(
     return "Edição cancelada. Nada foi alterado."
 
 
+def _handle_substituicao_dieta(
+    conversa: Conversa,
+    message_text: str,
+    user: "Usuario",
+    db: Session,
+) -> str:
+    estado = conversa.estado_pendente
+    etapa = estado.get("etapa")
+    low = (message_text or "").strip().lower()
+    descricao = estado.get("descricao", "")
+
+    if etapa == "aguardando_escopo":
+        if any(kw in low for kw in _ESCOPO_PLANO_KEYWORDS):
+            conversa.estado_pendente = None
+            ok = nutricao_service.anexar_troca_ao_plano(user.id, descricao, db)
+            if ok:
+                return f"Pronto, ajustei no seu plano: {descricao} 👍"
+            return "Você ainda não tem um plano salvo pra ajustar, mas anotei a troca pra hoje. 👍"
+
+        if any(kw in low for kw in _ESCOPO_HOJE_KEYWORDS):
+            conversa.estado_pendente = None
+            return "Belê, só por hoje então. Não mexi no seu plano. 👍"
+
+        return "É só pra hoje ou pra salvar no seu plano alimentar?"
+
+    conversa.estado_pendente = None
+    return "Belê, cancelei a pergunta."
+
+
 # ---------------------------------------------------------------------------
 # Processamento de confirmação pendente
 # ---------------------------------------------------------------------------
@@ -2136,6 +2168,16 @@ async def process_message(
         db.commit()
         return reply
 
+    # 3.7 Fluxo de substituição de dieta — intercepta pergunta hoje-vs-plano (não chama a IA)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "substituicao_dieta":
+        reply = _handle_substituicao_dieta(conversa, message_text, user, db)
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
+
     # 4. Trata confirmações pendentes (exercício e refeição)
     ctx_confirmacao = (
         _handle_confirmacao(conversa, message_text, user, sessao_data, db)
@@ -2321,7 +2363,22 @@ async def process_message(
                             if res["erro"]:
                                 result = f"ERRO: {res['erro']}"
                             else:
-                                result = _fmt_substituicao(res)
+                                resumo = _fmt_substituicao(res)
+                                descricao = (
+                                    f"{res['origem']['nome']} {res['origem']['gramas']}g"
+                                    f" -> {res['destino']['nome']} {res['destino']['gramas']}g"
+                                )
+                                conversa.estado_pendente = {
+                                    "tipo": "substituicao_dieta",
+                                    "etapa": "aguardando_escopo",
+                                    "descricao": descricao,
+                                    "resumo_macros": resumo,
+                                }
+                                result = (
+                                    f"SUBSTITUICAO_CALCULADA: apresente os números abaixo ao usuário "
+                                    f"e PERGUNTE se a troca é só para hoje ou para salvar no plano alimentar. "
+                                    f"Números: {resumo}"
+                                )
                 else:
                     result = "Ferramenta desconhecida."
                 tool_results.append({

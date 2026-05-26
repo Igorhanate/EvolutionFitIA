@@ -142,6 +142,18 @@ def get_meta_ativa(user_id: int, db: Session) -> MetaNutricional | None:
     )
 
 
+def anexar_troca_ao_plano(user_id: int, descricao_troca: str, db: Session) -> bool:
+    meta = get_meta_ativa(user_id, db)
+    if not meta:
+        return False
+    if meta.texto_original:
+        meta.texto_original = meta.texto_original + "\n[ajuste] " + descricao_troca
+    else:
+        meta.texto_original = "[ajuste] " + descricao_troca
+    db.flush()
+    return True
+
+
 def listar_dietas(user_id: int, db: Session) -> list[MetaNutricional]:
     """Metas nutricionais do usuário, mais recentes primeiro. Toda meta foi criada conscientemente — sem filtro de lixo."""
     return (
