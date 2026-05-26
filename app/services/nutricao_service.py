@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.models.alimento_taco import AlimentoTACO
 from app.models.foto_composicao import FotoComposicao
 from app.models.medida_corporal import MedidaCorporal
 from app.models.meta_nutricional import MetaNutricional
@@ -267,3 +268,70 @@ def build_nutricao_context(user_id: int, db: Session) -> str | None:
         partes.append(meta_str)
 
     return "\n".join(partes) if partes else None
+
+
+# ---------------------------------------------------------------------------
+# Consulta à base nutricional TACO
+# ---------------------------------------------------------------------------
+
+def buscar_alimento(termo: str, db: Session) -> list[AlimentoTACO]:
+    """Busca alimentos na base TACO por nome (ilike por palavra).
+
+    Nomes TACO usam vírgulas como separadores ("Arroz, integral, cozido"),
+    então buscas multi-palavra são aplicadas palavra a palavra (AND), não
+    como substring única. Exemplo: "arroz integral" vira
+    ilike('%arroz%') AND ilike('%integral%').
+
+    Ordena: resultados cujo nome começa com a primeira palavra vêm primeiro,
+    depois os que apenas contêm. Limite 10.
+    """
+    t = termo.strip().lower()
+    if not t:
+        return []
+    palavras = t.split()
+    primeira = palavras[0]
+
+    def _filtros_palavras(q):
+        for p in palavras:
+            q = q.filter(AlimentoTACO.nome.ilike(f"%{p}%"))
+        return q
+
+    comeca = (
+        _filtros_palavras(
+            db.query(AlimentoTACO).filter(AlimentoTACO.nome.ilike(f"{primeira}%"))
+        )
+        .order_by(AlimentoTACO.nome)
+        .limit(10)
+        .all()
+    )
+    ids_comeca = {a.id for a in comeca}
+    contem = (
+        _filtros_palavras(db.query(AlimentoTACO))
+        .filter(~AlimentoTACO.id.in_(ids_comeca) if ids_comeca else AlimentoTACO.id.isnot(None))
+        .order_by(AlimentoTACO.nome)
+        .limit(10 - len(comeca))
+        .all()
+    ) if len(comeca) < 10 else []
+    return comeca + contem
+
+
+def macros_por_porcao(alimento: AlimentoTACO, gramas: float) -> dict:
+    """Retorna macros proporcionais à porção em gramas (base TACO = 100g).
+
+    Campos None no alimento (dado não medido) permanecem None no resultado —
+    nunca são tratados como zero nem estimados.
+    """
+    fator = gramas / 100.0
+
+    def _calc(valor):
+        if valor is None:
+            return None
+        return round(valor * fator, 1)
+
+    return {
+        "kcal":          _calc(alimento.kcal),
+        "proteina_g":    _calc(alimento.proteina_g),
+        "lipideos_g":    _calc(alimento.lipideos_g),
+        "carboidrato_g": _calc(alimento.carboidrato_g),
+        "fibra_g":       _calc(alimento.fibra_g),
+    }
