@@ -335,6 +335,26 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 26/05/2026)
+
+### Implementado
+- NOVO: usuário pode **editar treino** via chat. `_iniciar_edicao_treino` lista treinos reais (reusa `treino_service.listar_treinos`); `_handle_editar_registro` recebeu `elif alvo == "treino"` nas duas etapas (`aguardando_escolha` e `aguardando_novo_valor`). Fluxo seguro: aceita só 1 número → bot pede texto novo → salva novo via `treino_service.cadastrar_treino_proprio` PRIMEIRO → só apaga o antigo se o save não lançou exceção → confirma. Dispatch de `iniciar_edicao_registro` plugado para `alvo="treino"`. Tool description atualizada: suplemento e treino implementados, dieta em breve.
+- REFATORAÇÃO: lógica de persistência de treino extraída para `treino_service.cadastrar_treino_proprio(user_id, nome, texto, db, exercicios="") → Treino`. Reusada em `_process_tool_cadastrar_treino` (sem mudança de comportamento) e no novo fluxo de edição.
+- `dryrun*.json` adicionado ao `.gitignore` (padrão glob, cobre futuros). `*.xlsx` e `*.xls` adicionados ao `.gitignore` (cobre `Taco-4a-Edicao.xlsx` e futuros).
+
+### Investigado (sem código alterado)
+- Inspecionada a base nutricional TACO (`Taco-4a-Edicao.xlsx`): 597 alimentos, 15 grupos, 3 abas. Mapeamento completo de colunas, sujeira catalogada (`"Tr"`, `"*"`, carboidratos negativos, nomes com espaço). Plano de importação documentado no CLAUDE.md (seção "Base nutricional TACO").
+
+### Decidido
+- **Edição de dieta**: Opção B aprovada (coleta explícita de calorias, sem depender da IA para extrair). Fluxo: lista → escolhe UM → text o → pergunta calorias → handler salva direto + apaga antigo. Mais segura e consistente com o padrão de suplemento/treino. **Pendente de implementação.**
+- **TBCA**: NÃO usar por ora — restrição de uso comercial exige autorização formal da USP/UNICAMP.
+
+### Pendente (próxima sessão)
+- [ ] Implementar **edição de dieta** (Opção B, plano aprovado).
+- [ ] Implementar **model + tabela + script de importação** da base TACO.
+
+---
+
 ## HISTÓRICO DE MUDANÇAS (sessão de 25/05/2026 — continuação)
 - NOVO: usuário pode apagar as próprias DIETAS via chat. Fundação genérica de exclusão parametrizada por `alvo`: `_EXCLUSAO_CONFIG` mapeia tipo → (singular, plural, apagar_fn); `_handle_apagar_registro` agora serve treino e dieta sem duplicação. Adicionado `listar_dietas` + `apagar_dietas` em nutricao_service (hard-delete em `metas_nutricionais`, guarda user_id). A tabela `dietas` (keyword-lixo) é ignorada — só `MetaNutricional` é exposta. Dispatch da tool `iniciar_exclusao_registro` plugado para `alvo="dieta"`. Comportamento de treino preservado identicamente.
 - NOVO: usuário pode remover suplementos da lista via chat. `_iniciar_exclusao_suplemento` lê `PerfilHabitos.suplementos` (lista JSON, sem IDs de banco), exibe numerada. `_handle_apagar_registro` bifurca por `alvo=="suplemento"`: calcula `lista_restante` por posição (correto mesmo com nomes duplicados), regrava via `registrar_suplementos_usuario(user_id, lista_restante, db)`. Apagar todos → `[]` gravado corretamente. Treino e dieta preservados identicamente.
