@@ -575,6 +575,34 @@ TOOLS = [
             "required": ["alvo"],
         },
     },
+    {
+        "name": "substituir_alimento",
+        "description": (
+            "Calcula a substituição de um alimento por outro mantendo equivalência CALÓRICA, usando dados REAIS da tabela TACO. "
+            "Use quando o usuário pedir para trocar/substituir um alimento por outro (ex: 'troca o arroz por batata', 'posso comer batata no lugar do arroz?'). "
+            "Você escolhe os nomes mais adequados dos alimentos e estima as gramas da porção de origem se o usuário não informar (use porções realistas: arroz cozido ~100g, frango ~120g, etc). "
+            "A ferramenta retorna os gramas equivalentes do destino e os macros REAIS de ambos os lados — apresente esses números ao usuário, NUNCA invente valores nutricionais. "
+            "Se a ferramenta retornar ERRO_ALIMENTO_NAO_ENCONTRADO ou erro de kcal, explique ao usuário e peça para especificar melhor o alimento."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "origem": {
+                    "type": "string",
+                    "description": "Nome do alimento a ser substituído (ex: 'arroz cozido')",
+                },
+                "destino": {
+                    "type": "string",
+                    "description": "Nome do alimento substituto (ex: 'batata inglesa cozida')",
+                },
+                "gramas_origem": {
+                    "type": "number",
+                    "description": "Porção em gramas do alimento de origem. Estime se o usuário não informar.",
+                },
+            },
+            "required": ["origem", "destino", "gramas_origem"],
+        },
+    },
 ]
 
 # Subset de tools para a chamada de análise das 3 fotos (exclui ferramentas de roteamento)
@@ -1015,6 +1043,23 @@ def _iniciar_edicao_treino(user: Usuario, conversa: Conversa, db: Session) -> st
         linhas.append(f"*{i}.* {label}")
     linhas.append("\nResponda com o *número*, ou *cancelar* para desistir.")
     return "\n".join(linhas)
+
+
+def _fmt_substituicao(res: dict) -> str:
+    def _v(val):
+        return "n/d" if val is None else str(val)
+
+    o = res["origem"]
+    d = res["destino"]
+    om = o["macros"]
+    dm = d["macros"]
+    return (
+        f"SUBSTITUICAO_OK | "
+        f"ORIGEM: {o['nome']} {o['gramas']}g = {_v(om['kcal'])}kcal, "
+        f"P{_v(om['proteina_g'])}g C{_v(om['carboidrato_g'])}g G{_v(om['lipideos_g'])}g | "
+        f"DESTINO: {d['nome']} {d['gramas']}g = {_v(dm['kcal'])}kcal, "
+        f"P{_v(dm['proteina_g'])}g C{_v(dm['carboidrato_g'])}g G{_v(dm['lipideos_g'])}g"
+    )
 
 
 async def _handle_editar_registro(
@@ -2258,6 +2303,25 @@ async def process_message(
                             "Edição de dieta chega em breve! 🙂"
                         )
                         result = "EDICAO_TIPO_NAO_SUPORTADO"
+                elif block.name == "substituir_alimento":
+                    origem_termo = block.input.get("origem", "")
+                    destino_termo = block.input.get("destino", "")
+                    gramas_origem = float(block.input.get("gramas_origem", 100))
+                    origem_list = nutricao_service.buscar_alimento(origem_termo, db)
+                    if not origem_list:
+                        result = f"ERRO_ALIMENTO_NAO_ENCONTRADO: origem '{origem_termo}' nao encontrada na TACO"
+                    else:
+                        destino_list = nutricao_service.buscar_alimento(destino_termo, db)
+                        if not destino_list:
+                            result = f"ERRO_ALIMENTO_NAO_ENCONTRADO: destino '{destino_termo}' nao encontrado na TACO"
+                        else:
+                            res = nutricao_service.substituir_por_equivalencia_calorica(
+                                origem_list[0], gramas_origem, destino_list[0], db
+                            )
+                            if res["erro"]:
+                                result = f"ERRO: {res['erro']}"
+                            else:
+                                result = _fmt_substituicao(res)
                 else:
                     result = "Ferramenta desconhecida."
                 tool_results.append({
