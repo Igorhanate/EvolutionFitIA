@@ -10,7 +10,7 @@ from app.models.dieta import Dieta
 from app.models.meta_nutricional import MetaNutricional
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service, habito_service, nutricao_service, perfil_service, treino_service
+from app.services import exercicio_service, habito_service, nutricao_service, perfil_service, treino_service, usda_service
 
 logger = logging.getLogger(__name__)
 
@@ -581,29 +581,39 @@ TOOLS = [
     {
         "name": "substituir_alimento",
         "description": (
-            "Calcula a substituição de um alimento por outro mantendo equivalência CALÓRICA, usando dados REAIS da tabela TACO. "
+            "Calcula a substituição de um alimento por outro mantendo equivalência CALÓRICA, usando dados REAIS (TACO ou USDA). "
             "Use quando o usuário pedir para trocar/substituir um alimento por outro (ex: 'troca o arroz por batata', 'posso comer batata no lugar do arroz?'). "
-            "Você escolhe os nomes mais adequados dos alimentos e estima as gramas da porção de origem se o usuário não informar (use porções realistas: arroz cozido ~100g, frango ~120g, etc). "
+            "Forneça cada alimento em português (origem_pt/destino_pt) E inglês (origem_en/destino_en). Você traduz. "
+            "A busca usa o português primeiro (base brasileira TACO) e o inglês como fallback (USDA). "
+            "Estime gramas_origem se o usuário não informar (use porções realistas: arroz cozido ~100g, frango ~120g, etc). "
             "A ferramenta retorna os gramas equivalentes do destino e os macros REAIS de ambos os lados — apresente esses números ao usuário, NUNCA invente valores nutricionais. "
             "Se a ferramenta retornar ERRO_ALIMENTO_NAO_ENCONTRADO ou erro de kcal, explique ao usuário e peça para especificar melhor o alimento."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "origem": {
+                "origem_pt": {
                     "type": "string",
-                    "description": "Nome do alimento a ser substituído (ex: 'arroz cozido')",
+                    "description": "Nome do alimento a ser substituído em português (ex: 'arroz cozido')",
                 },
-                "destino": {
+                "origem_en": {
                     "type": "string",
-                    "description": "Nome do alimento substituto (ex: 'batata inglesa cozida')",
+                    "description": "Nome do alimento a ser substituído em inglês (ex: 'cooked white rice')",
+                },
+                "destino_pt": {
+                    "type": "string",
+                    "description": "Nome do alimento substituto em português (ex: 'batata inglesa cozida')",
+                },
+                "destino_en": {
+                    "type": "string",
+                    "description": "Nome do alimento substituto em inglês (ex: 'boiled potato')",
                 },
                 "gramas_origem": {
                     "type": "number",
                     "description": "Porção em gramas do alimento de origem. Estime se o usuário não informar.",
                 },
             },
-            "required": ["origem", "destino", "gramas_origem"],
+            "required": ["origem_pt", "origem_en", "destino_pt", "destino_en", "gramas_origem"],
         },
     },
 ]
@@ -1046,6 +1056,86 @@ def _iniciar_edicao_treino(user: Usuario, conversa: Conversa, db: Session) -> st
         linhas.append(f"*{i}.* {label}")
     linhas.append("\nResponda com o *número*, ou *cancelar* para desistir.")
     return "\n".join(linhas)
+
+
+def _normar_alimento(obj) -> dict:
+    """Extrai campos nutricionais por 100g de um AlimentoTACO ou dict USDA para um formato comum."""
+    if hasattr(obj, "kcal"):  # AlimentoTACO
+        return {
+            "nome": obj.nome,
+            "kcal": obj.kcal,
+            "proteina_g": obj.proteina_g,
+            "lipideos_g": obj.lipideos_g,
+            "carboidrato_g": obj.carboidrato_g,
+            "fibra_g": obj.fibra_g,
+        }
+    # dict USDA
+    return {
+        "nome": obj.get("nome_en", ""),
+        "kcal": obj.get("kcal"),
+        "proteina_g": obj.get("proteina_g"),
+        "lipideos_g": obj.get("lipideos_g"),
+        "carboidrato_g": obj.get("carboidrato_g"),
+        "fibra_g": obj.get("fibra_g"),
+    }
+
+
+def _calcular_substituicao_normed(normed_o: dict, gramas_origem: float, normed_d: dict) -> dict:
+    """Equivalência calórica sobre dicts normalizados. Retorna o mesmo formato de substituir_por_equivalencia_calorica."""
+    def _prop(val_por_100g, fator):
+        if val_por_100g is None:
+            return None
+        return round(val_por_100g * fator, 1)
+
+    fator_o = gramas_origem / 100.0
+    kcal_origem = _prop(normed_o["kcal"], fator_o)
+
+    if kcal_origem is None:
+        return {"origem": None, "destino": None, "erro": "alimento de origem não tem kcal"}
+    if normed_d["kcal"] is None:
+        return {"origem": None, "destino": None, "erro": "alimento de destino não tem kcal"}
+    if normed_d["kcal"] == 0:
+        return {"origem": None, "destino": None, "erro": "alimento de destino tem 0 kcal, não dá pra equivaler"}
+
+    gramas_destino = round(kcal_origem / (normed_d["kcal"] / 100), 1)
+    fator_d = gramas_destino / 100.0
+
+    return {
+        "origem": {
+            "nome": normed_o["nome"],
+            "gramas": gramas_origem,
+            "macros": {
+                "kcal": kcal_origem,
+                "proteina_g": _prop(normed_o["proteina_g"], fator_o),
+                "lipideos_g": _prop(normed_o["lipideos_g"], fator_o),
+                "carboidrato_g": _prop(normed_o["carboidrato_g"], fator_o),
+                "fibra_g": _prop(normed_o["fibra_g"], fator_o),
+            },
+        },
+        "destino": {
+            "nome": normed_d["nome"],
+            "gramas": gramas_destino,
+            "macros": {
+                "kcal": _prop(normed_d["kcal"], fator_d),
+                "proteina_g": _prop(normed_d["proteina_g"], fator_d),
+                "lipideos_g": _prop(normed_d["lipideos_g"], fator_d),
+                "carboidrato_g": _prop(normed_d["carboidrato_g"], fator_d),
+                "fibra_g": _prop(normed_d["fibra_g"], fator_d),
+            },
+        },
+        "erro": None,
+    }
+
+
+async def _resolver_alimento(termo_pt: str, termo_en: str, db: "Session"):
+    """Cascata TACO → USDA. Retorna (obj_ou_dict, fonte) ou (None, None)."""
+    taco = nutricao_service.buscar_alimento(termo_pt, db)
+    if taco:
+        return taco[0], "TACO"
+    usda = await usda_service.buscar_alimento_usda(termo_en, settings.USDA_API_KEY)
+    if usda:
+        return usda[0], "USDA"
+    return None, None
 
 
 def _fmt_substituicao(res: dict) -> str:
@@ -2346,19 +2436,27 @@ async def process_message(
                         )
                         result = "EDICAO_TIPO_NAO_SUPORTADO"
                 elif block.name == "substituir_alimento":
-                    origem_termo = block.input.get("origem", "")
-                    destino_termo = block.input.get("destino", "")
+                    origem_pt = block.input.get("origem_pt", "")
+                    origem_en = block.input.get("origem_en", "")
+                    destino_pt = block.input.get("destino_pt", "")
+                    destino_en = block.input.get("destino_en", "")
                     gramas_origem = float(block.input.get("gramas_origem", 100))
-                    origem_list = nutricao_service.buscar_alimento(origem_termo, db)
-                    if not origem_list:
-                        result = f"ERRO_ALIMENTO_NAO_ENCONTRADO: origem '{origem_termo}' nao encontrada na TACO"
+                    origem_obj, _ = await _resolver_alimento(origem_pt, origem_en, db)
+                    if origem_obj is None:
+                        result = (
+                            f"ERRO_ALIMENTO_NAO_ENCONTRADO: origem '{origem_pt}' / '{origem_en}' "
+                            "nao encontrada em nenhuma base"
+                        )
                     else:
-                        destino_list = nutricao_service.buscar_alimento(destino_termo, db)
-                        if not destino_list:
-                            result = f"ERRO_ALIMENTO_NAO_ENCONTRADO: destino '{destino_termo}' nao encontrado na TACO"
+                        destino_obj, _ = await _resolver_alimento(destino_pt, destino_en, db)
+                        if destino_obj is None:
+                            result = (
+                                f"ERRO_ALIMENTO_NAO_ENCONTRADO: destino '{destino_pt}' / '{destino_en}' "
+                                "nao encontrado em nenhuma base"
+                            )
                         else:
-                            res = nutricao_service.substituir_por_equivalencia_calorica(
-                                origem_list[0], gramas_origem, destino_list[0], db
+                            res = _calcular_substituicao_normed(
+                                _normar_alimento(origem_obj), gramas_origem, _normar_alimento(destino_obj)
                             )
                             if res["erro"]:
                                 result = f"ERRO: {res['erro']}"
