@@ -464,6 +464,31 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 26/05/2026 — parte 4: USDA fallback na substituição de alimentos)
+
+### Implementado
+- **`app/config.py`:** `USDA_API_KEY: str = ""` adicionado logo após `OPENAI_API_KEY` (mesmo padrão opcional). Chave real configurada no `.env` local; **pendente configurar no Render**.
+- **`app/services/usda_service.py` (novo):** `buscar_alimento_usda(termo, api_key) -> list[dict]` — async, `httpx.AsyncClient(timeout=15)`, guard para `api_key` vazio, `dataType=["Foundation","SR Legacy"]`, `pageSize=5`. Mapeia `nutrientNumber` como str ou int; aceita `value` ou `amount`. Fallback de Atwater: se `kcal` vier `None` mas `proteina_g`, `carboidrato_g` e `lipideos_g` estiverem todos presentes, calcula `round(p*4 + c*4 + l*9, 1)` e sinaliza `kcal_estimado: True`. Se faltar algum macro, mantém `kcal: None` e `kcal_estimado: False`. Erros de rede → `[]` + log.
+- **`claude_service.py` — tool `substituir_alimento` reformulada:** `origem`/`destino` (strings únicas) substituídos por `origem_pt`, `origem_en`, `destino_pt`, `destino_en`. Claude sempre fornece os dois idiomas; `required` atualizado. Description atualizada para descrever a cascata PT→EN e a regra de perguntar o corte quando o alimento for genérico.
+- **`claude_service.py` — helpers novos:**
+  - `_normar_alimento(obj) -> dict`: extrai `{nome, kcal, proteina_g, lipideos_g, carboidrato_g, fibra_g}` de um `AlimentoTACO` (via `hasattr(obj, "kcal")`) ou dict USDA — formato comum para o cálculo.
+  - `_calcular_substituicao_normed(normed_o, gramas_origem, normed_d) -> dict`: mesma matemática de `substituir_por_equivalencia_calorica` mas sobre dicts normalizados; retorna mesmo formato consumido por `_fmt_substituicao`; guards kcal=None e kcal=0 preservados.
+  - `_resolver_alimento(termo_pt, termo_en, db) -> (obj, fonte) | (None, None)`: cascata TACO → USDA; TACO busca em PT, USDA em EN; retorna primeiro resultado de cada base.
+- **`claude_service.py` — dispatch `substituir_alimento` refatorado:** usa `await _resolver_alimento(...)` nos dois lados; normaliza com `_normar_alimento`; calcula com `_calcular_substituicao_normed`. Mensagem de erro inclui tanto o termo PT quanto EN. Fluxo `substituicao_dieta` (hoje-vs-plano) e `_fmt_substituicao` inalterados.
+- **`claude_service.py` — description da tool:** frase adicionada: Claude deve perguntar o corte/tipo específico antes de chamar a ferramenta quando o alimento for genérico (ex: "frango", "peixe", "carne"). Não assume o corte sozinho.
+- **`scripts/test_usda.py` (novo):** script standalone de teste das 5 situações (dict cru, tilápia, rice, xyzabc, chave vazia). Não entra na imagem Docker (`scripts/` está no `.dockerignore`).
+
+### Validado antes de commitar
+- Tilápia USDA: `kcal=96`, `proteina_g=20.1`, `lipideos_g=1.7` — bate com referência nutricional.
+- Frango peito cru: kcal ausente na USDA → Atwater calcula `107.4 kcal` (`22.5×4 + 0×4 + 1.93×9`), `kcal_estimado=True`.
+
+### Pendente
+- [ ] **Configurar `USDA_API_KEY` no Render** (variável de ambiente de produção).
+- [ ] **Teste end-to-end em produção**: pedir substituição de alimento presente só na USDA (ex: tilápia) via WhatsApp.
+- [ ] **Edição de dieta** (pendente desde sessões anteriores — não atacado nesta sessão).
+
+---
+
 ## HISTÓRICO DE MUDANÇAS (sessão de 26/05/2026 — parte 3: hoje-vs-plano + contexto de dieta)
 
 ### Implementado
