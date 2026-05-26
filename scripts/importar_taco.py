@@ -1,6 +1,6 @@
 """
 Lê Taco-4a-Edicao.xlsx, aplica tratamento de sujeira e gera:
-  - scripts/taco_seed.json   (lista de alimentos prontos para inserção)
+  - alembic/seeds/taco_seed.json   (lista de alimentos prontos para inserção)
 
 Script standalone: não importa nada de app.* e não toca em banco.
 Rode na raiz do projeto:
@@ -16,9 +16,13 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Caminhos
 # ---------------------------------------------------------------------------
+# __file__ = <raiz>/scripts/importar_taco.py
+#   .parent  → <raiz>/scripts/
+#   .parent  → <raiz>/
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXCEL_PATH = os.path.join(ROOT, "Taco-4a-Edicao.xlsx")
-SEED_PATH = os.path.join(ROOT, "scripts", "taco_seed.json")
+# Seed vai para alembic/seeds/ — fora do .dockerignore, entra na imagem Docker.
+SEED_PATH = os.path.join(ROOT, "alembic", "seeds", "taco_seed.json")
 
 # ---------------------------------------------------------------------------
 # Heurística de detecção de linha-separador de categoria

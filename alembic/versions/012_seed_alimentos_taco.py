@@ -21,12 +21,13 @@ depends_on = None
 #
 # __file__ = <raiz>/alembic/versions/012_seed_alimentos_taco.py
 #   .parent  → <raiz>/alembic/versions/
-#   .parent  → <raiz>/alembic/
-#   .parent  → <raiz>/           ← raiz do projeto
+#   .parent  → <raiz>/alembic/         ← sobe só 2 níveis (versions e alembic)
+#   / "seeds" / "taco_seed.json"       ← entra em alembic/seeds/
 #
+# alembic/ não está no .dockerignore; seeds/ entra na imagem via COPY . .
 # Nunca usamos cwd() nem caminhos relativos ao diretório de trabalho.
 # ---------------------------------------------------------------------------
-_SEED_PATH = Path(__file__).resolve().parent.parent.parent / "scripts" / "taco_seed.json"
+_SEED_PATH = Path(__file__).resolve().parent.parent / "seeds" / "taco_seed.json"
 
 # Definição leve da tabela para op.bulk_insert.
 # Inclui apenas as colunas que o seed fornece; 'id' é omitido (autoincrement).
