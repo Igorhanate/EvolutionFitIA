@@ -583,6 +583,7 @@ TOOLS = [
         "description": (
             "Calcula a substituição de um alimento por outro mantendo equivalência CALÓRICA, usando dados REAIS (TACO ou USDA). "
             "Use quando o usuário pedir para trocar/substituir um alimento por outro (ex: 'troca o arroz por batata', 'posso comer batata no lugar do arroz?'). "
+            "ANTES de chamar esta ferramenta, se o alimento informado pelo usuário for GENÉRICO ou ambíguo (ex: 'frango', 'peixe', 'carne', 'arroz' sem especificar), PERGUNTE primeiro qual o corte/tipo específico (ex: para 'frango': peito, coxa, sobrecoxa, asa? para 'peixe': qual peixe? para 'carne': qual corte?) e só chame a ferramenta quando o alimento estiver específico. Não assuma o corte sozinho. "
             "Forneça cada alimento em português (origem_pt/destino_pt) E inglês (origem_en/destino_en). Você traduz. "
             "A busca usa o português primeiro (base brasileira TACO) e o inglês como fallback (USDA). "
             "Estime gramas_origem se o usuário não informar (use porções realistas: arroz cozido ~100g, frango ~120g, etc). "
