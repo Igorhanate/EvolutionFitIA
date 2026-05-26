@@ -224,7 +224,7 @@ Deduplicação por `hotmart_transaction_id`.
 | `aguardando_menu` | Usuário chamou /menu, aguarda número 1–12 |
 | `criando_treino` | Coleta estruturada de 9 perguntas para criar treino personalizado |
 
-### Ferramentas Claude (TOOLS — 13 tools)
+### Ferramentas Claude (TOOLS — 14 tools)
 
 | Tool | Ação |
 |------|------|
@@ -240,6 +240,7 @@ Deduplicação por `hotmart_transaction_id`.
 | `registrar_habito_alcool` | Registra bebeu/não-bebeu álcool; mantém contador de dias sem beber |
 | `registrar_tomei_suplementos` | Marca suplementos como tomados no dia |
 | `registrar_suplementos_usuario` | Salva lista de suplementos para personalizar lembretes |
+| `substituir_alimento` | Calcula equivalência calórica entre dois alimentos via TACO (só leitura — não persiste) |
 | `TOOLS_ANALISE_CORPO` | Subset com só `registrar_analise_foto` — usado na chamada de 3 fotos |
 
 ### /menu command
@@ -460,6 +461,24 @@ JSON estruturado via `pythonjsonlogger`:
 logger.info("event_name", extra={"user_id": ..., "key": "value"})
 logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ```
+
+---
+
+## HISTÓRICO DE MUDANÇAS (sessão de 26/05/2026 — parte 2: camada de serviço TACO + tool)
+
+### Implementado
+- **Camada 1 — `nutricao_service.py`:** `buscar_alimento(termo, db)` — ilike palavra-a-palavra (nomes TACO usam vírgulas, ex: "Arroz, integral, cozido"; substring única falha); resultados "começa com" antes de "contém"; limite 10. `macros_por_porcao(alimento, gramas)` — proporção por 100g; campos `None` do TACO permanecem `None` (nunca inventar).
+- **Camada 2 — `nutricao_service.py`:** `substituir_por_equivalencia_calorica(origem, gramas, destino, db)` — calcula gramas equivalentes caloricamente; guards para kcal=None e kcal=0; retorna dict `{origem, destino, erro}`.
+- **Camada 3 — `claude_service.py`:** tool `substituir_alimento` adicionada ao array `TOOLS` (14 tools no total). Dispatch `elif block.name == "substituir_alimento"` no loop de tool-use: busca ambos os alimentos, pega o 1º de cada lista, chama `substituir_por_equivalencia_calorica`, monta string `SUBSTITUICAO_OK | ORIGEM: ... | DESTINO: ...`. Helper `_fmt_substituicao` formata macros com `n/d` para `None`. **Não interrompe o loop** (não seta `edicao_iniciada_msg`). **Não persiste nada** — só calcula e devolve ao Claude.
+
+### Diagnóstico (investigação sem alteração de código)
+- **Tilápia:** NÃO existe na base TACO 4ª edição. `SELECT nome FROM alimentos_taco WHERE nome ILIKE '%tila%'` → 0 resultados. Busca com e sem acento: 0.
+- **Persistência de dieta:** `substituir_alimento` é somente-leitura — nenhum `db.add`/`db.flush`; a dieta do usuário não é alterada pela substituição. `build_nutricao_context` envia ao Claude apenas o resumo de macros da meta ativa, não o `texto_original` completo.
+- **Padrão `aguardando_confirmacao`** reconhecido para reusar na pergunta "só hoje vs no plano": `_normalizar_confirmacao` + `estado_pendente = None` ao final em qualquer desfecho.
+
+### Pendente (próxima sessão)
+- [ ] **Edição de dieta** (Opção B): fluxo `_iniciar_edicao_dieta` → lista → escolhe 1 → texto novo → pergunta calorias → `cadastrar_meta` + apaga antigo. Plugar `elif alvo == "dieta"` no dispatch de `iniciar_edicao_registro`.
+- [ ] Decidir se "substituição de alimento" deve perguntar "só hoje ou atualizar o plano?" antes de persistir.
 
 ---
 
