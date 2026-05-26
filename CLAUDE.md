@@ -2,6 +2,127 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+---
+
+# CONTEXTO DO PROJETO — Evolution Fit AI (atualizado em 26/05/2026)
+
+## O QUE É
+
+SaaS de fitness via WhatsApp com IA. O usuário envia mensagens para o número **+55 11 5304-3378**; o bot responde como personal trainer + nutricionista ("Evo"), gerenciando treinos, dietas, medidas, hábitos e evolução físicos. Receita por assinatura recorrente (trimestral/anual), ativada automaticamente via webhook de compra.
+
+**Planos:** Trimestral R$ 29,99/mês · Anual R$ 19,99/mês
+
+---
+
+## STACK REAL
+
+| Camada | Tecnologia |
+|---|---|
+| Linguagem | Python 3.12 (Dockerfile) |
+| Framework | FastAPI 0.115.5 + Uvicorn |
+| ORM / Migrations | SQLAlchemy 2.0.36 + Alembic 1.14.0 (HEAD = migration 010) |
+| Banco | PostgreSQL — **produção: Render free tier** (DB local no `.env` é cópia parada) |
+| WhatsApp | **Meta Cloud API** (graph.facebook.com v19.0) |
+| Pagamento | **Kiwify** — integração implementada em `kiwify.py`; Hotmart router ainda existe como código morto legado |
+| Hospedagem | **Render free tier**, Docker, deploy automático no push `master` |
+| IA | **claude-sonnet-4-6** (padrão em `config.py`; sobreposto por env `CLAUDE_MODEL`) |
+| SDK Anthropic | 0.40.0, com prompt caching ephemeral (TTL 5 min) |
+| Áudio | OpenAI Whisper (`whisper-1`) — **DESATIVADO**, aguardando `OPENAI_API_KEY` |
+| Scheduler | APScheduler 3.10.4 in-process (lembrete das 20h **comentado/desativado** desde 25/05) |
+| Geração de imagem | matplotlib + Pillow (card de evolução PNG, item 10 do menu) |
+| Parsing de arquivos | pandas + openpyxl (Excel) / pypdf (PDF) |
+
+---
+
+## TAMANHO ATUAL
+
+**58 arquivos `.py`** · **~5.700 linhas de código**
+
+Estrutura: `main.py` + `app/` (routers, services, models, schemas, middleware) + `alembic/versions/` (10 migrations) + `scripts/`.
+
+---
+
+## FUNCIONALIDADES PRONTAS E FUNCIONANDO
+
+**Infraestrutura / plataforma**
+- Webhook WhatsApp recebe texto, imagem, documento (Excel/PDF) e áudio (áudio: recebido, porém responde "só texto/fotos" até `OPENAI_API_KEY` ser configurada)
+- Dedup atômico de mensagens (tabela `mensagens_processadas`, migration 010)
+- Resposta HTTP 200 imediata + processamento em BackgroundTask (evita reenvio da Meta)
+- Assinatura HMAC-SHA256 do webhook (`META_APP_SECRET`)
+- Webhook Kiwify: compra aprovada → ativa assinatura + envia boas-vindas; cancelamento → desativa
+- Ativação manual de assinatura via `POST /admin/subscriptions/grant`
+- Landing page servida em `/landing` (`static/landing/index.html`)
+- API Admin completa (usuários, histórico, evolução, medidas, refeições, metas)
+
+**Menu e fluxo de conversa**
+- `/menu` com 12 opções em 4 categorias (Treino, Nutrição, Medidas & Corpo, Hábitos Diários)
+- Máquina de estados multi-turno (`estado_pendente` em `Conversa`)
+- Perfil persistente do usuário (`perfis_fitness`, migrations 008–009)
+
+**Treino**
+- Item 1: criação personalizada com coleta estruturada (9 perguntas → 1 chamada Claude → salva)
+- Item 2: cadastro de treino externo (personal/PDF/Excel → `cadastrar_treino_proprio`)
+- Item 3: registro de cargas/séries por sessão, cálculo de 1RM (Epley/Brzycki/Lander)
+- Item 4: evolução de força (1RM por exercício, gráfico histórico)
+- Contexto de treinos injetado no prompt (resumo do treino mais recente + títulos anteriores)
+- Apagar treinos via chat (lista numerada, múltiplos, "todos", confirmação)
+- Editar treino via chat
+
+**Nutrição**
+- Item 5: criação de dieta personalizada (protocolo Mifflin-St Jeor, déficit/superávit/manutenção, plano 7 dias)
+- Item 6: cadastro de dieta externa (nutricionista/PDF/Excel → `cadastrar_dieta_propria`)
+- Item 7: análise de refeição por foto (macros estimados + balanço do dia; limite 6/dia)
+- Apagar dietas via chat
+- Dados corporais opcionais mas ativamente solicitados na criação de dieta
+
+**Medidas & Corpo**
+- Item 8: registro de peso e medidas corporais (histórico comparativo)
+- Item 9: análise de composição corporal (fluxo de 3 fotos + Claude Vision → % gordura estimada)
+- Item 10: painel de evolução em PNG (card dark-theme com logo)
+
+**Hábitos Diários**
+- Item 11: registro de água (ml acumulado) e suplementos (marcar como tomados)
+- Item 12: acompanhamento de dias sem álcool / sem fumar (streaks)
+- Cadastro e edição de lista de suplementos
+- Apagar suplementos da lista via chat
+- Rodapé do menu exibe contadores do dia (água, streaks, suplementos)
+- Lembrete automático das 20h: **DESATIVADO** (código comentado) — motivo: Render free dorme + regra de opt-in estrito
+
+---
+
+## PENDÊNCIAS PRINCIPAIS
+
+**Imediatas (pré-lançamento)**
+1. **Kiwify** — configurar produto na plataforma, obter tokens de webhook e preencher `KIWIFY_WEBHOOK_TOKEN_ANUAL/TRIMESTRAL` + `PAYMENT_LINK_*` no Render
+2. **OpenAI API Key** — necessário para reativar transcrição de áudio (Whisper)
+3. **Edição de dieta** via chat — decisão: substituição inteligente de itens com recálculo de calorias/macros usando a base TACO (nunca inventar números), devolvendo a dieta completa recalculada. **PRÉ-REQUISITO: importação da base TACO** (ver seção abaixo neste arquivo).
+4. **Limpar código morto** — router Hotmart ainda em `app/routers/hotmart.py` e registrado em `main.py`, nunca usado em produção
+
+**Próximo ciclo de desenvolvimento**
+5. **Base nutricional TACO** — model `AlimentoTACO` + migration + script de importação (`scripts/importar_taco.py`) — plano detalhado adiante neste arquivo
+6. **Coleta estruturada para dieta** (análogo ao fluxo de treino)
+7. **Reaproveitamento de perfil** no 2º treino em diante (não repetir 9 perguntas)
+8. **Sistema de lembretes opt-in** — bloqueado: requer scheduler confiável (Render pago ou cron externo); entidade Remédio também depende disso
+
+**Operacional / lançamento**
+9. Render free "dorme" (~50s na 1ª mensagem) — avaliar upgrade antes do lançamento público
+10. Teste de compra ponta-a-ponta com número que nunca comprou
+11. Configurar alerta de saldo baixo na Anthropic (bot parou uma vez por créditos zerados)
+12. Usuária de teste **Maria** — confirmada ativa (usando normalmente)
+
+---
+
+## VARIÁVEIS DE AMBIENTE — STATUS
+
+| Variável | Status |
+|---|---|
+| `DATABASE_URL`, `ANTHROPIC_API_KEY`, todas as `META_*`, `ADMIN_API_KEY` | ✅ configuradas no Render |
+| `OPENAI_API_KEY` | ⚠️ pendente (áudio desativado) |
+| `KIWIFY_WEBHOOK_TOKEN_*`, `PAYMENT_LINK_*` | ⚠️ pendente (produto não configurado na Kiwify ainda) |
+| `HOTMART_*` | legado — pode ser removido após configurar Kiwify |
+
+---
+
 ## Commands
 
 ```bash
