@@ -335,3 +335,43 @@ def macros_por_porcao(alimento: AlimentoTACO, gramas: float) -> dict:
         "carboidrato_g": _calc(alimento.carboidrato_g),
         "fibra_g":       _calc(alimento.fibra_g),
     }
+
+
+def substituir_por_equivalencia_calorica(
+    alimento_origem: AlimentoTACO,
+    gramas_origem: float,
+    alimento_destino: AlimentoTACO,
+    db: Session,
+) -> dict:
+    """Calcula quantos gramas do alimento_destino equivalem caloricamente
+    à porção informada do alimento_origem.
+
+    Retorna sempre um dict com chaves 'origem', 'destino' e 'erro'.
+    Em caso de erro, 'erro' é uma string descritiva e os cálculos não são feitos.
+    """
+    kcal_origem = macros_por_porcao(alimento_origem, gramas_origem)["kcal"]
+    if kcal_origem is None:
+        return {"origem": None, "destino": None,
+                "erro": "alimento de origem não tem kcal na TACO"}
+    if alimento_destino.kcal is None:
+        return {"origem": None, "destino": None,
+                "erro": "alimento de destino não tem kcal na TACO"}
+    if alimento_destino.kcal == 0:
+        return {"origem": None, "destino": None,
+                "erro": "alimento de destino tem 0 kcal, não dá pra equivaler"}
+
+    gramas_destino = round(kcal_origem / (alimento_destino.kcal / 100), 1)
+
+    return {
+        "origem": {
+            "nome":   alimento_origem.nome,
+            "gramas": gramas_origem,
+            "macros": macros_por_porcao(alimento_origem, gramas_origem),
+        },
+        "destino": {
+            "nome":   alimento_destino.nome,
+            "gramas": gramas_destino,
+            "macros": macros_por_porcao(alimento_destino, gramas_destino),
+        },
+        "erro": None,
+    }
