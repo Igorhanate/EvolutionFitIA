@@ -464,6 +464,24 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 26/05/2026 — parte 3: hoje-vs-plano + contexto de dieta)
+
+### Implementado
+- **`nutricao_service.py` — `anexar_troca_ao_plano(user_id, descricao_troca, db) -> bool`:** pega `get_meta_ativa`; se None → False; caso contrário anexa `"\n[ajuste] " + descricao_troca` ao `texto_original` (ou cria se vazio); `db.flush()`; retorna True.
+- **`claude_service.py` — dispatch `substituir_alimento` reformulado:** em vez de devolver `SUBSTITUICAO_OK` diretamente, arma `conversa.estado_pendente = {tipo: "substituicao_dieta", etapa: "aguardando_escopo", descricao, resumo_macros}` e retorna `SUBSTITUICAO_CALCULADA: apresente os números ... e PERGUNTE se é só para hoje ou para salvar no plano`. Loop de tool-use NÃO é interrompido — Claude ainda responde com os números e a pergunta; `estado_pendente` é persistido no `db.commit()` final.
+- **`claude_service.py` — constantes `_ESCOPO_PLANO_KEYWORDS` / `_ESCOPO_HOJE_KEYWORDS`:** plano = {"plano","salva","salvar","sempre","fixo","permanente","todo dia"}; hoje = {"hoje","agora","só essa","uma vez","dessa vez","só hoje"}.
+- **`claude_service.py` — `_handle_substituicao_dieta`:** handler síncrono que detecta plano → chama `anexar_troca_ao_plano` (confirma ou informa "sem plano salvo"); hoje → responde sem persistir; ambíguo → repergunta mantendo estado.
+- **`claude_service.py` — step 3.7 em `process_message`:** intercepta `tipo == "substituicao_dieta"` antes do fluxo geral; mesmo padrão dos steps 3.5/3.6 (commit + return imediato sem chamar Claude).
+- **`nutricao_service.py` — `build_nutricao_context`:** após a linha de macros da meta ativa, injeta `"Cardápio/ajustes do plano: <texto_original>"` truncado a 500 chars com `"..."`. Só adiciona se `meta.texto_original` tiver conteúdo. Isso inclui ajustes acumulados via `[ajuste]`.
+
+### Diagnóstico confirmado (sem alteração de código)
+- `estado_pendente` setado no dispatch de tool sobrevive até o próximo turno: nenhum reset entre o dispatch e o `db.commit()` final de `process_message`. Único ponto que zera é `/menu` (intencional). Padrão análogo ao de `iniciar_exclusao_registro` (que também seta `estado_pendente` dentro do loop de tools).
+
+### Pendente (próxima sessão)
+- [ ] **Edição de dieta** (Opção B): `_iniciar_edicao_dieta` → lista → escolhe 1 → texto novo → pergunta calorias → `cadastrar_meta` + apaga antigo. Plugar `elif alvo == "dieta"` no dispatch de `iniciar_edicao_registro`. Remover aviso "dieta em breve" da tool description.
+
+---
+
 ## HISTÓRICO DE MUDANÇAS (sessão de 26/05/2026 — parte 2: camada de serviço TACO + tool)
 
 ### Implementado
