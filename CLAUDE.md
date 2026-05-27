@@ -95,7 +95,7 @@ Estrutura: `main.py` + `app/` (routers, services, models, schemas, middleware) +
 **Imediatas (pré-lançamento)**
 1. **Kiwify** — configurar produto na plataforma, obter tokens de webhook e preencher `KIWIFY_WEBHOOK_TOKEN_ANUAL/TRIMESTRAL` + `PAYMENT_LINK_*` no Render
 2. **OpenAI API Key** — necessário para reativar transcrição de áudio (Whisper)
-3. **Edição de dieta** via chat — decisão: substituição inteligente de itens com recálculo de calorias/macros usando a base TACO (nunca inventar números), devolvendo a dieta completa recalculada. **PRÉ-REQUISITO: importação da base TACO** (ver seção abaixo neste arquivo).
+3. **Edição de dieta** via chat — ✅ CONCLUÍDA 26/05. Edição inteligente via tool `substituir_alimento` — busca TACO→USDA (fallback), equivalência calórica, fórmula Atwater quando falta kcal, desambiguação de corte (ex: "frango" → pergunta qual corte), e pergunta "só hoje vs salvar no plano" (anexa ao `texto_original`). ⚠️ Resíduo cosmético: aviso "dieta em breve" em `iniciar_edicao_registro` tool description — remover na próxima limpeza.
 4. **Limpar código morto** — router Hotmart ainda em `app/routers/hotmart.py` e registrado em `main.py`, nunca usado em produção
 
 **Próximo ciclo de desenvolvimento**
@@ -289,6 +289,16 @@ O menu mostra contadores de hábitos do dia no rodapé quando há dados (água, 
 
 Ao criar dieta (item 5 ou via chat), o Evo solicita ativamente medidas corporais (cintura, quadril, braço, coxa) e análise de composição corporal estimada por foto (% gordura). Esses dados são **opcionais**, mas aumentam a precisão do cálculo de calorias e macros — o peso isolado não distingue massa magra de gordura. Se o usuário já tiver medidas ou fotos de composição no contexto, o Evo usa esses valores automaticamente.
 
+### Integração USDA FoodData Central
+
+- **Arquivo:** `app/services/usda_service.py`
+- **Função:** `buscar_alimento_usda(termo, api_key) -> list[dict]` — async, `httpx.AsyncClient(timeout=15)`, `dataType=["Foundation","SR Legacy"]`, `pageSize=5`
+- **Macros:** retorna por 100g (mesmo padrão TACO); campos `None` quando nutriente não disponível
+- **Atwater fallback:** se `kcal` vier `None` mas `proteina_g`, `carboidrato_g` e `lipideos_g` estiverem presentes, calcula `round(p*4 + c*4 + l*9, 1)` e sinaliza `kcal_estimado: True`; se faltar algum macro, mantém `kcal: None`
+- **Guard de chave vazia:** `USDA_API_KEY` vazia → retorna `[]` sem chamar a API
+- **Cascata:** `_resolver_alimento(termo_pt, termo_en, db)` em `claude_service.py` — busca TACO em PT primeiro; se não encontrar, busca USDA em EN; retorna `(obj, fonte)` ou `(None, None)`
+- **Config:** `USDA_API_KEY: str = ""` em `app/config.py` (opcional, mesmo padrão de `OPENAI_API_KEY`); ⚠️ **pendente configurar no Render**
+
 ---
 
 ## Scheduler (`app/services/scheduler_service.py`)
@@ -372,6 +382,7 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `claude_service.py` | Orquestração Claude, tools, contexto, menu, fluxos multi-turno |
 | `exercicio_service.py` | 1RM, posição de sessão, evolução por exercício |
 | `nutricao_service.py` | Medidas, fotos, refeições, metas, contexto nutricional |
+| `usda_service.py` | Consulta USDA FoodData Central (Foundation + SR Legacy); fallback Atwater para kcal; camada 2 após TACO na substituição de alimentos |
 | `habito_service.py` | Água, streaks fumar/álcool, suplementos, contexto de hábitos |
 | `scheduler_service.py` | APScheduler — lembrete de suplementação às 20h |
 | `audio_service.py` | Transcrição via OpenAI Whisper |
@@ -450,6 +461,7 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `META_APP_SECRET` | ✅ configurada |
 | `ADMIN_API_KEY` | ✅ configurada |
 | `OPENAI_API_KEY` | ⚠️ pendente — necessário para reativar transcrição de áudio |
+| `USDA_API_KEY` | ⚠️ pendente — necessário para substituição de alimentos não presentes na TACO (USDA fallback) |
 | `HOTMART_WEBHOOK_SECRET` | ⚠️ pendente — substituir por Kiwify |
 | `HOTMART_OFFER_ID_*` | ⚠️ pendente — substituir por Kiwify |
 | `PAYMENT_LINK_*` | ⚠️ pendente — atualizar com links reais da Kiwify |
@@ -483,9 +495,9 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - Frango peito cru: kcal ausente na USDA → Atwater calcula `107.4 kcal` (`22.5×4 + 0×4 + 1.93×9`), `kcal_estimado=True`.
 
 ### Pendente
-- [ ] **Configurar `USDA_API_KEY` no Render** (variável de ambiente de produção).
+- [ ] **Configurar `USDA_API_KEY` no Render** (variável de ambiente de produção — ver tabela de variáveis).
 - [ ] **Teste end-to-end em produção**: pedir substituição de alimento presente só na USDA (ex: tilápia) via WhatsApp.
-- [ ] **Edição de dieta** (pendente desde sessões anteriores — não atacado nesta sessão).
+- [x] **Edição de dieta** — ✅ CONCLUÍDA 26/05. Implementada como edição inteligente via substituição de alimentos (TACO→USDA, equivalência calórica, hoje-vs-plano).
 
 ---
 
@@ -503,7 +515,8 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - `estado_pendente` setado no dispatch de tool sobrevive até o próximo turno: nenhum reset entre o dispatch e o `db.commit()` final de `process_message`. Único ponto que zera é `/menu` (intencional). Padrão análogo ao de `iniciar_exclusao_registro` (que também seta `estado_pendente` dentro do loop de tools).
 
 ### Pendente (próxima sessão)
-- [ ] **Edição de dieta** (Opção B): `_iniciar_edicao_dieta` → lista → escolhe 1 → texto novo → pergunta calorias → `cadastrar_meta` + apaga antigo. Plugar `elif alvo == "dieta"` no dispatch de `iniciar_edicao_registro`. Remover aviso "dieta em breve" da tool description.
+- [x] **Edição de dieta** — ✅ CONCLUÍDA 26/05 (não via Opção B, mas via edição inteligente por substituição de alimentos com TACO→USDA e pergunta hoje-vs-plano).
+- [ ] Aviso "dieta em breve" em `iniciar_edicao_registro` tool description — resíduo cosmético, remover na próxima limpeza.
 
 ---
 
@@ -520,8 +533,8 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - **Padrão `aguardando_confirmacao`** reconhecido para reusar na pergunta "só hoje vs no plano": `_normalizar_confirmacao` + `estado_pendente = None` ao final em qualquer desfecho.
 
 ### Pendente (próxima sessão)
-- [ ] **Edição de dieta** (Opção B): fluxo `_iniciar_edicao_dieta` → lista → escolhe 1 → texto novo → pergunta calorias → `cadastrar_meta` + apaga antigo. Plugar `elif alvo == "dieta"` no dispatch de `iniciar_edicao_registro`.
-- [ ] Decidir se "substituição de alimento" deve perguntar "só hoje ou atualizar o plano?" antes de persistir.
+- [x] **Edição de dieta** — ✅ CONCLUÍDA 26/05 via substituição inteligente (ver histórico partes 3 e 4).
+- [x] Pergunta "só hoje ou atualizar o plano?" — ✅ implementado (hoje-vs-plano com `_handle_substituicao_dieta`).
 
 ---
 
@@ -536,11 +549,11 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - Base nutricional TACO **IMPORTADA**: model `AlimentoTACO`, migrations 011 (cria tabela) e 012 (popula 597 alimentos). Seed em `alembic/seeds/taco_seed.json`. Validação cruzada 56/56 campos OK. Descoberta infra: banco compartilhado com Evolution API → autogenerate inviável; `scripts/` no .dockerignore → seed movido para `alembic/seeds/`.
 
 ### Decidido
-- **Edição de dieta**: Opção B aprovada (coleta explícita de calorias, sem depender da IA para extrair). Fluxo: lista → escolhe UM → text o → pergunta calorias → handler salva direto + apaga antigo. Mais segura e consistente com o padrão de suplemento/treino. **Pendente de implementação.**
+- **Edição de dieta**: Opção B aprovada, mas implementada de forma diferente e superior — edição inteligente via tool `substituir_alimento` (TACO→USDA, equivalência calórica, Atwater fallback, desambiguação de corte, hoje-vs-plano). ✅ CONCLUÍDA 26/05.
 - **TBCA**: NÃO usar por ora — restrição de uso comercial exige autorização formal da USP/UNICAMP.
 
 ### Pendente (próxima sessão)
-- [ ] Implementar **edição de dieta** (Opção B, plano aprovado).
+- [x] **Edição de dieta** — ✅ CONCLUÍDA 26/05 (ver histórico sessão 26/05 partes 2, 3 e 4).
 - [x] ~~Implementar **model + tabela + script de importação** da base TACO~~ — CONCLUÍDO 26/05.
 
 ---
