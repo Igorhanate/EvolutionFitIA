@@ -95,7 +95,7 @@ Estrutura: `main.py` + `app/` (routers, services, models, schemas, middleware) +
 **Imediatas (pré-lançamento)**
 1. **Kiwify** — configurar produto na plataforma, obter tokens de webhook e preencher `KIWIFY_WEBHOOK_TOKEN_ANUAL/TRIMESTRAL` + `PAYMENT_LINK_*` no Render
 2. **OpenAI API Key** — necessário para reativar transcrição de áudio (Whisper)
-3. **Edição de dieta** via chat — ✅ CONCLUÍDA 26/05. Edição inteligente via tool `substituir_alimento` — busca TACO→USDA (fallback), equivalência calórica, fórmula Atwater quando falta kcal, desambiguação de corte (ex: "frango" → pergunta qual corte), e pergunta "só hoje vs salvar no plano" (anexa ao `texto_original`). ⚠️ Resíduo cosmético: aviso "dieta em breve" em `iniciar_edicao_registro` tool description — remover na próxima limpeza.
+3. **Edição de dieta** via chat — ✅ CONCLUÍDA 26/05. Edição inteligente via tool `substituir_alimento` — busca TACO→USDA (fallback), equivalência calórica, fórmula Atwater quando falta kcal, desambiguação de corte (ex: "frango" → pergunta qual corte), e pergunta "só hoje vs salvar no plano" (anexa ao `texto_original`). ⚠️ Resíduo cosmético: aviso "dieta em breve" em `iniciar_edicao_registro` tool description — ✅ Resíduo cosmético removido 27/05: descrição e dispatch de `iniciar_edicao_registro` corrigidos — dieta redireciona para `substituir_alimento` sem mensagem "em breve".
 4. **Limpar código morto** — router Hotmart ainda em `app/routers/hotmart.py` e registrado em `main.py`, nunca usado em produção
 
 **Próximo ciclo de desenvolvimento**
@@ -473,6 +473,20 @@ JSON estruturado via `pythonjsonlogger`:
 logger.info("event_name", extra={"user_id": ..., "key": "value"})
 logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ```
+
+---
+
+## HISTÓRICO DE MUDANÇAS (sessão de 27/05/2026 — limpeza de resíduo "dieta em breve")
+
+### Corrigido
+- **`claude_service.py` — description da tool `iniciar_edicao_registro`:** removida a frase `'Suplemento' e 'treino' implementados; 'dieta' em breve.`. Substituída por instrução explícita: dieta NÃO usa esta ferramenta — deve ser editada via `substituir_alimento` (trocar alimentos específicos na conversa). Claude passa a saber o caminho correto em vez de prometer funcionalidade futura.
+- **`claude_service.py` — dispatch `elif block.name == "iniciar_edicao_registro"`:** ramo `else` (que capturava dieta e remédio) dividido em dois:
+  - `elif alvo == "dieta"`: retorna mensagem orientando o usuário a trocar alimentos na conversa (`result = "EDICAO_DIETA_REDIRECIONADO"`).
+  - `else` (remédio/outro): mensagem genérica de não-suportado sem mencionar "dieta em breve" (`result = "EDICAO_TIPO_NAO_SUPORTADO"`).
+  - Ramos `suplemento` e `treino` intocados.
+
+### Pendente
+- Nenhuma pendência nova desta sessão. Ver histórico anterior para pendências em aberto.
 
 ---
 
