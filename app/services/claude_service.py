@@ -1848,10 +1848,66 @@ def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
 
 def _iniciar_coleta_treino(user: Usuario, conversa: Conversa, db: Session) -> str:
     primeiro_nome = (user.nome or "").split()[0] if user.nome else ""
+    perfil = perfil_service.get_or_create_perfil(user.id, db)
+    tem_perfil = perfil.dias_semana_padrao is not None
+
+    dados: dict[str, str | None] = {chave: None for chave, _ in ETAPAS_TREINO}
+
+    if tem_perfil:
+        _local_d   = {"academia": "Academia", "casa": "Em casa", "ar_livre": "Ao ar livre"}
+        _obj_d     = {
+            "ganhar_massa": "Ganhar massa", "perder_gordura": "Perder gordura",
+            "manter": "Manter peso", "condicionamento": "Condicionamento",
+        }
+        _nivel_d   = {"iniciante": "Iniciante", "intermediario": "Intermediário", "avancado": "Avançado"}
+        _horario_d = {
+            "manha": "Manhã", "manha_pico": "Manhã pico (6h–9h)", "tarde": "Tarde",
+            "noite_pico": "Noite pico (17h–20h)", "noite": "Noite",
+        }
+
+        def _d(val: str | None, mapa: dict) -> str:
+            return mapa.get(val or "", val or "—") if val else "—"
+
+        perfil_resumo = {
+            "local":        perfil.local_treino_padrao,
+            "objetivo":     perfil.objetivo_padrao,
+            "dias_semana":  perfil.dias_semana_padrao,
+            "tempo_sessao": perfil.tempo_sessao_padrao,
+            "nivel":        perfil.nivel_experiencia,
+            "lesoes":       perfil.lesoes,
+            "horario":      perfil.horario_treino_padrao,
+        }
+
+        conversa.estado_pendente = {
+            "tipo": "criando_treino",
+            "fase": "confirmando_perfil",
+            "dados": dados,
+            "perfil_resumo": perfil_resumo,
+            "criado_em": datetime.utcnow().isoformat(),
+        }
+        db.add(conversa)
+        db.commit()
+
+        return (
+            "Bora pro seu treino"
+            + (f", {primeiro_nome}" if primeiro_nome else "")
+            + "! 💪 Tenho seu perfil salvo:\n\n"
+            + f"📍 *Local:* {_d(perfil.local_treino_padrao, _local_d)}\n"
+            + f"🎯 *Objetivo:* {_d(perfil.objetivo_padrao, _obj_d)}\n"
+            + f"📅 *Dias:* {perfil.dias_semana_padrao or '—'}\n"
+            + f"⏱️ *Tempo:* {perfil.tempo_sessao_padrao or '—'}\n"
+            + f"📊 *Nível:* {_d(perfil.nivel_experiencia, _nivel_d)}\n"
+            + f"🩹 *Lesões:* {perfil.lesoes or 'nenhuma'}\n"
+            + f"🕐 *Horário:* {_d(perfil.horario_treino_padrao, _horario_d)}\n\n"
+            + "Quer manter tudo isso? Responda *sim* pra manter, ou me diga o que quer mudar."
+        )
+
+    # 1º treino — coleta completa, sem etapa de confirmação
     conversa.estado_pendente = {
         "tipo": "criando_treino",
+        "fase": "coletando",
         "etapa_idx": 0,
-        "dados": {chave: None for chave, _ in ETAPAS_TREINO},
+        "dados": dados,
         "criado_em": datetime.utcnow().isoformat(),
     }
     db.add(conversa)
@@ -1871,18 +1927,65 @@ async def _handle_coleta_treino(
     db: Session,
 ) -> str:
     estado = conversa.estado_pendente
+    fase = estado.get("fase", "coletando")
     dados = dict(estado.get("dados", {}))
-    etapa_idx = int(estado.get("etapa_idx", 0))
 
+    # --- Fase de confirmação do perfil (2º treino em diante) ---
+    if fase == "confirmando_perfil":
+        perfil_resumo: dict = estado.get("perfil_resumo", {})
+        resposta = _normalizar_confirmacao(message_text)
+
+        if resposta == "sim":
+            dados["local"]        = perfil_resumo.get("local")
+            dados["objetivo"]     = perfil_resumo.get("objetivo")
+            dados["dias_semana"]  = perfil_resumo.get("dias_semana")
+            dados["tempo_sessao"] = perfil_resumo.get("tempo_sessao")
+            dados["nivel"]        = perfil_resumo.get("nivel")
+            dados["lesoes"]       = perfil_resumo.get("lesoes") or "nenhuma"
+            dados["horario"]      = perfil_resumo.get("horario")
+            # tipo_treino e dor_desconforto ficam None → perguntados a seguir
+            etapa_idx = next(
+                (i for i, (chave, _) in enumerate(ETAPAS_TREINO) if dados[chave] is None),
+                len(ETAPAS_TREINO),
+            )
+        else:
+            # Quer mudar algo — coleta completa do zero
+            etapa_idx = 0
+            conversa.estado_pendente = {
+                "tipo": "criando_treino",
+                "fase": "coletando",
+                "etapa_idx": etapa_idx,
+                "dados": dados,
+                "criado_em": estado.get("criado_em"),
+            }
+            return "Beleza, vamos refazer do zero então.\n\n" + ETAPAS_TREINO[0][1]
+
+        conversa.estado_pendente = {
+            "tipo": "criando_treino",
+            "fase": "coletando",
+            "etapa_idx": etapa_idx,
+            "dados": dados,
+            "criado_em": estado.get("criado_em"),
+        }
+        _, pergunta = ETAPAS_TREINO[etapa_idx]
+        return pergunta
+
+    # --- Fase normal de coleta ---
+    etapa_idx = int(estado.get("etapa_idx", 0))
     chave, _ = ETAPAS_TREINO[etapa_idx]
     dados[chave] = message_text.strip() or "não informado"
     etapa_idx += 1
+
+    # Pula etapas cujo valor já veio do perfil (não-None)
+    while etapa_idx < len(ETAPAS_TREINO) and dados.get(ETAPAS_TREINO[etapa_idx][0]) is not None:
+        etapa_idx += 1
 
     if etapa_idx >= len(ETAPAS_TREINO):
         return await _gerar_treino_de_dados(dados, user, conversa, db)
 
     conversa.estado_pendente = {
         "tipo": "criando_treino",
+        "fase": "coletando",
         "etapa_idx": etapa_idx,
         "dados": dados,
         "criado_em": estado.get("criado_em"),
