@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     DATABASE_URL: str
 
@@ -21,10 +21,6 @@ class Settings(BaseSettings):
 
     KIWIFY_WEBHOOK_TOKEN_ANUAL: str = ""
     KIWIFY_WEBHOOK_TOKEN_TRIMESTRAL: str = ""
-
-    HOTMART_WEBHOOK_SECRET: str = ""
-    HOTMART_OFFER_ID_TRIMESTRAL: str = ""
-    HOTMART_OFFER_ID_ANUAL: str = ""
 
     PAYMENT_LINK_TRIMESTRAL: str = ""
     PAYMENT_LINK_ANUAL: str = ""

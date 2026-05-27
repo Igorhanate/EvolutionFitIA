@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import logging
 from datetime import date, timedelta
 
@@ -10,11 +8,6 @@ from app.models.assinatura import Assinatura
 from app.models.usuario import Usuario
 
 logger = logging.getLogger(__name__)
-
-OFFER_PLAN_MAP: dict[str, str] = {
-    settings.HOTMART_OFFER_ID_TRIMESTRAL: "trimestral",
-    settings.HOTMART_OFFER_ID_ANUAL: "anual",
-}
 
 PLAN_DURATIONS: dict[str, int] = {
     "trimestral": 90,
@@ -53,12 +46,6 @@ def check_active_subscription(user_id: int, db: Session) -> Assinatura | None:
         )
         .first()
     )
-
-
-def map_offer_to_plan(offer_code: str | None) -> str | None:
-    if not offer_code:
-        return None
-    return OFFER_PLAN_MAP.get(offer_code)
 
 
 def activate_subscription(
@@ -129,14 +116,3 @@ def cancel_subscription_by_phone(phone: str, db: Session) -> None:
     for sub in subs:
         sub.status = "cancelado"
     db.commit()
-
-
-def validate_hotmart_webhook(body: bytes, token_header: str | None) -> bool:
-    if not token_header:
-        return False
-    expected = hmac.new(
-        settings.HOTMART_WEBHOOK_SECRET.encode(),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(expected, token_header)
