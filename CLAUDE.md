@@ -23,7 +23,7 @@ SaaS de fitness via WhatsApp com IA. O usuário envia mensagens para o número *
 | ORM / Migrations | SQLAlchemy 2.0.36 + Alembic 1.14.0 (HEAD = migration 012) |
 | Banco | PostgreSQL — **produção: Render free tier** (DB local no `.env` é cópia parada) |
 | WhatsApp | **Meta Cloud API** (graph.facebook.com v19.0) |
-| Pagamento | **Kiwify** — integração implementada em `kiwify.py`; Hotmart router ainda existe como código morto legado |
+| Pagamento | **Kiwify** — integração implementada em `kiwify.py`; router Hotmart removido (27/05) |
 | Hospedagem | **Render free tier**, Docker, deploy automático no push `master` |
 | IA | **claude-sonnet-4-6** (padrão em `config.py`; sobreposto por env `CLAUDE_MODEL`) |
 | SDK Anthropic | 0.40.0, com prompt caching ephemeral (TTL 5 min) |
@@ -96,7 +96,7 @@ Estrutura: `main.py` + `app/` (routers, services, models, schemas, middleware) +
 1. **Kiwify** — configurar produto na plataforma, obter tokens de webhook e preencher `KIWIFY_WEBHOOK_TOKEN_ANUAL/TRIMESTRAL` + `PAYMENT_LINK_*` no Render
 2. **OpenAI API Key** — necessário para reativar transcrição de áudio (Whisper)
 3. **Edição de dieta** via chat — ✅ CONCLUÍDA 26/05. Edição inteligente via tool `substituir_alimento` — busca TACO→USDA (fallback), equivalência calórica, fórmula Atwater quando falta kcal, desambiguação de corte (ex: "frango" → pergunta qual corte), e pergunta "só hoje vs salvar no plano" (anexa ao `texto_original`). ⚠️ Resíduo cosmético: aviso "dieta em breve" em `iniciar_edicao_registro` tool description — ✅ Resíduo cosmético removido 27/05: descrição e dispatch de `iniciar_edicao_registro` corrigidos — dieta redireciona para `substituir_alimento` sem mensagem "em breve".
-4. **Limpar código morto** — router Hotmart ainda em `app/routers/hotmart.py` e registrado em `main.py`, nunca usado em produção
+4. **Limpeza Hotmart ✅ CONCLUÍDA 27/05** — removidos `app/routers/hotmart.py`, `app/schemas/hotmart.py`, `OFFER_PLAN_MAP`, `map_offer_to_plan()`, `validate_hotmart_webhook()`, import+include em `main.py`, vars `HOTMART_*` de `config.py` e `render.yaml`. Adicionado `extra="ignore"` no Settings (tolera vars órfãs no `.env`/Render). NÃO removida a coluna `hotmart_transaction_id` (reaproveitada pelo Kiwify para dedup). Em produção.
 
 **Próximo ciclo de desenvolvimento**
 5. **Base nutricional TACO** — model `AlimentoTACO` + migration + script de importação (`scripts/importar_taco.py`) — plano detalhado adiante neste arquivo
@@ -119,7 +119,7 @@ Estrutura: `main.py` + `app/` (routers, services, models, schemas, middleware) +
 | `DATABASE_URL`, `ANTHROPIC_API_KEY`, todas as `META_*`, `ADMIN_API_KEY` | ✅ configuradas no Render |
 | `OPENAI_API_KEY` | ⚠️ pendente (áudio desativado) |
 | `KIWIFY_WEBHOOK_TOKEN_*`, `PAYMENT_LINK_*` | ⚠️ pendente (produto não configurado na Kiwify ainda) |
-| `HOTMART_*` | legado — pode ser removido após configurar Kiwify |
+| `HOTMART_*` | ✅ removidas do código (27/05) — limpar manualmente do painel Render e do `.env` (cosmético) |
 
 ---
 
@@ -462,8 +462,8 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `ADMIN_API_KEY` | ✅ configurada |
 | `OPENAI_API_KEY` | ⚠️ pendente — necessário para reativar transcrição de áudio |
 | `USDA_API_KEY` | ⚠️ pendente — necessário para substituição de alimentos não presentes na TACO (USDA fallback) |
-| `HOTMART_WEBHOOK_SECRET` | ⚠️ pendente — substituir por Kiwify |
-| `HOTMART_OFFER_ID_*` | ⚠️ pendente — substituir por Kiwify |
+| `HOTMART_WEBHOOK_SECRET` | ✅ removida do código (27/05) — apagar do painel Render se ainda existir |
+| `HOTMART_OFFER_ID_*` | ✅ removidas do código (27/05) — apagar do painel Render se ainda existirem |
 | `PAYMENT_LINK_*` | ⚠️ pendente — atualizar com links reais da Kiwify |
 
 ## Logs
