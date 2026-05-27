@@ -564,7 +564,7 @@ TOOLS = [
             "Quando o alvo estiver claro, chame IMEDIATAMENTE — NÃO peça confirmação prévia nem diga 'tem certeza?', "
             "porque o próprio fluxo desta ferramenta já lista os itens e pede a confirmação no momento certo. "
             "Só pergunte ANTES de chamar se o TIPO (treino/dieta/suplemento) estiver genuinamente ambíguo. "
-            "'Suplemento' e 'treino' implementados; 'dieta' em breve. "
+            "'Suplemento' e 'treino' usam esta ferramenta. Para DIETA, NÃO use esta ferramenta — a edição de dieta é feita pela substituição de alimentos (ferramenta substituir_alimento); se o usuário quiser editar a dieta, ajude-o a trocar alimentos específicos (ex: 'troca o arroz por batata'). "
             "NÃO use para apagar dados — use iniciar_exclusao_registro para isso. "
             "NÃO use para editar dados corporais (peso, idade, sexo) — esses têm fluxo próprio."
         ),
@@ -2432,10 +2432,16 @@ async def process_message(
                     elif alvo == "treino":
                         edicao_iniciada_msg = _iniciar_edicao_treino(user, conversa, db)
                         result = "EDICAO_INICIADA"
+                    elif alvo == "dieta":
+                        edicao_iniciada_msg = (
+                            "Para ajustar sua dieta, é só me dizer qual alimento quer trocar — "
+                            "ex: 'troca o arroz por batata'. Eu recalculo as calorias e macros pra você. 🥗"
+                        )
+                        result = "EDICAO_DIETA_REDIRECIONADO"
                     else:
                         edicao_iniciada_msg = (
-                            "Por enquanto só consigo editar *suplementos* e *treinos*. "
-                            "Edição de dieta chega em breve! 🙂"
+                            "Por enquanto só edito *suplementos*, *treinos* e *dieta* "
+                            "(essa última trocando alimentos direto na conversa). 🙂"
                         )
                         result = "EDICAO_TIPO_NAO_SUPORTADO"
                 elif block.name == "substituir_alimento":
