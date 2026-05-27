@@ -530,7 +530,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ### Pendente (próxima sessão)
 - [x] **Edição de dieta** — ✅ CONCLUÍDA 26/05 (não via Opção B, mas via edição inteligente por substituição de alimentos com TACO→USDA e pergunta hoje-vs-plano).
-- [ ] Aviso "dieta em breve" em `iniciar_edicao_registro` tool description — resíduo cosmético, remover na próxima limpeza.
+- [x] Aviso "dieta em breve" em `iniciar_edicao_registro` tool description — ✅ RESOLVIDO 27/05: descrição e dispatch corrigidos; edição de dieta redireciona para `substituir_alimento` sem mensagem "em breve".
 
 ---
 
@@ -610,13 +610,13 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ### Treino — pendências imediatas (continuação da etapa 2)
 - [ ] Remover o salvamento de treino por palavra-chave (Lugar C em process_message) que gera registros falsos (perguntas/confirmações salvas como treino). Fazer agora que a etapa 2a salva corretamente.
 - [ ] Limpar os ~50 treinos falsos já existentes no banco (mistura de planos reais + perguntas + confirmações) — com cuidado, via rota controlada.
-- [ ] Etapa 2b: reaproveitamento de perfil no 2º treino em diante (mostrar resumo "algo mudou?", confirmar variáveis, pular dados estáveis — não repetir perguntas).
+- [x] Etapa 2b ✅ CONCLUÍDA 27/05 — no 2º treino em diante, `_iniciar_coleta_treino` detecta perfil salvo (`dias_semana_padrao != None`), mostra resumo legível do perfil e pergunta "manter ou mudar?". Se manter: pré-preenche 7 campos e pergunta só `tipo_treino` + `dor_desconforto`. Se mudar: refaz coleta completa do zero. Estado usa chave `fase` (`confirmando_perfil` / `coletando`). Em produção.
 - [ ] Etapa 3: replicar a coleta estruturada para DIETA (fluxo separado), reaproveitando o perfil.
 
 ### Treino — pendências (continuação)
 - [x] Bug B: RESOLVIDO em 24/05 — IA enxerga os treinos via _treinos_context_str.
 - [x] Limpeza completa (grupo D + lixo restante) — RESOLVIDO em 24/05, banco com 10 treinos reais.
-- [ ] Etapa 2b: reaproveitar perfil no 2º treino (não repetir perguntas).
+- [x] Etapa 2b ✅ CONCLUÍDA 27/05 — ver descrição detalhada acima.
 - [ ] Etapa 3: coleta estruturada de DIETA + remover keyword de dieta.
 
 ### Exclusão e edição de registros pelo usuário
