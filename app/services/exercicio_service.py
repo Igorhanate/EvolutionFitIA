@@ -213,3 +213,38 @@ def get_evolucao_sessao(user_id: int, db: Session) -> list[dict]:
         }
         for r in rows
     ]
+
+
+def get_historico_recente(user_id: int, db: Session, semanas: int = 4) -> dict:
+    """Histórico das execuções das últimas N semanas, agrupado por exercício.
+    Para cada exercício: as últimas 3 execuções (mais recentes primeiro).
+    Mais a média de 1RM por sessão (para card de evolução)."""
+    from datetime import date, timedelta
+    limite = date.today() - timedelta(weeks=semanas)
+    regs = (
+        db.query(RegistroExercicio)
+        .filter(RegistroExercicio.user_id == user_id, RegistroExercicio.sessao_data >= limite)
+        .order_by(RegistroExercicio.sessao_data.desc(), RegistroExercicio.criado_em.desc())
+        .all()
+    )
+    exercicios: dict[str, list] = {}
+    for r in regs:
+        nome = r.exercicio_display or r.exercicio
+        if nome not in exercicios:
+            exercicios[nome] = []
+        if len(exercicios[nome]) < 3:
+            exercicios[nome].append({
+                "data": r.sessao_data.strftime("%d/%m"),
+                "series": r.series, "repeticoes": r.repeticoes,
+                "carga_kg": r.carga_kg, "rm_estimado": r.rm_estimado,
+            })
+    from collections import defaultdict
+    por_data: dict = defaultdict(list)
+    for r in regs:
+        if r.rm_estimado is not None:
+            por_data[r.sessao_data].append(r.rm_estimado)
+    evolucao = [
+        {"data": d.strftime("%d/%m"), "media_1rm": round(sum(v) / len(v), 1), "qtd_exercicios": len(v)}
+        for d, v in sorted(por_data.items(), reverse=True)
+    ]
+    return {"exercicios": exercicios, "evolucao_sessoes": evolucao, "periodo_semanas": semanas}

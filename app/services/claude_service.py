@@ -619,6 +619,16 @@ TOOLS = [
             "required": ["origem_pt", "origem_en", "destino_pt", "destino_en", "gramas_origem"],
         },
     },
+    {
+        "name": "consultar_historico_treino",
+        "description": (
+            "Consulta o histórico real de execuções de treino do usuário (cargas, séries, reps, 1RM) das últimas 4 semanas. "
+            "Use SEMPRE que o usuário perguntar sobre cargas anteriores, evolução de força, comparar com treinos passados, "
+            "ou ao apresentar o resumo de fim de treino. Retorna as últimas 3 execuções de cada exercício + média de 1RM por sessão. "
+            "Apresente em LISTA SIMPLES (formato WhatsApp), sem tabelas, sem explicar fontes/cálculos."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
 ]
 
 # Subset de tools para a chamada de análise das 3 fotos (exclui ferramentas de roteamento)
@@ -659,6 +669,26 @@ def _fmt_rm(rm_result: dict | None) -> str:
     nomes = {"epley": "Epley", "brzycki": "Brzycki", "lander": "Lander"}
     partes = [f"{nomes.get(k, k)}: {v}kg" for k, v in formulas.items()]
     return f"1RM estimado: *{rm_result['media']}kg* ({', '.join(partes)}) ⚠️ estimativa"
+
+
+def _fmt_historico_treino(hist: dict) -> str:
+    exercicios = hist.get("exercicios", {})
+    evolucao = hist.get("evolucao_sessoes", [])
+    n = hist.get("periodo_semanas", 4)
+    if not exercicios and not evolucao:
+        return f"Sem registros de execução nas últimas {n} semanas."
+    partes = [f"Histórico de treino (últimas {n} semanas):\n"]
+    if evolucao:
+        evo_str = " | ".join(f"{e['data']}: {e['media_1rm']}kg" for e in evolucao)
+        partes.append(f"Evolução (1RM médio por dia): {evo_str}\n")
+    if exercicios:
+        partes.append("Por exercício (últimas execuções):")
+        for nome, execs in exercicios.items():
+            execs_str = ", ".join(
+                f"{ex['carga_kg']}kg x{ex['repeticoes']} ({ex['data']})" for ex in execs
+            )
+            partes.append(f"- {nome}: {execs_str}")
+    return "\n".join(partes)
 
 
 def _sessao_context_str(user_id: int, sessao_data: date, db: Session) -> str | None:
@@ -2589,6 +2619,9 @@ async def process_message(
                                     f"e PERGUNTE se a troca é só para hoje ou para salvar no plano alimentar. "
                                     f"Números: {resumo}"
                                 )
+                elif block.name == "consultar_historico_treino":
+                    hist = exercicio_service.get_historico_recente(user.id, db, semanas=4)
+                    result = _fmt_historico_treino(hist)
                 else:
                     result = "Ferramenta desconhecida."
                 tool_results.append({
