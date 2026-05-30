@@ -624,7 +624,8 @@ TOOLS = [
         "description": (
             "Consulta o histórico real de execuções de treino do usuário (cargas, séries, reps, 1RM) das últimas 4 semanas. "
             "Use SEMPRE que o usuário perguntar sobre cargas anteriores, evolução de força, comparar com treinos passados, "
-            "ou ao apresentar o resumo de fim de treino. Retorna as últimas 3 execuções de cada exercício + média de 1RM por sessão. "
+            "ou ao apresentar o resumo de fim de treino. Retorna as últimas 3 execuções de cada exercício. "
+            "Mostra a evolução de carga e 1RM de cada exercício ao longo das últimas execuções (comparação válida pois é o mesmo exercício). "
             "Apresente em LISTA SIMPLES (formato WhatsApp), sem tabelas, sem explicar fontes/cálculos."
         ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
@@ -673,21 +674,16 @@ def _fmt_rm(rm_result: dict | None) -> str:
 
 def _fmt_historico_treino(hist: dict) -> str:
     exercicios = hist.get("exercicios", {})
-    evolucao = hist.get("evolucao_sessoes", [])
     n = hist.get("periodo_semanas", 4)
-    if not exercicios and not evolucao:
+    if not exercicios:
         return f"Sem registros de execução nas últimas {n} semanas."
     partes = [f"Histórico de treino (últimas {n} semanas):\n"]
-    if evolucao:
-        evo_str = " | ".join(f"{e['data']}: {e['media_1rm']}kg" for e in evolucao)
-        partes.append(f"Evolução (1RM médio por dia): {evo_str}\n")
-    if exercicios:
-        partes.append("Por exercício (últimas execuções):")
-        for nome, execs in exercicios.items():
-            execs_str = ", ".join(
-                f"{ex['carga_kg']}kg x{ex['repeticoes']} ({ex['data']})" for ex in execs
-            )
-            partes.append(f"- {nome}: {execs_str}")
+    for nome, execs in exercicios.items():
+        linhas = []
+        for ex in execs:
+            rm_str = f", 1RM≈{ex['rm_estimado']}kg" if ex.get("rm_estimado") is not None else ""
+            linhas.append(f"  {ex['carga_kg']}kg x{ex['repeticoes']} ({ex['data']}{rm_str})")
+        partes.append(f"- {nome}:\n" + "\n".join(linhas))
     return "\n".join(partes)
 
 

@@ -238,13 +238,4 @@ def get_historico_recente(user_id: int, db: Session, semanas: int = 4) -> dict:
                 "series": r.series, "repeticoes": r.repeticoes,
                 "carga_kg": r.carga_kg, "rm_estimado": r.rm_estimado,
             })
-    from collections import defaultdict
-    por_data: dict = defaultdict(list)
-    for r in regs:
-        if r.rm_estimado is not None:
-            por_data[r.sessao_data].append(r.rm_estimado)
-    evolucao = [
-        {"data": d.strftime("%d/%m"), "media_1rm": round(sum(v) / len(v), 1), "qtd_exercicios": len(v)}
-        for d, v in sorted(por_data.items(), reverse=True)
-    ]
-    return {"exercicios": exercicios, "evolucao_sessoes": evolucao, "periodo_semanas": semanas}
+    return {"exercicios": exercicios, "periodo_semanas": semanas}
