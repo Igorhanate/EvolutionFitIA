@@ -477,6 +477,24 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 30/05/2026 — cadastro de perfil obrigatório Etapas 1 e 1.5)
+
+### Implementado
+- **Cadastro de perfil obrigatório — Etapa 1 ✅** — guard 0.5 inserido no início de `process_message` (antes de `/menu`): verifica `perfil_minimo_completo`; se False, força fluxo de 6 etapas: confirmar nome → sexo → data de nascimento → altura → peso → nível de experiência. Grava em `PerfilFitness`. Bloqueia qualquer uso do bot até completar. `perfil_service` ganhou `perfil_minimo_completo()` e `calcular_idade()`. Boas-vindas Kiwify ajustada para direcionar ao cadastro em vez do `/menu`.
+- **Cadastro de perfil — Etapa 1.5 ✅** — após gravar os 5 campos, em vez de liberar direto, exibe oferta opcional: `1️⃣ Registrar medidas / 2️⃣ Enviar fotos pra análise / 3️⃣ Pular por agora`. Opção 1 redireciona para o fluxo oportunista de `registrar_medidas`; opção 2 copia a instrução do item 9 do menu (frente/costas/lado); opção 3 libera com `/menu`. Helper `faltam_medidas_ou_fotos()` adicionado em `perfil_service`. Item 5 do menu (dieta) prefixa aviso dinâmico se faltar medidas e/ou fotos — não bloqueia, só informa.
+- **Pendência "Perguntar sexo ao criar treino" ✅** — superada: sexo agora coletado obrigatoriamente na Etapa 1 do cadastro.
+
+### Segurança
+- **`ADMIN_API_KEY` rotacionada** — nova chave gerada e atualizada no Render. Chave anterior descartada. 🔐 Incidente registrado: chave vazou inline em `curl -H` no chat. Regra: NUNCA colar valores de chave em comandos — usar variável de shell extraída silenciosamente.
+
+### Limpeza confirmada
+- **`HOTMART_*` vars** — apagadas do painel Render (estavam órfãs pós-migração para Kiwify) e confirmadas ausentes do `.env` local (grep retornou 0 linhas).
+- **`USDA_API_KEY`** — confirmada ativa no Render; testada em produção com busca real.
+- **Salvamento por keyword (`Lugar C`)** — confirmado removido do código. Banco tem apenas 5 treinos reais (todos `origem="proprio"`): Peito A (133), Peito 3 (131), PEITO 3 (129), PEITO 1 (128), PERNA 2025 (125). Pendências L647-L648 marcadas como concluídas.
+- **`static/landing/motion.html`** — arquivo de 68KB não commitado, deletado. `static/landing/index.html` revertido (tinha botão "Assistir Motion 🎬" não finalizado). `LOGO PNG COM BORDA.PNG` (1.4MB) adicionado ao `.gitignore`.
+
+---
+
 ## HISTÓRICO DE MUDANÇAS (sessão de 28/05/2026 — limpeza de segurança e confirmações)
 
 ### Segurança
@@ -713,7 +731,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [ ] Lembrete: assinatura anual do criador expira ~maio/2027.
 
 ### Treino — novos refinos
-- [ ] Ao criar treino, perguntar o sexo da pessoa.
+- [x] Ao criar treino, perguntar o sexo da pessoa. — ✅ CONCLUÍDO 30/05: sexo coletado obrigatoriamente na Etapa 1 do cadastro de perfil antes de qualquer uso do bot.
 - [ ] Variação grande de peso/séries vs histórico: questionar o usuário ("registrei X, seu último foi Y, está certo?") e seguir só se confirmado.
 - [ ] Registro de carga POR EXERCÍCIO (não só por treino): considerar dados do mesmo exercício entre treinos diferentes APENAS quando ele for o 1º exercício da sessão em ambos os treinos.
 
