@@ -92,8 +92,8 @@ async def send_welcome_message(phone: str, nome: str | None) -> None:
         "Bem-vindo ao *Evolution Fit AI*!\n\n"
         "Sua assinatura foi ativada.\n\n"
         "Preparado para mudar de verdade?\n\n"
-        "Sou o *Evo*, crio seu treino e dieta 100% personalizados!\n\n"
-        "Vamos construir o corpo que você merece.\n\n"
-        "Digite */menu* e vamos começar!"
+        "Sou o *Evo*, seu personal trainer e nutricionista 24h. 💪\n\n"
+        "Mas antes, vamos cadastrar seu perfil — leva 1 minutinho!\n\n"
+        "Me manda um *oi* pra começar."
     )
     await send_message(phone, text)

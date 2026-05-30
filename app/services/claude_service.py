@@ -260,6 +260,15 @@ ETAPAS_TREINO: list[tuple[str, str]] = [
     ),
 ]
 
+ETAPAS_CADASTRO_PERFIL: list[tuple[str, str]] = [
+    ("confirmar_nome",    "Bora pro seu cadastro! 💪\n\nSeu nome é *{nome_kiwify}*, correto? (responda *sim* ou me diga seu nome correto)"),
+    ("sexo",              "Qual é o seu sexo?\n\n1️⃣ Masculino\n2️⃣ Feminino"),
+    ("data_nascimento",   "Qual a sua data de nascimento? (formato: *DD/MM/AAAA*)"),
+    ("altura_cm",         "Qual a sua altura em centímetros? (ex: *175*)"),
+    ("peso_kg",           "Qual o seu peso em kg? (ex: *82.5*)"),
+    ("nivel_experiencia", "Há quanto tempo treina?\n\n1️⃣ Iniciante (menos de 6 meses)\n2️⃣ Intermediário (6 meses a 2 anos)\n3️⃣ Avançado (mais de 2 anos)"),
+]
+
 MENU_TEXT = (
     "🏋️ *EVOLUTION FIT AI — Menu Principal*\n\n"
     "O que vamos focar hoje?\n\n"
@@ -1869,6 +1878,162 @@ def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Cadastro de perfil obrigatório
+# ---------------------------------------------------------------------------
+
+def _iniciar_cadastro_perfil(user: Usuario, conversa: Conversa, db: Session) -> str:
+    conversa.estado_pendente = {
+        "tipo": "cadastro_perfil",
+        "fase": "confirmar_nome",
+        "dados": {},
+        "criado_em": datetime.utcnow().isoformat(),
+    }
+    db.add(conversa)
+    db.commit()
+    primeiro_nome = (user.nome or "").split()[0].strip() if user.nome else ""
+    if primeiro_nome:
+        _, pergunta = ETAPAS_CADASTRO_PERFIL[0]
+        return pergunta.replace("{nome_kiwify}", primeiro_nome)
+    return "Bora pro seu cadastro! 💪\n\nQual é o seu nome?"
+
+
+async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: Usuario, db: Session) -> str:
+    estado = conversa.estado_pendente or {}
+    fase = estado.get("fase", "confirmar_nome")
+    dados: dict = dict(estado.get("dados", {}))
+    resposta = message_text.strip()
+
+    proxima_fase: str | None
+
+    if fase == "confirmar_nome":
+        norm = _normalizar_confirmacao(resposta)
+        if norm == "sim":
+            dados["nome"] = user.nome
+        else:
+            novo_nome = resposta.strip()
+            if novo_nome:
+                user.nome = novo_nome
+                db.flush()
+            dados["nome"] = user.nome
+        proxima_fase = "sexo"
+
+    elif fase == "sexo":
+        r = resposta.lower()
+        if r in ("1", "masculino", "homem", "m", "masc"):
+            dados["sexo"] = "M"
+            proxima_fase = "data_nascimento"
+        elif r in ("2", "feminino", "mulher", "f", "fem"):
+            dados["sexo"] = "F"
+            proxima_fase = "data_nascimento"
+        else:
+            return "Por favor, responda *1* ou *2*."
+
+    elif fase == "data_nascimento":
+        try:
+            partes = resposta.strip().split("/")
+            if len(partes) != 3:
+                raise ValueError
+            d, m, a = int(partes[0]), int(partes[1]), int(partes[2])
+            dt = date(a, m, d)
+            if dt.year < 1900 or dt.year > date.today().year:
+                raise ValueError
+            idade = perfil_service.calcular_idade(dt)
+            if idade is None or idade < 10 or idade > 100:
+                raise ValueError
+            dados["data_nascimento"] = dt.isoformat()
+            proxima_fase = "altura_cm"
+        except (ValueError, IndexError):
+            return "Formato inválido. Tente *DD/MM/AAAA* (ex: 15/03/1990)."
+
+    elif fase == "altura_cm":
+        try:
+            h = int(resposta.replace("cm", "").replace(" ", ""))
+            if not 100 <= h <= 250:
+                raise ValueError
+            dados["altura_cm"] = h
+            proxima_fase = "peso_kg"
+        except ValueError:
+            return "Altura inválida. Em cm, ex: *175*."
+
+    elif fase == "peso_kg":
+        try:
+            p = float(resposta.replace(",", ".").replace("kg", "").replace(" ", ""))
+            if not 30.0 <= p <= 300.0:
+                raise ValueError
+            dados["peso_kg"] = p
+            proxima_fase = "nivel_experiencia"
+        except ValueError:
+            return "Peso inválido. Ex: *82.5*."
+
+    elif fase == "nivel_experiencia":
+        mapa = {
+            "1": "iniciante", "2": "intermediario", "3": "avancado",
+            "iniciante": "iniciante",
+            "intermediário": "intermediario", "intermediario": "intermediario",
+            "avançado": "avancado", "avancado": "avancado",
+        }
+        nivel = mapa.get(resposta.lower())
+        if nivel:
+            dados["nivel_experiencia"] = nivel
+            proxima_fase = None
+        else:
+            return "Responda *1*, *2* ou *3*."
+
+    else:
+        proxima_fase = None
+
+    if proxima_fase is not None:
+        conversa.estado_pendente = {
+            "tipo": "cadastro_perfil",
+            "fase": proxima_fase,
+            "dados": dados,
+            "criado_em": estado.get("criado_em"),
+        }
+        db.add(conversa)
+        db.commit()
+        for etapa_nome, etapa_pergunta in ETAPAS_CADASTRO_PERFIL:
+            if etapa_nome == proxima_fase:
+                return etapa_pergunta
+        return "Próxima etapa do cadastro."
+
+    # Todas as fases concluídas — persiste no perfil
+    perfil = perfil_service.get_or_create_perfil(user.id, db)
+    perfil.sexo = dados.get("sexo")
+    if dados.get("data_nascimento"):
+        perfil.data_nascimento = date.fromisoformat(dados["data_nascimento"])
+    perfil.altura_cm = dados.get("altura_cm")
+    if dados.get("peso_kg") is not None:
+        perfil.peso_kg = dados["peso_kg"]
+    perfil.nivel_experiencia = dados.get("nivel_experiencia")
+    db.flush()
+    conversa.estado_pendente = None
+    db.add(conversa)
+    db.commit()
+
+    nome_salvo = user.nome or ""
+    primeiro_nome = nome_salvo.split()[0] if nome_salvo else ""
+    sexo_legivel = {"M": "Masculino", "F": "Feminino"}.get(dados.get("sexo", ""), "—")
+    nivel_legivel = {
+        "iniciante": "Iniciante",
+        "intermediario": "Intermediário",
+        "avancado": "Avançado",
+    }.get(dados.get("nivel_experiencia", ""), "—")
+    dt_nasc = date.fromisoformat(dados["data_nascimento"]) if dados.get("data_nascimento") else None
+    idade = perfil_service.calcular_idade(dt_nasc)
+
+    return (
+        "Perfil cadastrado! 🎯\n\n"
+        f"👤 {primeiro_nome}\n"
+        f"⚧ {sexo_legivel}\n"
+        + (f"🎂 {idade} anos\n" if idade else "")
+        + f"📏 {dados.get('altura_cm')}cm\n"
+        f"⚖️ {dados.get('peso_kg')}kg\n"
+        f"📊 {nivel_legivel}\n\n"
+        "Agora pode usar tudo! Digite */menu* pra começar."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Coleta estruturada de treino
 # ---------------------------------------------------------------------------
 
@@ -2318,6 +2483,13 @@ async def process_message(
 ) -> str:
     conversa = _get_or_create_conversa(user.id, db)
     sessao_data = date.today()
+
+    # 0.5. Guard: perfil obrigatório — intercepts before everything including /menu
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "cadastro_perfil":
+        return await _handle_cadastro_perfil(conversa, message_text, user, db)
+    _perfil = perfil_service.get_or_create_perfil(user.id, db)
+    if not perfil_service.perfil_minimo_completo(_perfil):
+        return _iniciar_cadastro_perfil(user, conversa, db)
 
     # 0. /menu command and menu item selection (intercept before everything else)
     stripped = message_text.strip()
