@@ -224,7 +224,7 @@ Deduplicação por `hotmart_transaction_id`.
 | `aguardando_menu` | Usuário chamou /menu, aguarda número 1–12 |
 | `criando_treino` | Coleta estruturada de 9 perguntas para criar treino personalizado |
 
-### Ferramentas Claude (TOOLS — 14 tools)
+### Ferramentas Claude (TOOLS — 15 tools)
 
 | Tool | Ação |
 |------|------|
@@ -241,6 +241,7 @@ Deduplicação por `hotmart_transaction_id`.
 | `registrar_tomei_suplementos` | Marca suplementos como tomados no dia |
 | `registrar_suplementos_usuario` | Salva lista de suplementos para personalizar lembretes |
 | `substituir_alimento` | Calcula equivalência calórica entre dois alimentos via TACO (só leitura — não persiste) |
+| `consultar_historico_treino` | Retorna histórico real das últimas 4 semanas por exercício (3 últimas execuções + carga/reps/1RM); lista WhatsApp |
 | `TOOLS_ANALISE_CORPO` | Subset com só `registrar_analise_foto` — usado na chamada de 3 fotos |
 
 ### /menu command
@@ -473,6 +474,27 @@ JSON estruturado via `pythonjsonlogger`:
 logger.info("event_name", extra={"user_id": ..., "key": "value"})
 logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ```
+
+---
+
+## HISTÓRICO DE MUDANÇAS (sessão de 27/05/2026 — tool consultar_historico_treino + planejamento épico)
+
+### Implementado
+- **Tool `consultar_historico_treino` ✅** — IA agora enxerga o histórico real de execuções (cargas/séries/reps/1RM) das últimas 4 semanas, agrupado por exercício (3 últimas execuções cada). Funções: `exercicio_service.get_historico_recente` + helper `_fmt_historico_treino` (lista WhatsApp, sem tabela). Removida a comparação de "1RM médio por sessão" porque misturava treinos diferentes — só evolução POR EXERCÍCIO (comparação válida).
+
+### ÉPICO: Estrutura de séries individuais + aquecimento (planejado, não iniciado)
+
+**PROBLEMA ATUAL:** `RegistroExercicio` guarda `series/repeticoes/carga` AGREGADOS — não distingue aquecimento de série válida, não guarda carga por série individual (1ª série X, 2ª série Y), e não tem vínculo com o tipo de treino (sem `treino_id`/`grupo_muscular`).
+
+**OBJETIVO:**
+- (a) Guardar cada SÉRIE individual com carga/reps próprias + flag `is_aquecimento` (bool)
+- (b) Vincular registro ao plano de treino (`treino_id` ou tipo) para permitir comparar sessões do MESMO tipo de treino
+- (c) Formato de apresentação ao solicitar treino: lista WhatsApp "Exercício A - X aquecimentos e Y séries válidas com N repetições" + "Envie 'treinar' para iniciar"
+- (d) Ao receber "treinar", mostrar por exercício: "No seu último treino você fez: aquecimento com X, séries válidas: 1ª série X peso N reps, 2ª série..."
+
+**REQUER:** migração nova (tabela de séries individuais OU campos novos), mudança no fluxo de registro (`registrar_exercicio`), mudança no `_fmt` e no contexto, e vínculo registro↔plano.
+
+É um épico de várias etapas — fazer em sessão dedicada.
 
 ---
 
