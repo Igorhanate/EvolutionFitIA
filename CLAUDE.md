@@ -298,7 +298,7 @@ Ao criar dieta (item 5 ou via chat), o Evo solicita ativamente medidas corporais
 - **Atwater fallback:** se `kcal` vier `None` mas `proteina_g`, `carboidrato_g` e `lipideos_g` estiverem presentes, calcula `round(p*4 + c*4 + l*9, 1)` e sinaliza `kcal_estimado: True`; se faltar algum macro, mantém `kcal: None`
 - **Guard de chave vazia:** `USDA_API_KEY` vazia → retorna `[]` sem chamar a API
 - **Cascata:** `_resolver_alimento(termo_pt, termo_en, db)` em `claude_service.py` — busca TACO em PT primeiro; se não encontrar, busca USDA em EN; retorna `(obj, fonte)` ou `(None, None)`
-- **Config:** `USDA_API_KEY: str = ""` em `app/config.py` (opcional, mesmo padrão de `OPENAI_API_KEY`); ⚠️ **pendente configurar no Render**
+- **Config:** `USDA_API_KEY: str = ""` em `app/config.py` (opcional, mesmo padrão de `OPENAI_API_KEY`); ✅ **configurada no Render (28/05)**
 
 ---
 
@@ -462,7 +462,7 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `META_APP_SECRET` | ✅ configurada |
 | `ADMIN_API_KEY` | ✅ configurada |
 | `OPENAI_API_KEY` | ⚠️ pendente — necessário para reativar transcrição de áudio |
-| `USDA_API_KEY` | ⚠️ pendente — necessário para substituição de alimentos não presentes na TACO (USDA fallback) |
+| `USDA_API_KEY` | ✅ configurada no Render (28/05) |
 | `HOTMART_WEBHOOK_SECRET` | ✅ removida do código (27/05) — apagar do painel Render se ainda existir |
 | `HOTMART_OFFER_ID_*` | ✅ removidas do código (27/05) — apagar do painel Render se ainda existirem |
 | `PAYMENT_LINK_*` | ⚠️ pendente — atualizar com links reais da Kiwify |
@@ -545,7 +545,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - Frango peito cru: kcal ausente na USDA → Atwater calcula `107.4 kcal` (`22.5×4 + 0×4 + 1.93×9`), `kcal_estimado=True`.
 
 ### Pendente
-- [ ] **Configurar `USDA_API_KEY` no Render** (variável de ambiente de produção — ver tabela de variáveis).
+- [x] **Configurar `USDA_API_KEY` no Render** — ✅ configurada (28/05).
 - [ ] **Teste end-to-end em produção**: pedir substituição de alimento presente só na USDA (ex: tilápia) via WhatsApp.
 - [x] **Edição de dieta** — ✅ CONCLUÍDA 26/05. Implementada como edição inteligente via substituição de alimentos (TACO→USDA, equivalência calórica, hoje-vs-plano).
 
