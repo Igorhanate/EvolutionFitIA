@@ -644,8 +644,8 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ## PENDÊNCIAS / ROADMAP (melhorias a fazer)
 
 ### Treino — pendências imediatas (continuação da etapa 2)
-- [ ] Remover o salvamento de treino por palavra-chave (Lugar C em process_message) que gera registros falsos (perguntas/confirmações salvas como treino). Fazer agora que a etapa 2a salva corretamente.
-- [ ] Limpar os ~50 treinos falsos já existentes no banco (mistura de planos reais + perguntas + confirmações) — com cuidado, via rota controlada.
+- [x] Remover o salvamento de treino por palavra-chave (Lugar C em process_message) — ✅ CONCLUÍDO (verificado 30/05). Zero ocorrências de "Lugar C" no código; `TREINO_KEYWORDS` definida mas não usada em salvamento; `Treino` só é criado em `_gerar_treino_de_dados` (coleta estruturada) e `treino_service.cadastrar_treino_proprio` (tools). Bloco final de `process_message` salva apenas `Dieta` por keyword, não `Treino`.
+- [x] Limpar os ~50 treinos falsos já existentes no banco — ✅ CONCLUÍDO (verificado 30/05). Produção (user_id=1) tem apenas 5 treinos, todos com `origem="proprio"` (Peito A, Peito 3, PEITO 3, PEITO 1, PERNA 2025) — nenhum lixo.
 - [x] Etapa 2b ✅ CONCLUÍDA 27/05 — no 2º treino em diante, `_iniciar_coleta_treino` detecta perfil salvo (`dias_semana_padrao != None`), mostra resumo legível do perfil e pergunta "manter ou mudar?". Se manter: pré-preenche 7 campos e pergunta só `tipo_treino` + `dor_desconforto`. Se mudar: refaz coleta completa do zero. Estado usa chave `fase` (`confirmando_perfil` / `coletando`). Em produção.
 - [ ] Etapa 3: replicar a coleta estruturada para DIETA (fluxo separado), reaproveitando o perfil.
 
