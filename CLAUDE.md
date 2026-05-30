@@ -482,19 +482,33 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ### Implementado
 - **Tool `consultar_historico_treino` ✅** — IA agora enxerga o histórico real de execuções (cargas/séries/reps/1RM) das últimas 4 semanas, agrupado por exercício (3 últimas execuções cada). Funções: `exercicio_service.get_historico_recente` + helper `_fmt_historico_treino` (lista WhatsApp, sem tabela). Removida a comparação de "1RM médio por sessão" porque misturava treinos diferentes — só evolução POR EXERCÍCIO (comparação válida).
 
-### ÉPICO: Estrutura de séries individuais + aquecimento (planejado, não iniciado)
+### ÉPICO: Estrutura de treino (séries individuais + comparação por treino) — planejado, não iniciado
 
-**PROBLEMA ATUAL:** `RegistroExercicio` guarda `series/repeticoes/carga` AGREGADOS — não distingue aquecimento de série válida, não guarda carga por série individual (1ª série X, 2ª série Y), e não tem vínculo com o tipo de treino (sem `treino_id`/`grupo_muscular`).
+**CONTEXTO DA DECISÃO (27/05):** Discutido em detalhe com o Igor. Duas comparações desejadas:
+- (#1) Mesmo exercício entre treinos diferentes (supino do "peito A" vs "peito B") — ✅ JÁ FUNCIONA via `consultar_historico_treino` (agrupa por nome de exercício, ignora o treino). Testado e confirmado.
+- (#2) Mesmo treino em dias diferentes (peito A de hoje vs peito A da semana passada) — ❌ FALTA. Precisa vincular a sessão de registros ao treino.
 
-**OBJETIVO:**
-- (a) Guardar cada SÉRIE individual com carga/reps próprias + flag `is_aquecimento` (bool)
-- (b) Vincular registro ao plano de treino (`treino_id` ou tipo) para permitir comparar sessões do MESMO tipo de treino
-- (c) Formato de apresentação ao solicitar treino: lista WhatsApp "Exercício A - X aquecimentos e Y séries válidas com N repetições" + "Envie 'treinar' para iniciar"
-- (d) Ao receber "treinar", mostrar por exercício: "No seu último treino você fez: aquecimento com X, séries válidas: 1ª série X peso N reps, 2ª série..."
+**DECISÃO de como marcar o treino da sessão:** o usuário diz qual treino ao começar — manda "treinar [nome]" (ex: "treinar peito A"). Isso marca todos os registros daquela sessão com o nome/tipo do treino. (NÃO usar `treino_id` da instância do plano — quebra ao recriar plano. Usar o nome/tipo, que é estável.)
 
-**REQUER:** migração nova (tabela de séries individuais OU campos novos), mudança no fluxo de registro (`registrar_exercicio`), mudança no `_fmt` e no contexto, e vínculo registro↔plano.
+**AS 3 PARTES DO ÉPICO (incrementais):**
 
-É um épico de várias etapas — fazer em sessão dedicada.
+**PARTE 1 — Vínculo sessão→treino (resolve comparação #2):**
+- Adicionar campo `treino_nome: str` no `RegistroExercicio` para o nome/tipo do treino da sessão.
+- Fluxo "treinar [nome]": ao iniciar, captura o nome do treino e marca a sessão. Os registros seguintes herdam esse nome até a sessão acabar/trocar.
+- `get_historico_recente` passa a permitir filtrar/agrupar por `treino_nome` → comparar "peito A" entre datas.
+
+**PARTE 2 — Séries individuais + aquecimento:**
+- `RegistroExercicio` hoje guarda `series/reps/carga` AGREGADOS. Criar estrutura para guardar cada SÉRIE individual com carga/reps próprias + flag `is_aquecimento` (bool).
+- Decisão pendente: tabela nova (`registros_series`) vinculada ao `RegistroExercicio`, OU coluna JSON `series_detalhe` no model existente. Avaliar na sessão dedicada.
+- Mudança no fluxo `registrar_exercicio` (hoje recebe `series/reps/carga`; passaria a receber séries individuais).
+
+**PARTE 3 — Fluxo de apresentação (formato WhatsApp):**
+- Ao SOLICITAR treino: lista simples "Exercício A - X aquecimentos e Y séries válidas com N repetições" + "Envie 'treinar [nome]' para iniciar".
+- Ao mandar "treinar [nome]": mostrar por exercício "No seu último treino você fez: aquecimento com X, séries válidas: 1ª série X peso N reps, 2ª série...". Depende das Partes 1 e 2.
+
+**REQUER:** migração(ões) nova(s) — todas MANUAIS (autogenerate inviável, banco compartilhado). Mudança em `registrar_exercicio`, no contexto, na exibição, e no parsing do "treinar".
+
+**ORDEM SUGERIDA:** Parte 1 (mais isolada, destrava #2) → Parte 2 (estrutura de séries) → Parte 3 (apresentação, depende das duas). Fazer em sessão(ões) dedicada(s) com cabeça fresca.
 
 ---
 
