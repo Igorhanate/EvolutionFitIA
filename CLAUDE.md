@@ -116,10 +116,10 @@ Estrutura: `main.py` + `app/` (routers, services, models, schemas, middleware) +
 
 | Variável | Status |
 |---|---|
-| `DATABASE_URL`, `ANTHROPIC_API_KEY`, todas as `META_*`, `ADMIN_API_KEY` | ✅ configuradas no Render |
+| `DATABASE_URL`, `ANTHROPIC_API_KEY`, todas as `META_*`, `ADMIN_API_KEY` | ✅ configuradas no Render (`ADMIN_API_KEY` rotacionada 28/05) |
 | `OPENAI_API_KEY` | ⚠️ pendente (áudio desativado) |
 | `KIWIFY_WEBHOOK_TOKEN_*`, `PAYMENT_LINK_*` | ⚠️ pendente (produto não configurado na Kiwify ainda) |
-| `HOTMART_*` | ✅ removidas do código (27/05) — limpar manualmente do painel Render e do `.env` (cosmético) |
+| `HOTMART_*` | ✅ removidas do código (27/05) — ✅ apagadas do painel Render (28/05) — ✅ apagadas do `.env` local (28/05) |
 
 ---
 
@@ -460,11 +460,11 @@ APScheduler (`AsyncIOScheduler`, timezone `America/Sao_Paulo`) integrado ao life
 | `META_ACCESS_TOKEN` | ✅ token permanente configurado |
 | `META_WEBHOOK_VERIFY_TOKEN` | ✅ configurada (`evfit-webhook-verify-2026`) |
 | `META_APP_SECRET` | ✅ configurada |
-| `ADMIN_API_KEY` | ✅ configurada |
+| `ADMIN_API_KEY` | ✅ configurada (rotacionada 28/05) |
 | `OPENAI_API_KEY` | ⚠️ pendente — necessário para reativar transcrição de áudio |
 | `USDA_API_KEY` | ✅ configurada no Render (28/05) |
-| `HOTMART_WEBHOOK_SECRET` | ✅ removida do código (27/05) — apagar do painel Render se ainda existir |
-| `HOTMART_OFFER_ID_*` | ✅ removidas do código (27/05) — apagar do painel Render se ainda existirem |
+| `HOTMART_WEBHOOK_SECRET` | ✅ removida do código (27/05) — ✅ apagada do painel Render (28/05) |
+| `HOTMART_OFFER_ID_*` | ✅ removidas do código (27/05) — ✅ apagadas do painel Render (28/05) |
 | `PAYMENT_LINK_*` | ⚠️ pendente — atualizar com links reais da Kiwify |
 
 ## Logs
@@ -474,6 +474,19 @@ JSON estruturado via `pythonjsonlogger`:
 logger.info("event_name", extra={"user_id": ..., "key": "value"})
 logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ```
+
+---
+
+## HISTÓRICO DE MUDANÇAS (sessão de 28/05/2026 — limpeza de segurança e confirmações)
+
+### Segurança
+- **`ADMIN_API_KEY` rotacionada** — nova chave gerada e atualizada no Render. Chave anterior descartada. Prática de segurança: nunca ecoar/logar a chave.
+
+### Limpeza confirmada
+- **`HOTMART_*` vars** — apagadas do painel Render (estavam órfãs pós-migração para Kiwify) e confirmadas ausentes do `.env` local (grep retornou 0 linhas).
+- **`USDA_API_KEY`** — confirmada ativa no Render; testada em produção com busca real.
+- **Salvamento por keyword (`Lugar C`)** — confirmado removido do código. Banco tem apenas 5 treinos reais (todos `origem="proprio"`): Peito A (133), Peito 3 (131), PEITO 3 (129), PEITO 1 (128), PERNA 2025 (125). Pendências L647-L648 marcadas como concluídas.
+- **`static/landing/motion.html`** — arquivo de 68KB não commitado, deletado. `static/landing/index.html` revertido (tinha botão "Assistir Motion 🎬" não finalizado). `LOGO PNG COM BORDA.PNG` (1.4MB) adicionado ao `.gitignore`.
 
 ---
 
