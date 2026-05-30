@@ -1979,6 +1979,37 @@ async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: U
         else:
             return "Responda *1*, *2* ou *3*."
 
+    elif fase == "oferta_extras":
+        r = resposta.lower()
+        if r in ("1", "medidas", "medida"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return (
+                "Beleza! Me manda suas medidas: *cintura*, *quadril*, *pescoço*, *braço*, *coxa*, *panturrilha*. "
+                "Pode mandar todas juntas ou uma por vez. 📏"
+            )
+        elif r in ("2", "fotos", "foto"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            primeiro_nome_local = (user.nome or "").split()[0] if user.nome else "você"
+            return (
+                f"Vou analisar sua composição corporal, {primeiro_nome_local}! 📸\n\n"
+                "Preciso de *3 fotos* suas:\n"
+                "1. *Frente* — de frente para a câmera\n"
+                "2. *Costas* — de costas para a câmera\n"
+                "3. *Lado* — perfil, braço relaxado ao lado do corpo\n\n"
+                "Pode mandar a primeira foto de *frente* agora!"
+            )
+        elif r in ("3", "pular", "nao", "não", "depois", "agora não", "agora nao"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Beleza! Pode usar tudo agora. Digite */menu* pra começar. 💪"
+        else:
+            return "Por favor, responda *1*, *2* ou *3*."
+
     else:
         proxima_fase = None
 
@@ -1996,7 +2027,7 @@ async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: U
                 return etapa_pergunta
         return "Próxima etapa do cadastro."
 
-    # Todas as fases concluídas — persiste no perfil
+    # Todas as fases concluídas — persiste no perfil e abre oferta de extras
     perfil = perfil_service.get_or_create_perfil(user.id, db)
     perfil.sexo = dados.get("sexo")
     if dados.get("data_nascimento"):
@@ -2006,9 +2037,6 @@ async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: U
         perfil.peso_kg = dados["peso_kg"]
     perfil.nivel_experiencia = dados.get("nivel_experiencia")
     db.flush()
-    conversa.estado_pendente = None
-    db.add(conversa)
-    db.commit()
 
     nome_salvo = user.nome or ""
     primeiro_nome = nome_salvo.split()[0] if nome_salvo else ""
@@ -2021,6 +2049,14 @@ async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: U
     dt_nasc = date.fromisoformat(dados["data_nascimento"]) if dados.get("data_nascimento") else None
     idade = perfil_service.calcular_idade(dt_nasc)
 
+    conversa.estado_pendente = {
+        "tipo": "cadastro_perfil",
+        "fase": "oferta_extras",
+        "criado_em": estado.get("criado_em"),
+    }
+    db.add(conversa)
+    db.commit()
+
     return (
         "Perfil cadastrado! 🎯\n\n"
         f"👤 {primeiro_nome}\n"
@@ -2029,7 +2065,12 @@ async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: U
         + f"📏 {dados.get('altura_cm')}cm\n"
         f"⚖️ {dados.get('peso_kg')}kg\n"
         f"📊 {nivel_legivel}\n\n"
-        "Agora pode usar tudo! Digite */menu* pra começar."
+        "Pra deixar tudo ainda mais preciso, posso registrar suas *medidas corporais* "
+        "(cintura, quadril, braço, etc.) e fazer uma *análise por fotos*.\n\n"
+        "É *opcional*, e caso queira pode enviar depois em outro momento.\n\n"
+        "1️⃣ Registrar medidas\n"
+        "2️⃣ Enviar fotos pra análise\n"
+        "3️⃣ Pular por agora"
     )
 
 
@@ -2384,8 +2425,18 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
 
     # 🥗 NUTRIÇÃO
     if item == 5:  # Criar dieta personalizada
+        _falta = perfil_service.faltam_medidas_ou_fotos(user.id, db)
+        if _falta["medidas"] and _falta["fotos"]:
+            _aviso = "📝 _Aviso: você ainda não enviou medidas corporais nem fotos pra análise. É opcional, mas ajuda a calibrar melhor. Pode enviar a qualquer momento._\n\n"
+        elif _falta["medidas"]:
+            _aviso = "📝 _Aviso: você ainda não enviou medidas corporais. É opcional, mas ajuda a calibrar melhor. Pode enviar a qualquer momento._\n\n"
+        elif _falta["fotos"]:
+            _aviso = "📝 _Aviso: você ainda não enviou fotos pra análise de composição corporal. É opcional, mas ajuda a calibrar melhor. Pode enviar a qualquer momento._\n\n"
+        else:
+            _aviso = ""
         return (
-            f"Vamos criar sua dieta personalizada, {primeiro_nome}! 🥗\n\n"
+            _aviso
+            + f"Vamos criar sua dieta personalizada, {primeiro_nome}! 🥗\n\n"
             "Preciso de alguns dados:\n"
             "• *Idade*, *sexo* (H/M), *altura* (cm), *peso* (kg)\n"
             "• *Nível de atividade*: sedentário / leve (1-3x/sem) / moderado (3-5x/sem) / intenso (6-7x/sem)\n"

@@ -24,3 +24,11 @@ def calcular_idade(data_nasc) -> int | None:
     from datetime import date
     hoje = date.today()
     return hoje.year - data_nasc.year - ((hoje.month, hoje.day) < (data_nasc.month, data_nasc.day))
+
+
+def faltam_medidas_ou_fotos(user_id: int, db: Session) -> dict:
+    from app.models.medida_corporal import MedidaCorporal
+    from app.models.foto_composicao import FotoComposicao
+    medidas = db.query(MedidaCorporal).filter(MedidaCorporal.user_id == user_id).first() is None
+    fotos = db.query(FotoComposicao).filter(FotoComposicao.user_id == user_id).first() is None
+    return {"medidas": medidas, "fotos": fotos}
