@@ -15,6 +15,7 @@ class RegistroExercicio(Base):
     posicao_sessao: Mapped[int] = mapped_column(Integer, nullable=False)
     exercicio: Mapped[str] = mapped_column(String(200), nullable=False)        # normalizado (lowercase)
     exercicio_display: Mapped[str] = mapped_column(String(200), nullable=False) # original do usuário
+    treino_nome: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     series: Mapped[int] = mapped_column(Integer, nullable=False)
     repeticoes: Mapped[int] = mapped_column(Integer, nullable=False)
     carga_kg: Mapped[float] = mapped_column(Float, nullable=False)
