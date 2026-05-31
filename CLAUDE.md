@@ -544,6 +544,17 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - Ao SOLICITAR treino: lista simples "Exercício A - X aquecimentos e Y séries válidas com N repetições" + "Envie 'treinar [nome]' para iniciar".
 - Ao mandar "treinar [nome]": mostrar por exercício "No seu último treino você fez: aquecimento com X, séries válidas: 1ª série X peso N reps, 2ª série...". Depende das Partes 1 e 2.
 
+⭐ **FEEDBACK DO IGOR (31/05):** hoje, ao mandar `'treinar [nome do plano]'`, o bot só responde "Sessão iniciada" e fica esperando os registros. Isso **NÃO ATENDE** à expectativa. Ao iniciar a sessão, o bot deve:
+1. Identificar **QUAL DIA** do plano semanal é (Dia 1, Dia 2... do plano salvo).
+2. Mostrar o treino do dia no formato:
+   `'Exercício A - X aquecimentos e Y séries válidas com N repetições'`
+   `'Exercício B - X aquecimentos e Y séries válidas com N repetições'`
+   `'Envie [comando] para iniciar'`
+3. Após confirmação (`'treinar'` ou comando equivalente), por exercício mostrar:
+   `'No seu último treino você fez: aquecimento com X, séries válidas: 1ª X reps N peso, 2ª...'`
+
+Isso confirma que a Parte 3 depende essencialmente das Partes 1 (vínculo sessão→treino) + 2 (séries individuais + aquecimento + parsing do dia atual a partir do texto do plano). **Atacar essa apresentação como o foco principal da Parte 3.**
+
 **REQUER:** migração(ões) nova(s) — todas MANUAIS (autogenerate inviável, banco compartilhado). Mudança em `registrar_exercicio`, no contexto, na exibição, e no parsing do "treinar".
 
 **ORDEM SUGERIDA:** Parte 1 (mais isolada, destrava #2) → Parte 2 (estrutura de séries) → Parte 3 (apresentação, depende das duas). Fazer em sessão(ões) dedicada(s) com cabeça fresca.
