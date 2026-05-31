@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, JSON, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -16,6 +16,7 @@ class RegistroExercicio(Base):
     exercicio: Mapped[str] = mapped_column(String(200), nullable=False)        # normalizado (lowercase)
     exercicio_display: Mapped[str] = mapped_column(String(200), nullable=False) # original do usuário
     treino_nome: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    series_detalhe: Mapped[list | None] = mapped_column(JSON, nullable=True)
     series: Mapped[int] = mapped_column(Integer, nullable=False)
     repeticoes: Mapped[int] = mapped_column(Integer, nullable=False)
     carga_kg: Mapped[float] = mapped_column(Float, nullable=False)
