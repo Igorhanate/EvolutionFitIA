@@ -10,7 +10,6 @@ from app.models.meta_nutricional import MetaNutricional
 from app.models.registro_refeicao import RegistroRefeicao
 
 REMINDER_DAYS = 30
-LIMITE_FOTOS_DIA = 6
 
 
 # ---------------------------------------------------------------------------

@@ -58,8 +58,7 @@ CLASSIFICAÇÃO DE FOTOS RECEBIDAS — siga rigorosamente:
 
 ANÁLISE DE REFEIÇÕES POR FOTO:
 - Use 'analisar_refeicao' para registrar os macros estimados visualmente
-- Se o resultado indicar LIMITE_ATINGIDO, informe que o limite de 6 análises por dia foi atingido e não exiba tabela
-- Caso contrário, exiba SEMPRE no formato:
+- Exiba SEMPRE no formato:
 
 🍽️ *Análise Nutricional*
 ━━━━━━━━━━━━━━━━
@@ -1699,12 +1698,6 @@ def _process_tool_refeicao(
     today = date.today()
     count = nutricao_service.get_count_refeicoes_dia(user.id, today, db)
 
-    if count >= nutricao_service.LIMITE_FOTOS_DIA:
-        return (
-            f"LIMITE_ATINGIDO: usuário já registrou {nutricao_service.LIMITE_FOTOS_DIA} refeições hoje. "
-            "Informe que o limite diário de análises foi atingido."
-        )
-
     conversa.estado_pendente = {
         "tipo": "confirmar_refeicao",
         "analise": {
@@ -2459,8 +2452,7 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
     if item == 7:  # Analisar refeição por foto
         return (
             "Manda uma *foto da sua refeição* e eu analiso as calorias e macros! 📸🍽️\n\n"
-            "Funciona com: pratos, marmitas, lanches, bebidas, embalagens...\n\n"
-            "_Limite: 6 análises por dia._"
+            "Funciona com: pratos, marmitas, lanches, bebidas, embalagens..."
         )
 
     # 📏 MEDIDAS & CORPO
