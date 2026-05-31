@@ -477,6 +477,20 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 31/05/2026 — épico Parte 1 completo + refinos)
+
+### Implementado
+- **Épico Parte 1 passo 2 — Comando A ✅** — comando `'treinar [nome]'` inicia sessão na tabela `sessoes_treino`; se vier sem nome, bot pergunta. Registros de exercício durante sessão ativa herdam o `treino_nome`.
+- **B1.a ✅** — quando `'treinar'` sem nome E há treinos salvos, bot mostra lista numerada (até 10 mais recentes); aceita número OU nome livre.
+- **B1.b.1 ✅** — item 1 do menu agora pede o **NOME DO PLANO** antes de gravar `Treino` (fase `nomeando_treino`). Validação: não-vazio, ≤60 chars, comandos reservados cancelam.
+- **B1.b.2 ✅** — quando `'treinar'` sem nome E lista vazia, bot mostra menu de 3 opções (importar/criar do zero/cancelar). Opção 1 dispara item 2 do menu, opção 2 dispara item 1.
+- **Fix ✅** — textos ajustados de "treino" para "plano" (1 plano semanal = 1 `Treino` no banco). `SYSTEM_PROMPT` proíbe RPE/RPE alvo no output de treinos gerados pela IA.
+
+### Cancelado / Adiado
+- **B2 (registro retroativo / pergunta de vincular) CANCELADO** — versão proposta (mostrar lista de todos os treinos sempre que cair exercício sem sessão) seria confusa. O comportamento desejado pelo Igor depende de saber "esse exercício está nesse treino?", que só é possível com Parte 2 (estrutura nova). Adiado para Parte 3 (apresentação) com base na Parte 2.
+
+---
+
 ## HISTÓRICO DE MUDANÇAS (sessão de 30/05/2026 — cadastro de perfil obrigatório Etapas 1 e 1.5)
 
 ### Implementado
@@ -535,10 +549,13 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - Fluxo "treinar [nome]": ao iniciar, captura o nome do treino e marca a sessão. Os registros seguintes herdam esse nome até a sessão acabar/trocar.
 - `get_historico_recente` passa a permitir filtrar/agrupar por `treino_nome` → comparar "peito A" entre datas.
 
-**PARTE 2 — Séries individuais + aquecimento:**
-- `RegistroExercicio` hoje guarda `series/reps/carga` AGREGADOS. Criar estrutura para guardar cada SÉRIE individual com carga/reps próprias + flag `is_aquecimento` (bool).
-- Decisão pendente: tabela nova (`registros_series`) vinculada ao `RegistroExercicio`, OU coluna JSON `series_detalhe` no model existente. Avaliar na sessão dedicada.
-- Mudança no fluxo `registrar_exercicio` (hoje recebe `series/reps/carga`; passaria a receber séries individuais).
+**PARTE 2 — Séries individuais + aquecimento + estrutura de exercícios (BLOCO COESO — não fatiar):**
+- **Problema de representação atual:** plano semanal hoje é 1 `Treino` com texto livre. Para "peito A de hoje vs peito A da semana passada" funcionar, cada dia precisa ser separado — N `Treinos` individuais OU lista estruturada de treinos-do-dia dentro do plano (decisão a tomar na sessão dedicada).
+- **Lista estruturada de exercícios:** quando um plano é salvo, guardar `conteudo['exercicios_estruturados']` (JSON) — não só texto livre. Sem isso, detectar "esse exercício está nesse treino?" requer parse regex sobre texto gerado pelo Claude (~30% de falsos positivos).
+- **Detecção de exercício fora do plano:** ao registrar exercício em sessão ativa, comparar contra `exercicios_estruturados`. Se **não** estiver, perguntar: *"esse exercício não estava no treino — quer adicionar ao treino ou salvar só como pontual?"*. "Adicionar" → grava no treino E registra execução. "Pontual" → registra execução com `treino_nome` vinculado, sem mexer no treino.
+- **Séries individuais + aquecimento:** `RegistroExercicio` hoje guarda `series/reps/carga` AGREGADOS. Criar estrutura para guardar cada SÉRIE individual com carga/reps próprias + flag `is_aquecimento` (bool). Decisão pendente: tabela nova (`registros_series`) vinculada ao `RegistroExercicio`, OU coluna JSON `series_detalhe` no model existente.
+- **Tool `registrar_exercicio`** passa a aceitar séries individuais (não só agregado) — mudança no input_schema e no `_process_tool_registrar`.
+- **Parte 3 (apresentação) e B3 (confirmar troca de sessão)** entram na mesma sessão da Parte 2 OU logo depois — serão pequenos com a estrutura já pronta.
 
 **PARTE 3 — Fluxo de apresentação (formato WhatsApp):**
 - Ao SOLICITAR treino: lista simples "Exercício A - X aquecimentos e Y séries válidas com N repetições" + "Envie 'treinar [nome]' para iniciar".
@@ -557,7 +574,7 @@ Isso confirma que a Parte 3 depende essencialmente das Partes 1 (vínculo sessã
 
 **REQUER:** migração(ões) nova(s) — todas MANUAIS (autogenerate inviável, banco compartilhado). Mudança em `registrar_exercicio`, no contexto, na exibição, e no parsing do "treinar".
 
-**ORDEM SUGERIDA:** Parte 1 (mais isolada, destrava #2) → Parte 2 (estrutura de séries) → Parte 3 (apresentação, depende das duas). Fazer em sessão(ões) dedicada(s) com cabeça fresca.
+**ORDEM ATUALIZADA (31/05):** Parte 1 ✅ ENTREGUE. Próxima sessão = **PARTE 2 INTEIRA** (bloco coeso, não fatiar mais — estrutura nova destrava todo o resto). Sessão seguinte = **PARTE 3 + B3** (apresentação e refinos, pequenos com a estrutura pronta).
 
 ---
 
