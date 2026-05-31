@@ -2599,6 +2599,79 @@ async def process_message(
 
     _PALAVRAS_RESERVADAS = {"cancelar", "/menu", "menu", "#menu", "treinar"}
 
+    def _nome_display_treino(t: Treino) -> str:
+        cont = t.conteudo if isinstance(t.conteudo, dict) else {}
+        nome = (cont.get("nome") or "").strip()
+        return nome if nome else _titulo_treino(cont.get("texto") or "")
+
+    def _eh_comando_reservado(s_lower: str) -> bool:
+        return (
+            s_lower in {"/menu", "menu", "#menu"}
+            or s_lower.startswith("treinar")
+            or s_lower.startswith("/")
+        )
+
+    # Handler: usuário está escolhendo treino da lista numerada
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "escolhendo_treino":
+        estado = conversa.estado_pendente
+        ids = estado.get("ids", [])
+        labels = estado.get("labels", [])
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+
+        if stripped_lower == "cancelar":
+            conversa.estado_pendente = None
+            reply = "Beleza, cancelei. Quando quiser começar, manda 'treinar [nome]'."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif stripped.isdigit():
+            idx = int(stripped) - 1
+            if 0 <= idx < len(ids):
+                nome_treino = labels[idx]
+                sessao_treino_service.iniciar_sessao(user.id, nome_treino, db)
+                conversa.estado_pendente = None
+                reply = (
+                    f"Sessão iniciada: *{nome_treino}* 💪\n"
+                    "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
+                )
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+            else:
+                reply = f"Número inválido. Responda *1* a *{len(ids)}* ou o nome do treino (ou *cancelar*)."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+        elif stripped and not _eh_comando_reservado(stripped_lower):
+            # Nome livre — aceita qualquer texto que não seja comando
+            sessao_treino_service.iniciar_sessao(user.id, stripped, db)
+            conversa.estado_pendente = None
+            reply = (
+                f"Sessão iniciada: *{stripped}* 💪\n"
+                "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
+            )
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        else:
+            # Comando reservado — limpa estado e deixa os guards seguintes processarem
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+
+    # Handler: usuário está digitando nome livre (sem lista)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_nome_treino":
         if stripped_lower == "cancelar":
             conversa.estado_pendente = None
@@ -2610,11 +2683,7 @@ async def process_message(
             db.add(conversa)
             db.commit()
             return reply
-        elif (
-            stripped_lower in {"/menu", "menu", "#menu"}
-            or stripped_lower.startswith("treinar")
-            or stripped_lower.startswith("/")
-        ):
+        elif _eh_comando_reservado(stripped_lower):
             # É um novo comando — limpa estado e deixa os guards seguintes processarem
             conversa.estado_pendente = None
             db.add(conversa)
@@ -2647,8 +2716,23 @@ async def process_message(
                 "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
             )
         else:
-            conversa.estado_pendente = {"tipo": "aguardando_nome_treino"}
-            reply = "Qual treino você vai fazer? Manda o nome (ex: peito A, perna, full body)."
+            treinos_lista = treino_service.listar_treinos(user.id, db)[:10]
+            if treinos_lista:
+                labels = [_nome_display_treino(t) for t in treinos_lista]
+                linhas = ["Qual treino você vai fazer?\n"]
+                for i, lb in enumerate(labels, 1):
+                    linhas.append(f"*{i}.* {lb}")
+                linhas.append("\nResponda com o *número* ou o *nome* (ou *cancelar*).")
+                reply = "\n".join(linhas)
+                conversa.estado_pendente = {
+                    "tipo": "escolhendo_treino",
+                    "ids": [t.id for t in treinos_lista],
+                    "labels": labels,
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
+            else:
+                conversa.estado_pendente = {"tipo": "aguardando_nome_treino"}
+                reply = "Qual treino você vai fazer? Manda o nome (ex: peito A, perna, full body)."
         mensagens_tmp = list(conversa.mensagens or [])
         mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
         mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
