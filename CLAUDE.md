@@ -491,6 +491,23 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 ---
 
+## HISTÓRICO DE MUDANÇAS (sessão de 31/05/2026 — continuação tarde: Parte 2 Etapas 1 e 2)
+
+### Implementado
+- **Etapa 1 da Parte 2 ✅** — migration 014: coluna `series_detalhe` JSON nullable em `registros_exercicio`. Testada upgrade/downgrade/upgrade local antes do push. Em produção, deploy aplicou migration sem erro.
+- **Etapa 2 da Parte 2 ✅** — tool `salvar_treino_estruturado` + função async `extrair_estrutura_treino` (2 tentativas, degradação graciosa) + integração em `_gerar_treino_de_dados` (item 1 do menu). Ao salvar o plano, `Treino.conteudo["dias"]` passa a conter a lista estruturada de dias/exercícios extraída por 2ª chamada Claude.
+- **Fix Etapa 2 ✅** — primeira versão (`max_tokens=2000`) falhava em planos grandes (Claude retornava só `nome_plano` sem `dias`). Corrigido com: `max_tokens=4000`, prompt reforçado com 5 regras numeradas, retry agressivo na 2ª tentativa (instrução de "sua resposta anterior estava INCOMPLETA"), log expandido com `stop_reason` e `usage`.
+- **Validação em produção ✅** — plano novo (id=140, "salve como teste 2.0") criado após o fix retornou estrutura COMPLETA: 6 dias, todos com `numero`/`nome`/`foco`/`exercicios` populados, cada exercício com `series_validas`/`aquecimento`/`reps`/`descanso_seg`.
+
+### Estado da Parte 2 (final de 31/05)
+- ✅ Etapa 1: migration 014 (`series_detalhe` em `registros_exercicio`)
+- ✅ Etapa 2: extração estruturada no item 1 (criar treino do zero)
+- 🟡 Etapa 3 PENDENTE: cadastrar treino do personal (item 2) com extração estruturada — chamar `extrair_estrutura_treino` após salvar na tool `cadastrar_treino_proprio`
+- 🟡 Etapa 4 PENDENTE: refatorar tool `registrar_exercicio` pra aceitar `series_detalhe` (lista de séries individuais com `is_aquecimento`)
+- 🟡 Etapa 5 PENDENTE: detecção de exercício fora do plano (comparar contra `Treino.conteudo["dias"]` na sessão ativa, perguntar "adicionar ao treino ou pontual?")
+
+---
+
 ## HISTÓRICO DE MUDANÇAS (sessão de 30/05/2026 — cadastro de perfil obrigatório Etapas 1 e 1.5)
 
 ### Implementado
@@ -574,7 +591,7 @@ Isso confirma que a Parte 3 depende essencialmente das Partes 1 (vínculo sessã
 
 **REQUER:** migração(ões) nova(s) — todas MANUAIS (autogenerate inviável, banco compartilhado). Mudança em `registrar_exercicio`, no contexto, na exibição, e no parsing do "treinar".
 
-**ORDEM ATUALIZADA (31/05):** Parte 1 ✅ ENTREGUE. Próxima sessão = **PARTE 2 INTEIRA** (bloco coeso, não fatiar mais — estrutura nova destrava todo o resto). Sessão seguinte = **PARTE 3 + B3** (apresentação e refinos, pequenos com a estrutura pronta).
+**ORDEM ATUALIZADA (31/05 tarde):** Parte 1 ✅ ENTREGUE. Parte 2 Etapas 1 e 2 ✅ ENTREGUES. Próximas etapas = **Etapas 3, 4 e 5 da Parte 2** (item 2 do menu, séries individuais, detecção fora do plano). Depois = **PARTE 3 + B3** (apresentação e refinos, pequenos com a estrutura pronta).
 
 ---
 
@@ -819,23 +836,27 @@ Isso confirma que a Parte 3 depende essencialmente das Partes 1 (vínculo sessã
 
 ## PRÓXIMA SESSÃO (retomada após /clear)
 
-**Foco:** PARTE 2 do épico de estrutura de treino — bloco coeso.
+**Foco:** Parte 2 Etapas 3, 4 e 5 do épico de estrutura de treino.
 
-**Antes de qualquer código, 3 decisões pendentes a tomar:**
-1. Plano semanal: continuar como 1 Treino com "treinos-do-dia" estruturados dentro do JSON OU dividir em N Treinos (um por dia)? Avaliar trade-offs.
-2. Séries individuais: coluna JSON `series_detalhe` no RegistroExercicio existente OU tabela nova `registros_series`? (Igor já preferiu JSON na sessão de 31/05 — confirmar.)
-3. Como extrair `exercicios_estruturados` quando o usuário cria treino: pedir ao Claude na geração (item 1) e na tool `cadastrar_treino_proprio` (item 2)? Ou parse separado?
+**Decisões já tomadas (não reperguntar):**
+1. ✅ Plano semanal: 1 `Treino` com `conteudo["dias"]` estruturado (JSON) — implementado na Etapa 2.
+2. ✅ Séries individuais: coluna JSON `series_detalhe` no `RegistroExercicio` existente — migration 014 aplicada.
+3. ✅ Extração estruturada: `extrair_estrutura_treino` (2ª chamada Claude com tool) — item 1 do menu funcionando.
+
+**Etapas pendentes da Parte 2:**
+- 🟡 **Etapa 3:** cadastrar treino do personal (item 2 do menu / tool `cadastrar_treino_proprio`) — chamar `extrair_estrutura_treino` após salvar o texto, gravar `dias` no `conteudo`.
+- 🟡 **Etapa 4:** refatorar tool `registrar_exercicio` + `_process_tool_registrar` para aceitar lista de séries individuais `[{carga, reps, is_aquecimento}]` e gravar em `series_detalhe`.
+- 🟡 **Etapa 5:** detecção de exercício fora do plano — ao registrar, comparar contra `Treino.conteudo["dias"]` da sessão ativa; se ausente, perguntar "adicionar ao treino ou pontual?".
 
 **Reconhecimento obrigatório no início:**
 - `git status` + `git log --oneline -8`
-- `alembic current` (deve estar em 013)
-- Conteúdo de `app/models/registro_exercicio.py`, `app/models/treino.py`, `exercicio_service.registrar`, `_process_tool_registrar`, tool `registrar_exercicio`, `_gerar_treino_de_dados`, `treino_service.cadastrar_treino_proprio`
-- Resumir escopo Parte 2 conforme CLAUDE.md antes de codar
+- `alembic current` (deve estar em 014)
+- Conteúdo de `app/models/registro_exercicio.py` (confirmar `series_detalhe`), `_process_tool_registrar`, tool `registrar_exercicio`, `treino_service.cadastrar_treino_proprio`, `extrair_estrutura_treino`
 
 **Cuidados:**
-- Migração nova (014) — MANUAL no padrão das anteriores. Banco compartilhado, autogenerate inviável.
-- Render free SEM backup automático — testar upgrade/downgrade/upgrade local antes do push.
+- Render free SEM backup automático — testar upgrade/downgrade/upgrade local se houver nova migration.
 - Auto-migrate roda no Dockerfile: commit + push = migration aplicada em produção automaticamente.
+- Banco compartilhado com Evolution API — autogenerate inviável, migrations sempre MANUAIS.
 
-**Status do produto:** 5 entregas em produção no dia 31/05, tudo testado e funcionando.
+**Status do produto:** migration 014 em produção, extração estruturada funcionando (validada com plano id=140).
 
