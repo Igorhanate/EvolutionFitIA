@@ -2182,6 +2182,32 @@ async def _handle_coleta_treino(
     fase = estado.get("fase", "coletando")
     dados = dict(estado.get("dados", {}))
 
+    # --- Fase de nomeação do treino (fase final — grava com nome) ---
+    if fase == "nomeando_treino":
+        nome = message_text.strip()
+        if not nome:
+            return "Por favor, me manda o nome do treino (ex: Peito A)."
+        if len(nome) > 60:
+            return "Nome muito longo (máx 60 caracteres). Tenta de novo."
+        if nome.lower() in {"cancelar", "/menu", "menu", "#menu"} or nome.lower().startswith("/"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Cancelei a criação do treino. Os dados não foram salvos."
+        texto_gerado = estado.get("texto_gerado", "")
+        db.add(Treino(
+            user_id=user.id,
+            conteudo={
+                "texto": texto_gerado,
+                "nome": nome,
+                "gerado_em": datetime.utcnow().isoformat(),
+            },
+        ))
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return f"Treino *{nome}* salvo com sucesso! 💪\n\nQuando quiser começar, manda 'treinar {nome}'."
+
     # --- Fase de confirmação do perfil (2º treino em diante) ---
     if fase == "confirmando_perfil":
         perfil_resumo: dict = estado.get("perfil_resumo", {})
@@ -2381,13 +2407,17 @@ async def _gerar_treino_de_dados(
     if tempo_p:   perfil.tempo_sessao_padrao   = tempo_p
     db.flush()
 
-    # Persiste o treino gerado
-    db.add(Treino(user_id=user.id, conteudo={"texto": reply, "gerado_em": datetime.utcnow().isoformat()}))
+    # Pede nome antes de gravar — fase "nomeando_treino" persiste o texto e aguarda resposta
+    conversa.estado_pendente = {
+        "tipo": "criando_treino",
+        "fase": "nomeando_treino",
+        "texto_gerado": reply,
+        "criado_em": datetime.utcnow().isoformat(),
+    }
+    db.add(conversa)
+    db.commit()
 
-    # Limpa estado
-    conversa.estado_pendente = None
-
-    return reply
+    return reply + "\n\n---\n\nQue nome você quer dar pra esse treino? (ex: Peito A, Treino de pernas, Push)"
 
 
 # ---------------------------------------------------------------------------
