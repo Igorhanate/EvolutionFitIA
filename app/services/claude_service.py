@@ -1815,14 +1815,21 @@ def _process_tool_cadastrar_dieta(tool_input: dict, user: Usuario, db: Session) 
     )
 
 
-def _process_tool_cadastrar_treino(tool_input: dict, user: Usuario, db: Session) -> str:
-    treino_service.cadastrar_treino_proprio(
+async def _process_tool_cadastrar_treino(tool_input: dict, user: Usuario, db: Session) -> str:
+    texto_original = tool_input["texto_original"]
+    treino = treino_service.cadastrar_treino_proprio(
         user_id=user.id,
         nome=tool_input["nome_treino"],
-        texto=tool_input["texto_original"],
+        texto=texto_original,
         db=db,
         exercicios=tool_input.get("exercicios_extraidos", ""),
     )
+    estrutura = await extrair_estrutura_treino(texto_original, client)
+    if estrutura and isinstance(estrutura.get("dias"), list) and len(estrutura["dias"]) > 0:
+        novo_conteudo = dict(treino.conteudo)
+        novo_conteudo["dias"] = estrutura["dias"]
+        treino.conteudo = novo_conteudo
+        db.flush()
     return (
         f"TREINO_CADASTRADO: '{tool_input['nome_treino']}' registrado com sucesso. "
         "Confirme e informe que pode reportar cargas normalmente para acompanhar evolução e 1RM."
@@ -3128,7 +3135,7 @@ async def process_message(
                 elif block.name == "cadastrar_dieta_propria":
                     result = _process_tool_cadastrar_dieta(block.input, user, db)
                 elif block.name == "cadastrar_treino_proprio":
-                    result = _process_tool_cadastrar_treino(block.input, user, db)
+                    result = await _process_tool_cadastrar_treino(block.input, user, db)
                 elif block.name == "iniciar_coleta_fotos_corpo":
                     if image_b64:
                         primeiro_nome = _process_tool_iniciar_coleta(
