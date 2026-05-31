@@ -2701,6 +2701,53 @@ async def process_message(
             db.add(conversa)
             db.flush()
 
+    # Handler: usuário escolhe entre importar, criar do zero ou cancelar (lista vazia)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "lista_vazia_treino":
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+
+        if stripped == "3" or stripped_lower == "cancelar":
+            conversa.estado_pendente = None
+            reply = "Beleza, cancelei. Quando quiser, manda /menu pra ver as opções."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif stripped == "1":
+            # Importar treino próprio → equivalente ao item 2 do menu
+            conversa.estado_pendente = None
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            reply = await _handle_menu_item(2, user, phone, db, conversa)
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif stripped == "2":
+            # Criar do zero → equivalente ao item 1 do menu
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            reply = _iniciar_coleta_treino(user, conversa, db)
+            # _iniciar_coleta_treino já define estado_pendente=criando_treino e faz commit
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif _eh_comando_reservado(stripped_lower):
+            # Comando reservado — limpa estado e deixa próximos guards processarem
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            reply = "Responda *1* (importar), *2* (criar do zero) ou *3* (cancelar)."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
     # Handler: usuário está digitando nome livre (sem lista)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_nome_treino":
         if stripped_lower == "cancelar":
@@ -2761,8 +2808,17 @@ async def process_message(
                     "criado_em": datetime.utcnow().isoformat(),
                 }
             else:
-                conversa.estado_pendente = {"tipo": "aguardando_nome_treino"}
-                reply = "Qual treino você vai fazer? Manda o nome (ex: peito A, perna, full body)."
+                # Lista vazia → menu de 3 opções
+                conversa.estado_pendente = {
+                    "tipo": "lista_vazia_treino",
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
+                reply = (
+                    "Você ainda não tem treinos salvos. Vamos criar um?\n\n"
+                    "1️⃣ Importar treino que já tenho (do meu personal/PDF/papel)\n"
+                    "2️⃣ Criar treino do zero (eu te oriento e monto)\n"
+                    "3️⃣ Cancelar"
+                )
         mensagens_tmp = list(conversa.mensagens or [])
         mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
         mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
