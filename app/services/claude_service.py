@@ -2195,14 +2195,15 @@ async def _handle_coleta_treino(
             db.commit()
             return "Cancelei a criação do treino. Os dados não foram salvos."
         texto_gerado = estado.get("texto_gerado", "")
-        db.add(Treino(
-            user_id=user.id,
-            conteudo={
-                "texto": texto_gerado,
-                "nome": nome,
-                "gerado_em": datetime.utcnow().isoformat(),
-            },
-        ))
+        conteudo_treino = {
+            "texto": texto_gerado,
+            "nome": nome,
+            "gerado_em": datetime.utcnow().isoformat(),
+        }
+        estrutura = estado.get("estrutura")
+        if isinstance(estrutura, dict) and isinstance(estrutura.get("dias"), list):
+            conteudo_treino["dias"] = estrutura["dias"]
+        db.add(Treino(user_id=user.id, conteudo=conteudo_treino))
         conversa.estado_pendente = None
         db.add(conversa)
         db.commit()
@@ -2270,6 +2271,83 @@ async def _handle_coleta_treino(
     }
     _, pergunta = ETAPAS_TREINO[etapa_idx]
     return pergunta
+
+
+_TOOL_EXTRACAO_TREINO = {
+    "name": "salvar_treino_estruturado",
+    "description": "Extrai a estrutura do plano de treino em formato JSON (dias e exercícios) a partir do texto livre.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "nome_plano": {"type": "string", "description": "Nome curto do plano (ex: 'Plano Hipertrofia')"},
+            "dias": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "numero": {"type": "integer", "description": "Número do dia (1, 2, 3...)"},
+                        "nome": {"type": "string", "description": "Nome do dia (ex: 'Peito A', 'Push', 'Pernas')"},
+                        "foco": {"type": "string", "description": "Grupos musculares trabalhados (opcional)"},
+                        "exercicios": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "nome": {"type": "string", "description": "Nome do exercício"},
+                                    "series_validas": {"type": "integer", "description": "Séries de trabalho (sem contar aquecimento)"},
+                                    "aquecimento": {"type": "integer", "description": "Séries de aquecimento (0 se não houver)"},
+                                    "reps": {"type": "string", "description": "Faixa de repetições (ex: '8-10', '12', 'até falha')"},
+                                    "descanso_seg": {"type": "integer", "description": "Tempo de descanso em segundos"},
+                                    "observacoes": {"type": "string", "description": "Observação opcional sobre o exercício"},
+                                },
+                                "required": ["nome", "series_validas", "aquecimento", "reps", "descanso_seg"],
+                            },
+                        },
+                    },
+                    "required": ["numero", "nome", "exercicios"],
+                },
+            },
+        },
+        "required": ["nome_plano", "dias"],
+    },
+}
+
+
+async def extrair_estrutura_treino(texto_plano: str, anthropic_client) -> dict | None:
+    """Faz 2ª chamada Claude com tool salvar_treino_estruturado pra extrair dias/exercícios do texto livre.
+    Retorna dict com {nome_plano, dias: [...]} se sucesso, ou None após 2 tentativas (degradação graciosa).
+    """
+    prompt = (
+        "Você recebeu um plano de treino em texto livre abaixo. Sua tarefa é EXTRAIR a estrutura em JSON "
+        "usando a tool salvar_treino_estruturado. NÃO invente exercícios ou números que não estejam no texto. "
+        "Se algum campo estiver ausente, omita-o (se for opcional) ou use valor 0 (aquecimento) / 60 (descanso padrão). "
+        "USE A TOOL OBRIGATORIAMENTE.\n\n"
+        f"PLANO:\n{texto_plano}"
+    )
+
+    for tentativa in range(2):
+        try:
+            resp = await anthropic_client.messages.create(
+                model=settings.CLAUDE_MODEL,
+                max_tokens=2000,
+                tools=[_TOOL_EXTRACAO_TREINO],
+                tool_choice={"type": "tool", "name": "salvar_treino_estruturado"},
+                messages=[{"role": "user", "content": prompt}],
+            )
+            for block in resp.content:
+                if hasattr(block, "name") and block.name == "salvar_treino_estruturado":
+                    dados = block.input
+                    if isinstance(dados, dict) and isinstance(dados.get("dias"), list) and len(dados["dias"]) > 0:
+                        return dados
+                    logger.warning("extrair_estrutura_treino_validacao_falhou", extra={"tentativa": tentativa + 1, "dados": str(dados)[:200]})
+                    break
+            else:
+                logger.warning("extrair_estrutura_treino_tool_nao_usada", extra={"tentativa": tentativa + 1})
+        except Exception as e:
+            logger.warning("extrair_estrutura_treino_erro", extra={"tentativa": tentativa + 1, "error": str(e)})
+
+    logger.error("extrair_estrutura_treino_falhou_todas_tentativas")
+    return None
 
 
 async def _gerar_treino_de_dados(
@@ -2407,11 +2485,15 @@ async def _gerar_treino_de_dados(
     if tempo_p:   perfil.tempo_sessao_padrao   = tempo_p
     db.flush()
 
-    # Pede nome antes de gravar — fase "nomeando_treino" persiste o texto e aguarda resposta
+    # Extrai estrutura JSON (dias/exercícios) do texto gerado — degradação graciosa se falhar
+    estrutura = await extrair_estrutura_treino(reply, client)
+
+    # Pede nome antes de gravar — fase "nomeando_treino" persiste texto e estrutura, aguarda resposta
     conversa.estado_pendente = {
         "tipo": "criando_treino",
         "fase": "nomeando_treino",
         "texto_gerado": reply,
+        "estrutura": estrutura,
         "criado_em": datetime.utcnow().isoformat(),
     }
     db.add(conversa)
