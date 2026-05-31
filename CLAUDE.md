@@ -815,3 +815,27 @@ Isso confirma que a Parte 3 depende essencialmente das Partes 1 (vínculo sessã
 
 **TBCA:** NÃO usar por ora — tem restrição de uso comercial (exige autorização formal dos coordenadores da USP/UNICAMP). Avaliar somente com autorização em mãos.
 
+---
+
+## PRÓXIMA SESSÃO (retomada após /clear)
+
+**Foco:** PARTE 2 do épico de estrutura de treino — bloco coeso.
+
+**Antes de qualquer código, 3 decisões pendentes a tomar:**
+1. Plano semanal: continuar como 1 Treino com "treinos-do-dia" estruturados dentro do JSON OU dividir em N Treinos (um por dia)? Avaliar trade-offs.
+2. Séries individuais: coluna JSON `series_detalhe` no RegistroExercicio existente OU tabela nova `registros_series`? (Igor já preferiu JSON na sessão de 31/05 — confirmar.)
+3. Como extrair `exercicios_estruturados` quando o usuário cria treino: pedir ao Claude na geração (item 1) e na tool `cadastrar_treino_proprio` (item 2)? Ou parse separado?
+
+**Reconhecimento obrigatório no início:**
+- `git status` + `git log --oneline -8`
+- `alembic current` (deve estar em 013)
+- Conteúdo de `app/models/registro_exercicio.py`, `app/models/treino.py`, `exercicio_service.registrar`, `_process_tool_registrar`, tool `registrar_exercicio`, `_gerar_treino_de_dados`, `treino_service.cadastrar_treino_proprio`
+- Resumir escopo Parte 2 conforme CLAUDE.md antes de codar
+
+**Cuidados:**
+- Migração nova (014) — MANUAL no padrão das anteriores. Banco compartilhado, autogenerate inviável.
+- Render free SEM backup automático — testar upgrade/downgrade/upgrade local antes do push.
+- Auto-migrate roda no Dockerfile: commit + push = migration aplicada em produção automaticamente.
+
+**Status do produto:** 5 entregas em produção no dia 31/05, tudo testado e funcionando.
+
