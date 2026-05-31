@@ -32,7 +32,7 @@ REGRAS GERAIS:
 - Sempre chame o usuário pelo primeiro nome quando souber
 - Antes de gerar um treino, pergunte NESTA ORDEM, uma de cada vez: (1) qual TIPO de treino (musculação/academia, calistenia, yoga, pilates, corrida/endurance, híbrido, funcional, CrossFit, mobilidade ou outro); (2) ONDE vai treinar (academia, casa, ao ar livre); (3) objetivo principal; (4) quantos dias por semana; (5) quanto tempo por sessão; (6) há quanto tempo treina (nível); (7) lesões ou limitações; (8) em qual horário costuma treinar — se for academia em horário de pico (6h–9h ou 17h–20h), evite exercícios que dependem de polias duplas, cross e aparelhos muito disputados, priorizando halteres, barras e máquinas menos concorridas; (9) "Você sente dor ou desconforto ao fazer algum exercício específico?" — se o cliente citar algum, NÃO inclua esse exercício no treino; se o cliente pedir para incluir um exercício que ele mesmo citou como problemático, confirme: "Você mencionou desconforto nesse exercício — tem certeza que quer incluí-lo?". Essa pergunta é feita a cada nova criação de treino, independente de conversas anteriores. IMPORTANTE: a pergunta (9) pertence EXCLUSIVAMENTE ao fluxo de CRIAÇÃO de treino — NÃO deve ser feita ao iniciar sessões de registro de cargas (opção 3 do menu). Nem todo treino é em academia — adapte exercícios e equipamentos ao tipo e local informados.
 - Antes de gerar uma dieta, faça as perguntas essenciais do PROTOCOLO DE CRIAÇÃO DE DIETA mais abaixo.
-- Treinos: estruture por Dia 1 / Dia 2 etc., inclua séries/repetições e tempos de descanso
+- Treinos: estruture por Dia 1 / Dia 2 etc., inclua séries/repetições e tempos de descanso. NÃO inclua RPE, "RPE alvo" ou qualquer referência numérica a RPE nos treinos gerados — use apenas séries, repetições e tempo de descanso.
 - Mensagens curtas para WhatsApp: parágrafos curtos, bullet points, sem paredes de texto
 - SEMPRE que apresentar uma lista de opções para o usuário escolher (tipos de treino, objetivos, níveis, etc.), numere cada opção (1, 2, 3...) e mantenha um emoji ilustrativo quando fizer sentido. Exemplo de formato: '1️⃣ 🏋️ Musculação', '2️⃣ 🤸 Calistenia'. Instrua o usuário a responder com o número da opção desejada. Quando o usuário responder apenas com um número, interprete-o como a escolha correspondente à última lista numerada que você apresentou, considerando o contexto da conversa. Se houver qualquer ambiguidade real sobre a qual lista o número se refere, pergunte de forma breve antes de prosseguir.
 - Nunca saia do personagem. Fale apenas sobre fitness e nutrição.
@@ -2186,7 +2186,7 @@ async def _handle_coleta_treino(
     if fase == "nomeando_treino":
         nome = message_text.strip()
         if not nome:
-            return "Por favor, me manda o nome do treino (ex: Peito A)."
+            return "Por favor, me manda o nome do plano (ex: Plano Hipertrofia)."
         if len(nome) > 60:
             return "Nome muito longo (máx 60 caracteres). Tenta de novo."
         if nome.lower() in {"cancelar", "/menu", "menu", "#menu"} or nome.lower().startswith("/"):
@@ -2206,7 +2206,7 @@ async def _handle_coleta_treino(
         conversa.estado_pendente = None
         db.add(conversa)
         db.commit()
-        return f"Treino *{nome}* salvo com sucesso! 💪\n\nQuando quiser começar, manda 'treinar {nome}'."
+        return f"Plano *{nome}* salvo! 💪\n\nQuando for treinar, manda 'treinar {nome}'."
 
     # --- Fase de confirmação do perfil (2º treino em diante) ---
     if fase == "confirmando_perfil":
@@ -2417,7 +2417,7 @@ async def _gerar_treino_de_dados(
     db.add(conversa)
     db.commit()
 
-    return reply + "\n\n---\n\nQue nome você quer dar pra esse treino? (ex: Peito A, Treino de pernas, Push)"
+    return reply + "\n\n---\n\nComo quer chamar esse *plano*? (ex: Plano Hipertrofia, Treino Verão, ABC)"
 
 
 # ---------------------------------------------------------------------------
