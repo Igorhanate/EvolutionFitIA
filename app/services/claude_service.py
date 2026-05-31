@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import date, datetime
 
 import anthropic
@@ -10,7 +11,7 @@ from app.models.dieta import Dieta
 from app.models.meta_nutricional import MetaNutricional
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service, habito_service, nutricao_service, perfil_service, treino_service, usda_service
+from app.services import exercicio_service, habito_service, nutricao_service, perfil_service, sessao_treino_service, treino_service, usda_service
 
 logger = logging.getLogger(__name__)
 
@@ -1510,6 +1511,9 @@ def _process_tool_registrar(
             f"na posição {posicao} da sessão. Informe o usuário e aguarde confirmação."
         )
 
+    sessao = sessao_treino_service.get_sessao_ativa(user.id, db)
+    treino_nome = sessao.treino_nome if sessao else None
+
     registro = exercicio_service.registrar(
         user_id=user.id,
         sessao_data=sessao_data,
@@ -1519,13 +1523,18 @@ def _process_tool_registrar(
         repeticoes=reps,
         carga_kg=carga,
         db=db,
+        treino_nome=treino_nome,
     )
 
     primeiro_vez_str = " Primeiro registro deste exercício nesta posição — referência criada." if not historico else ""
+    sem_sessao_str = (
+        " ⚠️ Você ainda não iniciou um treino — manda 'treinar [nome do treino]' antes pra eu agrupar os registros."
+        if sessao is None else ""
+    )
 
     return (
         f"REGISTRADO: '{exercicio_display}' — posição {posicao} na sessão, "
-        f"{series}x{reps} @ {carga}kg.{primeiro_vez_str}"
+        f"{series}x{reps} @ {carga}kg.{primeiro_vez_str}{sem_sessao_str}"
     )
 
 
@@ -2584,8 +2593,71 @@ async def process_message(
     if not perfil_service.perfil_minimo_completo(_perfil):
         return _iniciar_cadastro_perfil(user, conversa, db)
 
-    # 0. /menu command and menu item selection (intercept before everything else)
+    # 0.8. Guard: comando "treinar [nome]" — inicia sessão de treino
     stripped = message_text.strip()
+    stripped_lower = stripped.lower()
+
+    _PALAVRAS_RESERVADAS = {"cancelar", "/menu", "menu", "#menu", "treinar"}
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_nome_treino":
+        if stripped_lower == "cancelar":
+            conversa.estado_pendente = None
+            reply = "Beleza, cancelei. Quando quiser começar, manda 'treinar [nome]'."
+            mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif (
+            stripped_lower in {"/menu", "menu", "#menu"}
+            or stripped_lower.startswith("treinar")
+            or stripped_lower.startswith("/")
+        ):
+            # É um novo comando — limpa estado e deixa os guards seguintes processarem
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        elif stripped:
+            nome_treino = stripped
+            sessao_treino_service.iniciar_sessao(user.id, nome_treino, db)
+            conversa.estado_pendente = None
+            reply = (
+                f"Sessão iniciada: *{nome_treino}* 💪\n"
+                "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
+            )
+            mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        # stripped vazio → permanece aguardando; nenhuma ação
+
+    _m = re.match(r'^treinar(?:\s+(.+))?$', stripped_lower)
+    if _m:
+        nome_capturado = _m.group(1)
+        if nome_capturado:
+            nome_treino = stripped[len("treinar"):].strip()
+            sessao_treino_service.iniciar_sessao(user.id, nome_treino, db)
+            reply = (
+                f"Sessão iniciada: *{nome_treino}* 💪\n"
+                "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
+            )
+        else:
+            conversa.estado_pendente = {"tipo": "aguardando_nome_treino"}
+            reply = "Qual treino você vai fazer? Manda o nome (ex: peito A, perna, full body)."
+        mensagens_tmp = list(conversa.mensagens or [])
+        mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+        mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens_tmp
+        db.add(conversa)
+        db.commit()
+        return reply
+
+    # 0. /menu command and menu item selection (intercept before everything else)
     if stripped.lower() in ("/menu", "#menu"):
         conversa.estado_pendente = {"tipo": "aguardando_menu"}
         db.add(conversa)

@@ -129,6 +129,7 @@ def registrar(
     repeticoes: int,
     carga_kg: float,
     db: Session,
+    treino_nome: str | None = None,
 ) -> RegistroExercicio:
     exercicio_norm = normalizar_nome(exercicio_display)
     rm_result = calcular_rm(carga_kg, repeticoes)
@@ -140,6 +141,7 @@ def registrar(
         posicao_sessao=posicao,
         exercicio=exercicio_norm,
         exercicio_display=exercicio_display,
+        treino_nome=treino_nome,
         series=series,
         repeticoes=repeticoes,
         carga_kg=carga_kg,
