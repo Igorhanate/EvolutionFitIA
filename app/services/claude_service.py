@@ -2318,28 +2318,46 @@ async def extrair_estrutura_treino(texto_plano: str, anthropic_client) -> dict |
     Retorna dict com {nome_plano, dias: [...]} se sucesso, ou None após 2 tentativas (degradação graciosa).
     """
     prompt = (
-        "Você recebeu um plano de treino em texto livre abaixo. Sua tarefa é EXTRAIR a estrutura em JSON "
-        "usando a tool salvar_treino_estruturado. NÃO invente exercícios ou números que não estejam no texto. "
-        "Se algum campo estiver ausente, omita-o (se for opcional) ou use valor 0 (aquecimento) / 60 (descanso padrão). "
-        "USE A TOOL OBRIGATORIAMENTE.\n\n"
+        "Você recebeu um plano de treino em texto livre abaixo. Sua tarefa é EXTRAIR a estrutura "
+        "em JSON usando a tool salvar_treino_estruturado.\n\n"
+        "REGRAS OBRIGATÓRIAS:\n"
+        "1. SEMPRE retorne o array 'dias' PREENCHIDO com TODOS os dias do plano (1 entrada por dia de treino).\n"
+        "2. NÃO retorne apenas 'nome_plano' — o campo 'dias' é OBRIGATÓRIO e não pode ser vazio.\n"
+        "3. NÃO invente exercícios ou números que não estejam no texto.\n"
+        "4. Se algum campo opcional estiver ausente no texto, omita-o. Para 'aquecimento', use 0 se não houver. Para 'descanso_seg', use 60 como padrão.\n"
+        "5. Se o texto tem N dias diferentes, retorne N entradas em 'dias'.\n\n"
         f"PLANO:\n{texto_plano}"
     )
 
     for tentativa in range(2):
         try:
+            prompt_atual = prompt
+            if tentativa > 0:
+                prompt_atual = prompt + (
+                    "\n\nATENÇÃO: sua resposta anterior estava INCOMPLETA (faltou o array 'dias'). "
+                    "Retorne a estrutura COMPLETA agora, com TODOS os dias preenchidos."
+                )
             resp = await anthropic_client.messages.create(
                 model=settings.CLAUDE_MODEL,
-                max_tokens=2000,
+                max_tokens=4000,
                 tools=[_TOOL_EXTRACAO_TREINO],
                 tool_choice={"type": "tool", "name": "salvar_treino_estruturado"},
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": prompt_atual}],
             )
             for block in resp.content:
                 if hasattr(block, "name") and block.name == "salvar_treino_estruturado":
                     dados = block.input
                     if isinstance(dados, dict) and isinstance(dados.get("dias"), list) and len(dados["dias"]) > 0:
                         return dados
-                    logger.warning("extrair_estrutura_treino_validacao_falhou", extra={"tentativa": tentativa + 1, "dados": str(dados)[:200]})
+                    logger.warning(
+                        "extrair_estrutura_treino_validacao_falhou",
+                        extra={
+                            "tentativa": tentativa + 1,
+                            "dados": str(dados)[:200],
+                            "stop_reason": getattr(resp, "stop_reason", "unknown"),
+                            "usage": str(getattr(resp, "usage", "")),
+                        },
+                    )
                     break
             else:
                 logger.warning("extrair_estrutura_treino_tool_nao_usada", extra={"tentativa": tentativa + 1})
