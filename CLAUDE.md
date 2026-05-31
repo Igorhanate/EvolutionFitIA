@@ -71,7 +71,7 @@ Estrutura: `main.py` + `app/` (routers, services, models, schemas, middleware) +
 **Nutrição**
 - Item 5: criação de dieta personalizada (protocolo Mifflin-St Jeor, déficit/superávit/manutenção, plano 7 dias)
 - Item 6: cadastro de dieta externa (nutricionista/PDF/Excel → `cadastrar_dieta_propria`)
-- Item 7: análise de refeição por foto (macros estimados + balanço do dia; limite 6/dia)
+- Item 7: análise de refeição por foto (macros estimados + balanço do dia; sem limite diário)
 - Apagar dietas via chat
 - Dados corporais opcionais mas ativamente solicitados na criação de dieta
 
@@ -483,6 +483,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - **Cadastro de perfil obrigatório — Etapa 1 ✅** — guard 0.5 inserido no início de `process_message` (antes de `/menu`): verifica `perfil_minimo_completo`; se False, força fluxo de 6 etapas: confirmar nome → sexo → data de nascimento → altura → peso → nível de experiência. Grava em `PerfilFitness`. Bloqueia qualquer uso do bot até completar. `perfil_service` ganhou `perfil_minimo_completo()` e `calcular_idade()`. Boas-vindas Kiwify ajustada para direcionar ao cadastro em vez do `/menu`.
 - **Cadastro de perfil — Etapa 1.5 ✅** — após gravar os 5 campos, em vez de liberar direto, exibe oferta opcional: `1️⃣ Registrar medidas / 2️⃣ Enviar fotos pra análise / 3️⃣ Pular por agora`. Opção 1 redireciona para o fluxo oportunista de `registrar_medidas`; opção 2 copia a instrução do item 9 do menu (frente/costas/lado); opção 3 libera com `/menu`. Helper `faltam_medidas_ou_fotos()` adicionado em `perfil_service`. Item 5 do menu (dieta) prefixa aviso dinâmico se faltar medidas e/ou fotos — não bloqueia, só informa.
 - **Pendência "Perguntar sexo ao criar treino" ✅** — superada: sexo agora coletado obrigatoriamente na Etapa 1 do cadastro.
+- **Limite de 6 análises de refeição/dia removido** — usuário pode registrar quantas refeições quiser. Custo da API mitigado pelo fato de só refeições CONFIRMADAS contarem (análise sem confirmar não persiste).
 
 ### Segurança
 - **`ADMIN_API_KEY` rotacionada** — nova chave gerada e atualizada no Render. Chave anterior descartada. 🔐 Incidente registrado: chave vazou inline em `curl -H` no chat. Regra: NUNCA colar valores de chave em comandos — usar variável de shell extraída silenciosamente.
@@ -714,7 +715,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [ ] Dietas: mostrar medidas sempre em 2 unidades — gramas E colheres de sopa.
 
 ### Rápidos
-- [ ] Remover o limite de 6 análises de refeição por foto por dia.
+- ✅ CONCLUÍDO 30/05 — limite de 6 análises de refeição/dia removido. Constante LIMITE_FOTOS_DIA removida de nutricao_service.py; guard em claude_service.py removido; menções no SYSTEM_PROMPT e no menu item 7 removidas. Agora usuário pode analisar quantas refeições quiser/dia.
 
 ### Grandes (sessão dedicada)
 - [ ] Treino guiado ao vivo: treino completo -> cliente "estou pronto" -> bot manda exercício a exercício -> cliente reporta carga/reps -> bot indica descanso (aquecimento 1 min, válidas caso a caso) e próxima série.
