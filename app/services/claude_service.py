@@ -638,6 +638,24 @@ TOOLS = [
         ),
         "input_schema": {"type": "object", "properties": {}, "required": []},
     },
+    {
+        "name": "editar_perfil",
+        "description": (
+            "Atualiza o perfil do usuário (peso ou nível de experiência) quando ele PEDIR EXPLICITAMENTE pra alterar — "
+            "ex: 'quero atualizar meu peso', 'mudar meu nível', 'agora estou avançado'. "
+            "NÃO use essa tool quando o usuário só REGISTRAR uma medição casual ('pesei 80kg hoje') — pra isso use registrar_medidas. "
+            "Campos editáveis: peso_kg (float >= 30 e <= 300) ou nivel_experiencia ('iniciante', 'intermediario', 'avancado'). "
+            "Pode atualizar um ou ambos numa única chamada. Outros campos (sexo, data de nascimento, altura) NÃO são editáveis aqui."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "peso_kg": {"type": "number"},
+                "nivel_experiencia": {"type": "string", "enum": ["iniciante", "intermediario", "avancado"]},
+            },
+            "required": [],
+        },
+    },
 ]
 
 # Subset de tools para a chamada de análise das 3 fotos (exclui ferramentas de roteamento)
@@ -2513,6 +2531,38 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
 
 
 # ---------------------------------------------------------------------------
+# Confirmação de registro de medida após variação grande de peso no perfil
+# ---------------------------------------------------------------------------
+
+async def _handle_confirmar_historico_medida(
+    conversa: Conversa,
+    message_text: str,
+    user: Usuario,
+    db: Session,
+) -> str:
+    estado = conversa.estado_pendente or {}
+    resposta = _normalizar_confirmacao(message_text)
+    if resposta == "sim":
+        nutricao_service.registrar_medidas(
+            user_id=user.id,
+            data_medicao=date.today(),
+            campos={"peso_kg": float(estado.get("peso_kg"))},
+            db=db,
+        )
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return f"Pronto, registrei {estado.get('peso_kg')}kg no seu histórico corporal também. 📊"
+    elif resposta == "nao":
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return "Beleza, mantenho só no perfil. 👍"
+    else:
+        return "Por favor, responda *sim* ou *não*."
+
+
+# ---------------------------------------------------------------------------
 # Função principal
 # ---------------------------------------------------------------------------
 
@@ -2608,6 +2658,16 @@ async def process_message(
     # 3.7 Fluxo de substituição de dieta — intercepta pergunta hoje-vs-plano (não chama a IA)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "substituicao_dieta":
         reply = _handle_substituicao_dieta(conversa, message_text, user, db)
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
+
+    # 3.8 Confirmar registro no histórico corporal após variação grande de peso no perfil
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "confirmar_historico_medida":
+        reply = await _handle_confirmar_historico_medida(conversa, message_text, user, db)
         mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
         mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
         conversa.mensagens = mensagens
@@ -2833,6 +2893,39 @@ async def process_message(
                 elif block.name == "consultar_historico_treino":
                     hist = exercicio_service.get_historico_recente(user.id, db, semanas=4)
                     result = _fmt_historico_treino(hist)
+                elif block.name == "editar_perfil":
+                    args = block.input or {}
+                    peso_novo = args.get("peso_kg")
+                    nivel_novo = args.get("nivel_experiencia")
+                    if peso_novo is None and nivel_novo is None:
+                        result = "Nada para atualizar — informe peso_kg ou nivel_experiencia."
+                    else:
+                        partes_result = []
+                        if peso_novo is not None:
+                            if peso_novo < 30 or peso_novo > 300:
+                                partes_result.append(f"Peso fora do intervalo (30-300kg): {peso_novo}")
+                            else:
+                                info = perfil_service.atualizar_peso_perfil(user.id, float(peso_novo), db)
+                                partes_result.append(f"Peso atualizado: {info['anterior']}kg → {info['novo']}kg")
+                                if info["diff"] is not None and info["diff"] >= 5.0:
+                                    conversa.estado_pendente = {
+                                        "tipo": "confirmar_historico_medida",
+                                        "peso_kg": float(peso_novo),
+                                        "anterior": info["anterior"],
+                                        "criado_em": datetime.utcnow().isoformat(),
+                                    }
+                                    db.add(conversa)
+                                    partes_result.append(
+                                        f"VARIACAO_GRANDE: {info['diff']:.1f}kg de diferença. "
+                                        f"PERGUNTE ao usuário se quer registrar como nova medição no histórico corporal (sim/não)."
+                                    )
+                        if nivel_novo is not None:
+                            info_n = perfil_service.atualizar_nivel_perfil(user.id, nivel_novo, db)
+                            if "erro" in info_n:
+                                partes_result.append(info_n["erro"])
+                            else:
+                                partes_result.append(f"Nível atualizado: {info_n['anterior']} → {info_n['novo']}")
+                        result = " | ".join(partes_result)
                 else:
                     result = "Ferramenta desconhecida."
                 tool_results.append({
