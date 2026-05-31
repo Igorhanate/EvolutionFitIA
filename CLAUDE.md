@@ -482,8 +482,12 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ### Implementado
 - **Cadastro de perfil obrigatório — Etapa 1 ✅** — guard 0.5 inserido no início de `process_message` (antes de `/menu`): verifica `perfil_minimo_completo`; se False, força fluxo de 6 etapas: confirmar nome → sexo → data de nascimento → altura → peso → nível de experiência. Grava em `PerfilFitness`. Bloqueia qualquer uso do bot até completar. `perfil_service` ganhou `perfil_minimo_completo()` e `calcular_idade()`. Boas-vindas Kiwify ajustada para direcionar ao cadastro em vez do `/menu`.
 - **Cadastro de perfil — Etapa 1.5 ✅** — após gravar os 5 campos, em vez de liberar direto, exibe oferta opcional: `1️⃣ Registrar medidas / 2️⃣ Enviar fotos pra análise / 3️⃣ Pular por agora`. Opção 1 redireciona para o fluxo oportunista de `registrar_medidas`; opção 2 copia a instrução do item 9 do menu (frente/costas/lado); opção 3 libera com `/menu`. Helper `faltam_medidas_ou_fotos()` adicionado em `perfil_service`. Item 5 do menu (dieta) prefixa aviso dinâmico se faltar medidas e/ou fotos — não bloqueia, só informa.
+- **Cadastro de perfil — Etapa 2 ✅** — tool `editar_perfil` adicionada (atualiza `peso_kg` e/ou `nivel_experiencia` no `PerfilFitness` quando o usuário pedir explicitamente). Guardrail de 5kg: variação grande aciona `estado_pendente = confirmar_historico_medida` e pergunta se quer registrar também no histórico corporal (guard 3.8 em `process_message`). `atualizar_peso_perfil` + `atualizar_nivel_perfil` em `perfil_service`. Rota admin `GET /admin/users/{id}/perfil` criada para debug de campos do perfil.
+- 🔍 Observação a verificar: usuário (Igor) reportou que dados do cadastro "sumiram" após primeira sessão. Investigação não conclusiva (não havia rota /admin/perfil — criada agora mas não consultada). Sinais indicam perfil persistido (estado_pendente=None + 808 msgs históricas). Verificar na próxima sessão com a rota nova `GET /admin/users/{id}/perfil`.
 - **Pendência "Perguntar sexo ao criar treino" ✅** — superada: sexo agora coletado obrigatoriamente na Etapa 1 do cadastro.
 - **Limite de 6 análises de refeição/dia removido** — usuário pode registrar quantas refeições quiser. Custo da API mitigado pelo fato de só refeições CONFIRMADAS contarem (análise sem confirmar não persiste).
+- **Épico Parte 1 — passo 1 de 2 ✅** — migration 013 criada (tabela `sessoes_treino` + coluna `treino_nome` em `registros_exercicio`). Model `SessaoTreino` novo. Testada localmente (upgrade/downgrade/upgrade OK). Em produção via deploy auto. PASSO 2 PENDENTE: fluxo de "treinar [nome]" (parser, herança do nome no registro, IA pergunta se vier sem nome).
+- **Maria id=6 confirmada ativa ✅** — duplicata id=5 mantida como lixo silencioso (documentado em Limpeza/acompanhamento).
 
 ### Segurança
 - **`ADMIN_API_KEY` rotacionada** — nova chave gerada e atualizada no Render. Chave anterior descartada. 🔐 Incidente registrado: chave vazou inline em `curl -H` no chat. Regra: NUNCA colar valores de chave em comandos — usar variável de shell extraída silenciosamente.
@@ -677,6 +681,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 ## PENDÊNCIAS / ROADMAP (melhorias a fazer)
 
 ### Treino — pendências imediatas (continuação da etapa 2)
+- [ ] **Épico Parte 1 PASSO 2 (próxima sessão):** fluxo "treinar [nome]" — parser, herança do `treino_nome` em `registrar_exercicio`, IA pergunta se vier sem nome, `get_historico_recente` aceita filtro por `treino_nome`. NÃO entrega agora: comando "finalizar" e auto-expiração 20min (vão pra Parte 1 estendida ou Parte 2).
 - [x] Remover o salvamento de treino por palavra-chave (Lugar C em process_message) — ✅ CONCLUÍDO (verificado 30/05). Zero ocorrências de "Lugar C" no código; `TREINO_KEYWORDS` definida mas não usada em salvamento; `Treino` só é criado em `_gerar_treino_de_dados` (coleta estruturada) e `treino_service.cadastrar_treino_proprio` (tools). Bloco final de `process_message` salva apenas `Dieta` por keyword, não `Treino`.
 - [x] Limpar os ~50 treinos falsos já existentes no banco — ✅ CONCLUÍDO (verificado 30/05). Produção (user_id=1) tem apenas 5 treinos, todos com `origem="proprio"` (Peito A, Peito 3, PEITO 3, PEITO 1, PERNA 2025) — nenhum lixo.
 - [x] Etapa 2b ✅ CONCLUÍDA 27/05 — no 2º treino em diante, `_iniciar_coleta_treino` detecta perfil salvo (`dias_semana_padrao != None`), mostra resumo legível do perfil e pergunta "manter ou mudar?". Se manter: pré-preenche 7 campos e pergunta só `tipo_treino` + `dor_desconforto`. Se mudar: refaz coleta completa do zero. Estado usa chave `fase` (`confirmando_perfil` / `coletando`). Em produção.
@@ -715,6 +720,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [ ] Dietas: mostrar medidas sempre em 2 unidades — gramas E colheres de sopa.
 
 ### Rápidos
+- [ ] Verificar via `/admin/users/{id}/perfil` se o cadastro de perfil do Igor persistiu mesmo após reclamação de "dados perdidos" (30/05).
 - ✅ CONCLUÍDO 30/05 — limite de 6 análises de refeição/dia removido. Constante LIMITE_FOTOS_DIA removida de nutricao_service.py; guard em claude_service.py removido; menções no SYSTEM_PROMPT e no menu item 7 removidas. Agora usuário pode analisar quantas refeições quiser/dia.
 
 ### Grandes (sessão dedicada)
