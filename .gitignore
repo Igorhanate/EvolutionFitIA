@@ -24,3 +24,7 @@ dryrun*.json
 delecao_resultado.json
 *_resultado.json
 LOGO PNG COM BORDA.PNG
+
+# Pasta de imagens local e arquivos de debug de fontes
+IMAGENS/
+codepoints.txt
