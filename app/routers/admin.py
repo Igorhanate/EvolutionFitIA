@@ -19,7 +19,8 @@ from app.models.meta_nutricional import MetaNutricional
 from app.models.registro_refeicao import RegistroRefeicao
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service, nutricao_service, treino_service
+from app.models.perfil_fitness import PerfilFitness
+from app.services import exercicio_service, nutricao_service, perfil_service, treino_service
 from app.services.subscription_service import check_active_subscription
 
 router = APIRouter(tags=["Admin"], dependencies=[Depends(require_admin_key)])
@@ -42,6 +43,35 @@ def list_users(db: Session = Depends(get_db)):
             "data_fim": assinatura.data_fim.isoformat() if assinatura else None,
         })
     return result
+
+
+@router.get("/users/{user_id}/perfil")
+def get_perfil(user_id: int, db: Session = Depends(get_db)):
+    """Retorna o PerfilFitness do usuário. Útil pra debug."""
+    _get_user_or_404(user_id, db)
+    perfil = db.query(PerfilFitness).filter(PerfilFitness.user_id == user_id).first()
+    if perfil is None:
+        return {
+            "user_id": user_id,
+            "perfil_existe": False,
+            "campos_preenchidos": {c: False for c in ("sexo", "data_nascimento", "altura_cm", "peso_kg", "nivel_experiencia")},
+            "valores": None,
+        }
+    campos = ("sexo", "data_nascimento", "altura_cm", "peso_kg", "nivel_experiencia")
+    return {
+        "user_id": user_id,
+        "perfil_existe": True,
+        "campos_preenchidos": {c: getattr(perfil, c) is not None for c in campos},
+        "valores": {
+            "sexo": perfil.sexo,
+            "data_nascimento": perfil.data_nascimento.isoformat() if perfil.data_nascimento else None,
+            "altura_cm": perfil.altura_cm,
+            "peso_kg": float(perfil.peso_kg) if perfil.peso_kg is not None else None,
+            "nivel_experiencia": perfil.nivel_experiencia,
+            "criado_em": perfil.criado_em.isoformat() if getattr(perfil, "criado_em", None) else None,
+            "atualizado_em": perfil.atualizado_em.isoformat() if getattr(perfil, "atualizado_em", None) else None,
+        },
+    }
 
 
 @router.get("/users/{user_id}/treinos")
