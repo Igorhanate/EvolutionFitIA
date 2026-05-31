@@ -492,6 +492,7 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - **`USDA_API_KEY`** — confirmada ativa no Render; testada em produção com busca real.
 - **Salvamento por keyword (`Lugar C`)** — confirmado removido do código. Banco tem apenas 5 treinos reais (todos `origem="proprio"`): Peito A (133), Peito 3 (131), PEITO 3 (129), PEITO 1 (128), PERNA 2025 (125). Pendências L647-L648 marcadas como concluídas.
 - **`static/landing/motion.html`** — arquivo de 68KB não commitado, deletado. `static/landing/index.html` revertido (tinha botão "Assistir Motion 🎬" não finalizado). `LOGO PNG COM BORDA.PNG` (1.4MB) adicionado ao `.gitignore`.
+- **Persistência PerfilFitness verificada** — PerfilFitness nunca é deletado em nenhuma trilha de código (zero `db.delete` em produção); cancelamento de assinatura só muda status; sem CASCADE; perfil sobrevive a cancelamento/renovação. Documentado.
 
 ---
 
@@ -724,10 +725,11 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - [ ] Teste de compra nova de ponta a ponta com número que nunca comprou.
 - [ ] Validar valor pago no webhook Kiwify (segurança extra).
 - [ ] Migrar memória de dor/desconforto para o banco de dados (hoje é só por conversa).
+- [ ] Configurar alerta de saldo baixo / recarga automática de créditos no Console da Anthropic (o bot parou uma vez por créditos zerados).
 
 ### Limpeza / acompanhamento
-- [ ] Confirmar com a Maria que está usando normalmente.
-- [ ] Possível registro duplicado da Maria no banco (conta antiga, telefone 12 dígitos) — limpar via rota admin.
+- ✅ CONFIRMADO 30/05: id=6 (Maria Eduarda, telefone 13 dígitos, assinatura anual ATIVA até 2027-05-22) está usando o bot ativamente com conversas registradas.
+- ⚠️ MANTIDA: id=5 (12 dígitos, sem assinatura, sem conversas) deixada como lixo silencioso — nunca recebe mensagens porque o normalize_phone do subscription_service.py converte 12→13 dígitos. Causa raiz documentada: id=5 foi criado antes da normalização ser aplicada; id=6 é o canônico.
 - [ ] Lembrete: assinatura anual do criador expira ~maio/2027.
 
 ### Treino — novos refinos
@@ -774,5 +776,3 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 
 **TBCA:** NÃO usar por ora — tem restrição de uso comercial (exige autorização formal dos coordenadores da USP/UNICAMP). Avaliar somente com autorização em mãos.
 
-### Segurança / operação
-- [ ] Configurar alerta de saldo baixo / recarga automática de créditos no Console da Anthropic (o bot parou hoje porque os créditos zeraram).
