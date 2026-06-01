@@ -136,6 +136,39 @@ def list_exercicios(user_id: int, db: Session = Depends(get_db)):
     return [{"exercicio": r.exercicio, "exercicio_display": r.exercicio_display} for r in rows]
 
 
+@router.get("/users/{user_id}/registros-exercicio")
+def get_registros_exercicio(
+    user_id: int,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """Retorna os N registros de exercício mais recentes do usuário. Útil pra debug, especialmente series_detalhe."""
+    _get_user_or_404(user_id, db)
+    regs = (
+        db.query(RegistroExercicio)
+        .filter(RegistroExercicio.user_id == user_id)
+        .order_by(RegistroExercicio.criado_em.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "sessao_data": r.sessao_data.isoformat() if r.sessao_data else None,
+            "posicao_sessao": r.posicao_sessao,
+            "exercicio_display": r.exercicio_display,
+            "treino_nome": r.treino_nome,
+            "series": r.series,
+            "repeticoes": r.repeticoes,
+            "carga_kg": r.carga_kg,
+            "rm_estimado": r.rm_estimado,
+            "series_detalhe": r.series_detalhe,
+            "criado_em": r.criado_em.isoformat() if r.criado_em else None,
+        }
+        for r in regs
+    ]
+
+
 @router.get("/users/{user_id}/meta-nutricional")
 def get_meta_nutricional(user_id: int, db: Session = Depends(get_db)):
     """Meta nutricional ativa e histórico de metas do usuário."""
