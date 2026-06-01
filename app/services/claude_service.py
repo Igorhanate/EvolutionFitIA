@@ -308,6 +308,25 @@ TOOLS = [
                 "series": {"type": "integer", "description": "Número de séries realizadas"},
                 "repeticoes": {"type": "integer", "description": "Repetições por série"},
                 "carga_kg": {"type": "number", "description": "Carga utilizada em kg"},
+                "series_detalhe": {
+                    "type": "array",
+                    "description": (
+                        "OPCIONAL — lista de séries individuais quando o usuário detalhar cargas/reps DIFERENTES por série, "
+                        "ou quando mencionar AQUECIMENTO antes das séries válidas. "
+                        "Cada item: {carga_kg, repeticoes, is_aquecimento}. "
+                        "Se o usuário disse algo simples como 'supino 80kg 3x8', NÃO use esse campo — "
+                        "só preencha series/repeticoes/carga_kg agregados."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "carga_kg": {"type": "number", "description": "Carga em kg desta série"},
+                            "repeticoes": {"type": "integer", "description": "Repetições desta série"},
+                            "is_aquecimento": {"type": "boolean", "description": "True se for série de aquecimento; false para séries válidas (de trabalho)"},
+                        },
+                        "required": ["carga_kg", "repeticoes", "is_aquecimento"],
+                    },
+                },
             },
             "required": ["exercicio", "series", "repeticoes", "carga_kg"],
         },
@@ -1392,6 +1411,7 @@ def _handle_confirmacao(
             repeticoes=reps,
             carga_kg=carga,
             db=db,
+            series_detalhe=estado.get("series_detalhe"),
         )
         return (
             f"[SISTEMA] Usuário confirmou o registro de '{exercicio}': "
@@ -1474,6 +1494,25 @@ def _handle_confirmacao_refeicao(
 # Processamento de tool call
 # ---------------------------------------------------------------------------
 
+def _derivar_agregados_de_series(series_detalhe: list) -> dict | None:
+    """Deriva {series, repeticoes, carga_kg} a partir de séries individuais.
+    Considera apenas válidas (is_aquecimento=False).
+    - series  = count das válidas
+    - carga_kg = max(carga_kg das válidas)
+    - repeticoes = reps da série de maior carga
+    Retorna None se não houver séries válidas.
+    """
+    validas = [s for s in series_detalhe if not s.get("is_aquecimento", False)]
+    if not validas:
+        return None
+    serie_max = max(validas, key=lambda s: float(s.get("carga_kg", 0)))
+    return {
+        "series": len(validas),
+        "repeticoes": int(serie_max.get("repeticoes", 0)),
+        "carga_kg": float(serie_max.get("carga_kg", 0)),
+    }
+
+
 def _process_tool_registrar(
     tool_input: dict,
     user: Usuario,
@@ -1485,6 +1524,14 @@ def _process_tool_registrar(
     series = int(tool_input["series"])
     reps = int(tool_input["repeticoes"])
     carga = float(tool_input["carga_kg"])
+
+    series_detalhe_raw = tool_input.get("series_detalhe")
+    if series_detalhe_raw and isinstance(series_detalhe_raw, list) and len(series_detalhe_raw) > 0:
+        agregados = _derivar_agregados_de_series(series_detalhe_raw)
+        if agregados is not None:
+            series = agregados["series"]
+            reps = agregados["repeticoes"]
+            carga = agregados["carga_kg"]
 
     exercicio_norm = exercicio_service.normalizar_nome(exercicio_display)
     posicao = exercicio_service.get_proxima_posicao(user.id, sessao_data, db)
@@ -1504,6 +1551,7 @@ def _process_tool_registrar(
             "ultima_carga": ultima_carga,
             "variacao_pct": variacao_pct,
             "sessao_data": sessao_data.isoformat(),
+            "series_detalhe": series_detalhe_raw,
         }
         return (
             f"AGUARDANDO_CONFIRMACAO: '{exercicio_display}' com {carga}kg representa variação "
@@ -1524,6 +1572,7 @@ def _process_tool_registrar(
         carga_kg=carga,
         db=db,
         treino_nome=treino_nome,
+        series_detalhe=series_detalhe_raw,
     )
 
     primeiro_vez_str = " Primeiro registro deste exercício nesta posição — referência criada." if not historico else ""
