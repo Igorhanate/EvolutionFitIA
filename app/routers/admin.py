@@ -16,6 +16,7 @@ from app.models.foto_composicao import FotoComposicao
 from app.models.medida_corporal import MedidaCorporal
 from app.models.registro_exercicio import RegistroExercicio
 from app.models.meta_nutricional import MetaNutricional
+from app.models.sessao_treino import SessaoTreino
 from app.models.registro_refeicao import RegistroRefeicao
 from app.models.treino import Treino
 from app.models.usuario import Usuario
@@ -167,6 +168,40 @@ def get_registros_exercicio(
         }
         for r in regs
     ]
+
+
+@router.delete("/registros-exercicio")
+def delete_all_registros_exercicio(
+    confirm: str = "",
+    db: Session = Depends(get_db),
+) -> dict:
+    """⚠️ APAGA TODOS os RegistroExercicio + SessaoTreino do banco — operação irreversível.
+
+    Requer query param ?confirm=APAGAR_TUDO. Sem ele, retorna 400.
+    Útil pra recomeçar testes do zero antes do replanejamento da Parte 2/3.
+    """
+    if confirm != "APAGAR_TUDO":
+        raise HTTPException(
+            status_code=400,
+            detail="Operação destrutiva. Passe ?confirm=APAGAR_TUDO no query param para confirmar."
+        )
+
+    count_registros = db.query(RegistroExercicio).count()
+    count_sessoes = db.query(SessaoTreino).count()
+
+    try:
+        db.query(RegistroExercicio).delete()
+        db.query(SessaoTreino).delete()
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao apagar: {str(e)}")
+
+    return {
+        "ok": True,
+        "registros_exercicio_apagados": count_registros,
+        "sessoes_treino_apagadas": count_sessoes,
+    }
 
 
 @router.get("/users/{user_id}/meta-nutricional")
