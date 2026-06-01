@@ -500,12 +500,49 @@ logger.error("event_name", extra={"error": str(e)}, exc_info=True)
 - **Validação em produção ✅** — plano novo (id=140, "salve como teste 2.0") criado após o fix retornou estrutura COMPLETA: 6 dias, todos com `numero`/`nome`/`foco`/`exercicios` populados, cada exercício com `series_validas`/`aquecimento`/`reps`/`descanso_seg`.
 - **Etapa 3 da Parte 2 ✅** — `_process_tool_cadastrar_treino` (item 2 do menu — cadastrar treino do personal) virou async e passou a chamar `extrair_estrutura_treino` após salvar. Atualiza `Treino.conteudo['dias']` com a estrutura extraída via 2ª chamada Claude. Degradação graciosa se falhar. Dispatch em `process_message` agora usa `await`. Validado em produção (id=141, treino do Personal João — 3 dias estruturados com 4 exercícios cada, todos com `nome`/`series_validas`/`aquecimento`/`reps`/`descanso_seg`).
 
-### Estado da Parte 2 (final de 31/05)
+### Estado da Parte 2 (final de 01/06 madrugada)
 - ✅ Etapa 1: migration 014 (`series_detalhe` em `registros_exercicio`)
-- ✅ Etapa 2: extração estruturada no item 1 (criar treino do zero)
-- ✅ Etapa 3: extração estruturada no item 2 (cadastrar treino do personal)
-- 🟡 Etapa 4 PENDENTE: refatorar tool `registrar_exercicio` pra aceitar `series_detalhe` (lista de séries individuais com `is_aquecimento`)
-- 🟡 Etapa 5 PENDENTE: detecção de exercício fora do plano (comparar contra `Treino.conteudo["dias"]` na sessão ativa, perguntar "adicionar ao treino ou pontual?")
+- ✅ Etapa 2: extração estruturada item 1 (criar plano do zero)
+- ✅ Etapa 3: extração estruturada item 2 (cadastrar plano do personal)
+- ✅ Etapa 4: séries individuais + aquecimento na tool `registrar_exercicio`
+- ❌ Etapa 5 original CANCELADA — escopo replanejado abaixo
+
+---
+
+## HISTÓRICO DE MUDANÇAS (sessão de 01/06/2026 madrugada — Etapa 4 + replanejamento terminologia)
+
+### Implementado
+- **Etapa 4 da Parte 2 ✅** — tool `registrar_exercicio` agora aceita campo opcional `series_detalhe` (lista de séries individuais com `is_aquecimento`). Helper `_derivar_agregados_de_series` calcula agregados a partir das séries válidas (count, max carga, reps da série de maior carga). Compatível com ambos os formatos: simples (3 agregados como antes) ou detalhado (lista). 1RM continua usando agregados. `_handle_confirmacao` (variação anormal) propaga `series_detalhe` corretamente. Validado em produção via rota admin nova `/admin/users/{id}/registros-exercicio`.
+- **Rota admin nova ✅** — GET `/admin/users/{user_id}/registros-exercicio?limit=N` retorna últimos registros com todos os campos (incluindo `series_detalhe`). Usado pra validar Etapa 4 em produção.
+
+### Decidido (replanejamento de terminologia — Parte 2 Etapa 5 + Parte 3)
+- **Glossário consolidado:** PLANO = `Treino` no banco (1 linha) / TREINO = item dentro de `conteudo["dias"]` (ex: "Peito A", "Push") / EXERCÍCIO = item dentro de `dias[i].exercicios`.
+- **Problema descoberto:** todo o sistema atual trata o nome do PLANO como `treino_nome` em sessões e registros. Isso impede comparações por TREINO (dia) e a apresentação de "treino do dia" no formato que o Igor pediu.
+- **Solução acordada:** `treino_nome` em `SessaoTreino` e `RegistroExercicio` passa a guardar nome do TREINO (dia), não do PLANO. Sem migration nova — só muda semântica.
+- **Registros antigos serão APAGADOS** (5 registros de teste, todos com `treino_nome` = nome do plano, semanticamente errados). Recomeço limpo.
+- **Etapa 5 original (detecção exercício fora) CANCELADA** — substituída por replanejamento maior.
+
+### REPLANEJAMENTO Parte 2/3 (alinhamento terminológico — 01/06)
+
+**Fluxo-alvo do usuário:**
+1. Usuário manda `treinar` (sem nome).
+2. Se 0 planos → lista vazia (já implementado em B1.b.2). Se 1 plano → vai direto pros TREINOS. Se 2+ → pergunta o PLANO primeiro.
+3. Bot mostra lista numerada de TREINOS (dias do plano escolhido).
+4. Usuário escolhe (número ou nome).
+5. Bot APRESENTA o treino do dia: `Segue seu treino de *X*:` / `- Supino: 2 aquecimentos + 3 séries válidas de 8-10 reps` / `...` / `Envie *treinar* para iniciar.`
+6. Usuário manda `treinar` (confirmação) → sessão abre com `treino_nome = nome do TREINO`.
+7. Ao registrar exercício, bot compara contra `dias[X].exercicios`. Se fora → pergunta "adicionar ao treino ou pontual?". Se dentro → registra + mostra histórico série a série.
+
+**Etapas redesenhadas (5):**
+- 🟡 **E1:** Apagar registros antigos (5 de teste, todos com `treino_nome` semanticamente errado).
+- 🟡 **E2:** Refatorar `treinar [nome]` + B1.a + B1.b.1 pra exigir nome de TREINO (não PLANO). Lista numerada mostra treinos dos planos. Se 1 plano vai direto; se 2+ pergunta plano antes.
+- 🟡 **E3:** Apresentação do treino antes de iniciar — bot mostra exercícios estruturados + pede confirmação (`treinar`) pra abrir sessão.
+- 🟡 **E4:** Detecção de exercício fora do treino (match parcial case-insensitive). Pergunta "adicionar ou pontual?". Adicionar → atualiza `Treino.conteudo["dias"][X].exercicios`. Pontual → só registra.
+- 🟡 **E5:** Apresentação de histórico série a série ao registrar (lê `series_detalhe` dos últimos registros).
+
+**Não entra nesse replanejamento:** comando `finalizar` + estatísticas, auto-expiração 20min, B3 (confirmar troca de sessão). Ficam pra depois.
+
+**Estimativa:** 5 commits + testes entre cada. Provavelmente 1-2 sessões adicionais.
 
 ---
 
@@ -592,7 +629,7 @@ Isso confirma que a Parte 3 depende essencialmente das Partes 1 (vínculo sessã
 
 **REQUER:** migração(ões) nova(s) — todas MANUAIS (autogenerate inviável, banco compartilhado). Mudança em `registrar_exercicio`, no contexto, na exibição, e no parsing do "treinar".
 
-**ORDEM ATUALIZADA (31/05 noite):** Parte 1 ✅ ENTREGUE. Parte 2 Etapas 1, 2 e 3 ✅ ENTREGUES. Próximas = **Etapas 4 e 5 da Parte 2** (séries individuais no registrar_exercicio + detecção fora do plano). Depois = **PARTE 3 + B3** (apresentação).
+**ORDEM ATUALIZADA (01/06 madrugada):** Parte 1 ✅ + Parte 2 Etapas 1-4 ✅. Etapa 5 original ❌ CANCELADA. Próximas = E1-E5 do REPLANEJAMENTO (alinhamento terminológico PLANO/TREINO/EXERCÍCIO + apresentação no formato que o Igor pediu). Depois disso = finalizar + auto-expira + B3.
 
 ---
 
@@ -837,26 +874,27 @@ Isso confirma que a Parte 3 depende essencialmente das Partes 1 (vínculo sessã
 
 ## PRÓXIMA SESSÃO (retomada após /clear)
 
-**Foco:** Parte 2 Etapas 3, 4 e 5 do épico de estrutura de treino.
+**Foco:** E1 do REPLANEJAMENTO — apagar registros antigos e começar alinhamento terminológico PLANO/TREINO/EXERCÍCIO.
 
 **Decisões já tomadas (não reperguntar):**
 1. ✅ Plano semanal: 1 `Treino` com `conteudo["dias"]` estruturado (JSON) — implementado na Etapa 2.
 2. ✅ Séries individuais: coluna JSON `series_detalhe` no `RegistroExercicio` existente — migration 014 aplicada.
-3. ✅ Extração estruturada: `extrair_estrutura_treino` (2ª chamada Claude com tool) — item 1 do menu funcionando.
-
-**Etapas pendentes da Parte 2:**
-- 🟡 **Etapa 4:** refatorar tool `registrar_exercicio` + `_process_tool_registrar` para aceitar lista de séries individuais `[{carga, reps, is_aquecimento}]` e gravar em `series_detalhe`. Cuidado: precisa manter compatibilidade com cálculo de 1RM (que hoje usa carga/reps agregados).
-- 🟡 **Etapa 5:** detecção de exercício fora do plano — ao registrar, comparar nome do exercício contra `Treino.conteudo["dias"]` da sessão ativa; se ausente, perguntar "adicionar ao treino ou pontual?".
+3. ✅ Extração estruturada: `extrair_estrutura_treino` (2ª chamada Claude com tool) — itens 1 e 2 do menu funcionando.
+4. ✅ Etapa 4: tool `registrar_exercicio` aceita `series_detalhe` opcional — validado em produção.
+5. Match parcial case-insensitive para detecção de exercício fora do treino.
+6. Sempre perguntar (a cada exercício fora do treino) — não auto-adicionar.
+7. Se 1 plano → vai direto pra lista de TREINOS (dias). Se 2+ planos → pergunta PLANO primeiro.
+8. Registros antigos (5 de teste, `treino_nome` com nome do plano) serão APAGADOS — recomeço limpo.
 
 **Reconhecimento obrigatório no início:**
 - `git status` + `git log --oneline -8`
 - `alembic current` (deve estar em 014)
-- Conteúdo de `app/models/registro_exercicio.py` (confirmar `series_detalhe`), `_process_tool_registrar`, tool `registrar_exercicio`, `treino_service.cadastrar_treino_proprio`, `extrair_estrutura_treino`
+- Ler seção REPLANEJAMENTO Parte 2/3 acima para entender glossário e fluxo-alvo completo.
 
 **Cuidados:**
 - Render free SEM backup automático — testar upgrade/downgrade/upgrade local se houver nova migration.
 - Auto-migrate roda no Dockerfile: commit + push = migration aplicada em produção automaticamente.
 - Banco compartilhado com Evolution API — autogenerate inviável, migrations sempre MANUAIS.
 
-**Status do produto:** migration 014 em produção, extração estruturada funcionando nos dois fluxos: item 1 (id=140 'salve como teste 2.0') e item 2 (id=141 'Treino do Personal João - Push/Pull/Legs', origem=proprio, 3 dias estruturados).
+**Status do produto:** migration 014 em produção. Extração estruturada funcionando nos dois fluxos (id=140 e id=141). Tool registrar_exercicio aceita series_detalhe (validado em produção). PRÓXIMA SESSÃO: alinhamento de terminologia PLANO/TREINO/EXERCÍCIO.
 
