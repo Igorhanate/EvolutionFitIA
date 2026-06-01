@@ -2263,7 +2263,7 @@ async def _handle_coleta_treino(
         conversa.estado_pendente = None
         db.add(conversa)
         db.commit()
-        return f"Plano *{nome}* salvo! 💪\n\nQuando for treinar, manda 'treinar {nome}'."
+        return f"Plano *{nome}* salvo! 💪\n\nQuando quiser treinar, manda *treinar* e eu mostro os treinos do plano."
 
     # --- Fase de confirmação do perfil (2º treino em diante) ---
     if fase == "confirmando_perfil":
@@ -2797,26 +2797,49 @@ async def process_message(
             or s_lower.startswith("/")
         )
 
+    def _dias_do_plano(plano: Treino) -> list[str]:
+        cont = plano.conteudo if isinstance(plano.conteudo, dict) else {}
+        dias = cont.get("dias")
+        nomes: list[str] = []
+        if isinstance(dias, list):
+            for i, d in enumerate(dias, 1):
+                if not isinstance(d, dict):
+                    continue
+                nome = (d.get("nome") or "").strip()
+                if not nome:
+                    nome = f"Dia {d.get('numero') or i}"
+                nomes.append(nome)
+        return nomes
+
+    def _casar_dia(texto: str, dias_nomes: list[str]) -> str | None:
+        alvo = texto.strip().lower()
+        if not alvo or not dias_nomes:
+            return None
+        for nome in dias_nomes:
+            if nome.lower() == alvo:
+                return nome
+        candidatos = [n for n in dias_nomes if alvo in n.lower() or n.lower() in alvo]
+        return candidatos[0] if len(candidatos) == 1 else None
+
     # Handler: usuário está escolhendo treino da lista numerada
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "escolhendo_treino":
         estado = conversa.estado_pendente
-        ids = estado.get("ids", [])
-        labels = estado.get("labels", [])
+        dias_nomes = estado.get("dias_nomes", [])
         mensagens_tmp: list[dict] = list(conversa.mensagens or [])
 
         if stripped_lower == "cancelar":
             conversa.estado_pendente = None
-            reply = "Beleza, cancelei. Quando quiser começar, manda 'treinar [nome]'."
+            reply = "Beleza, cancelei. Quando quiser começar, manda *treinar*."
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
             db.add(conversa)
             db.commit()
             return reply
-        elif stripped.isdigit():
+        elif dias_nomes and stripped.isdigit():
             idx = int(stripped) - 1
-            if 0 <= idx < len(ids):
-                nome_treino = labels[idx]
+            if 0 <= idx < len(dias_nomes):
+                nome_treino = dias_nomes[idx]
                 sessao_treino_service.iniciar_sessao(user.id, nome_treino, db)
                 conversa.estado_pendente = None
                 reply = (
@@ -2830,7 +2853,7 @@ async def process_message(
                 db.commit()
                 return reply
             else:
-                reply = f"Número inválido. Responda *1* a *{len(ids)}* ou o nome do treino (ou *cancelar*)."
+                reply = f"Número inválido. Responda *1* a *{len(dias_nomes)}* ou o nome do treino (ou *cancelar*)."
                 mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
                 mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
                 conversa.mensagens = mensagens_tmp
@@ -2838,11 +2861,26 @@ async def process_message(
                 db.commit()
                 return reply
         elif stripped and not _eh_comando_reservado(stripped_lower):
-            # Nome livre — aceita qualquer texto que não seja comando
-            sessao_treino_service.iniciar_sessao(user.id, stripped, db)
+            # Nome digitado — Q1: casa contra os dias do plano; Q2: aceita livre se o plano não tem dias
+            if dias_nomes:
+                nome_treino = _casar_dia(stripped, dias_nomes)
+                if nome_treino is None:
+                    reply = (
+                        "Não achei esse treino na lista. Responda com o *número* "
+                        f"(*1* a *{len(dias_nomes)}*) ou o *nome* exato (ou *cancelar*)."
+                    )
+                    mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                    mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                    conversa.mensagens = mensagens_tmp
+                    db.add(conversa)
+                    db.commit()
+                    return reply
+            else:
+                nome_treino = stripped
+            sessao_treino_service.iniciar_sessao(user.id, nome_treino, db)
             conversa.estado_pendente = None
             reply = (
-                f"Sessão iniciada: *{stripped}* 💪\n"
+                f"Sessão iniciada: *{nome_treino}* 💪\n"
                 "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
             )
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
@@ -2856,6 +2894,88 @@ async def process_message(
             conversa.estado_pendente = None
             db.add(conversa)
             db.flush()
+
+    # Handler: usuário está escolhendo o PLANO (quando há 2+ planos)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "escolhendo_plano":
+        estado = conversa.estado_pendente
+        plano_ids = estado.get("plano_ids", [])
+        plano_labels = estado.get("plano_labels", [])
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+        plano_escolhido_id = None
+
+        if stripped_lower == "cancelar":
+            conversa.estado_pendente = None
+            reply = "Beleza, cancelei. Quando quiser começar, manda *treinar*."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif stripped.isdigit():
+            idx = int(stripped) - 1
+            if 0 <= idx < len(plano_ids):
+                plano_escolhido_id = plano_ids[idx]
+            else:
+                reply = f"Número inválido. Responda *1* a *{len(plano_ids)}* ou o nome do plano (ou *cancelar*)."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+        elif stripped and not _eh_comando_reservado(stripped_lower):
+            alvo = stripped.lower()
+            candidatos = [pid for pid, lb in zip(plano_ids, plano_labels) if alvo in lb.lower() or lb.lower() in alvo]
+            if len(candidatos) == 1:
+                plano_escolhido_id = candidatos[0]
+            else:
+                reply = "Não achei esse plano. Responda com o *número* ou o *nome* (ou *cancelar*)."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+        else:
+            # Comando reservado — limpa estado e deixa os guards seguintes processarem
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+
+        if plano_escolhido_id is not None:
+            plano = db.query(Treino).filter(Treino.id == plano_escolhido_id).first()
+            dias_nomes = _dias_do_plano(plano) if plano else []
+            nome_plano = _nome_display_treino(plano) if plano else "plano"
+            if dias_nomes:
+                linhas = [f"Plano: *{nome_plano}*\n", "Qual treino você vai fazer?\n"]
+                for i, dn in enumerate(dias_nomes, 1):
+                    linhas.append(f"*{i}.* {dn}")
+                linhas.append("\nResponda com o *número* ou o *nome* (ou *cancelar*).")
+                reply = "\n".join(linhas)
+                conversa.estado_pendente = {
+                    "tipo": "escolhendo_treino",
+                    "dias_nomes": dias_nomes,
+                    "plano_id": plano.id if plano else None,
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
+            else:
+                reply = (
+                    f"O plano *{nome_plano}* ainda não tem treinos separados por dia.\n"
+                    "Me diz o *nome do treino* que você vai fazer hoje (ex: 'Peito A') e eu inicio a sessão. Ou *cancelar*."
+                )
+                conversa.estado_pendente = {
+                    "tipo": "escolhendo_treino",
+                    "dias_nomes": [],
+                    "plano_id": plano.id if plano else None,
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
 
     # Handler: usuário escolhe entre importar, criar do zero ou cancelar (lista vazia)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "lista_vazia_treino":
@@ -2949,20 +3069,48 @@ async def process_message(
                 "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
             )
         else:
-            treinos_lista = treino_service.listar_treinos(user.id, db)[:10]
+            treinos_lista = treino_service.listar_treinos(user.id, db)
             if treinos_lista:
-                labels = [_nome_display_treino(t) for t in treinos_lista]
-                linhas = ["Qual treino você vai fazer?\n"]
-                for i, lb in enumerate(labels, 1):
-                    linhas.append(f"*{i}.* {lb}")
-                linhas.append("\nResponda com o *número* ou o *nome* (ou *cancelar*).")
-                reply = "\n".join(linhas)
-                conversa.estado_pendente = {
-                    "tipo": "escolhendo_treino",
-                    "ids": [t.id for t in treinos_lista],
-                    "labels": labels,
-                    "criado_em": datetime.utcnow().isoformat(),
-                }
+                if len(treinos_lista) == 1:
+                    plano = treinos_lista[0]
+                    dias_nomes = _dias_do_plano(plano)
+                    if dias_nomes:
+                        linhas = [f"Plano: *{_nome_display_treino(plano)}*\n", "Qual treino você vai fazer?\n"]
+                        for i, dn in enumerate(dias_nomes, 1):
+                            linhas.append(f"*{i}.* {dn}")
+                        linhas.append("\nResponda com o *número* ou o *nome* (ou *cancelar*).")
+                        reply = "\n".join(linhas)
+                        conversa.estado_pendente = {
+                            "tipo": "escolhendo_treino",
+                            "dias_nomes": dias_nomes,
+                            "plano_id": plano.id,
+                            "criado_em": datetime.utcnow().isoformat(),
+                        }
+                    else:
+                        reply = (
+                            f"O plano *{_nome_display_treino(plano)}* ainda não tem treinos separados por dia.\n"
+                            "Me diz o *nome do treino* que você vai fazer hoje (ex: 'Peito A') e eu inicio a sessão. Ou *cancelar*."
+                        )
+                        conversa.estado_pendente = {
+                            "tipo": "escolhendo_treino",
+                            "dias_nomes": [],
+                            "plano_id": plano.id,
+                            "criado_em": datetime.utcnow().isoformat(),
+                        }
+                else:
+                    plano_lista = treinos_lista[:10]
+                    plano_labels = [_nome_display_treino(t) for t in plano_lista]
+                    linhas = ["Você tem mais de um plano. Qual deles?\n"]
+                    for i, lb in enumerate(plano_labels, 1):
+                        linhas.append(f"*{i}.* {lb}")
+                    linhas.append("\nResponda com o *número* ou o *nome* (ou *cancelar*).")
+                    reply = "\n".join(linhas)
+                    conversa.estado_pendente = {
+                        "tipo": "escolhendo_plano",
+                        "plano_ids": [t.id for t in plano_lista],
+                        "plano_labels": plano_labels,
+                        "criado_em": datetime.utcnow().isoformat(),
+                    }
             else:
                 # Lista vazia → menu de 3 opções
                 conversa.estado_pendente = {
