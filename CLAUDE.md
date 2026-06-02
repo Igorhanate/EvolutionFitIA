@@ -970,3 +970,23 @@ PENDENCIAS NOVAS (mini-epico "gestao de planos", DEPOIS de E3/E4/E5):
 METODO (manter sempre): recon por janelas pequenas (Claude Code COLAPSA outputs >~18 linhas e o RESUMO dele NAO e confiavel - ja errou linha 3177 vs 1516); para mudanca em fluxo central: dump do diff -> copiar pro Desktop -> ANEXAR no chat -> revisar literal ANTES do push. py_compile e gate de sintaxe, nao de logica.
 
 LANCAMENTO (inalterado): Kiwify, OPENAI_API_KEY (Whisper/audio), upgrade Render, teste compra ponta-a-ponta, alerta saldo Anthropic.
+
+=================================================================
+ATUALIZACAO 01/06/2026 #3 (MAIS RECENTE)
+=================================================================
+SESSAO GUIADA - EM ANDAMENTO (vira a proxima entrega; "E3 commit 2 / atalho treinar [nome]" segue pendente DEPOIS).
+Decisao Igor (Opcao 1): ao confirmar "treinar", o bot CONDUZ exercicio a exercicio.
+
+APRESENTACAO (antes do treinar) - novo formato:
+  "Segue seu treino de *X*:" + por exercicio "<nome> - A aquecimentos e V series validas com R repeticoes" (omite aquecimentos se 0) + "Envie *treinar* para iniciarmos o treino".
+
+GUIADO (apos treinar):
+  - Anuncia "Exercicio n/total - *nome*: prescricao".
+  - Set no formato REPS x PESO (ex: 8 x80 = 8 reps com 80kg). Aquecimento: prefixo "aquecimento" ou "aq" (ex: aquecimento 12 x40). Rotulo automatico: sem prefixo, e aquecimento ate bater o prescrito, depois validas.
+  - AUTO-AVANCO: ao atingir o nº de validas prescrito, registra e passa pro proximo sozinho. "proximo" forca avanco (menos validas); "pular" pula sem registrar; "cancelar" encerra; fim -> finalizada_em + "Treino concluido".
+  - Registro: reusa _derivar_agregados_de_series + exercicio_service.registrar (series_detalhe = lista de {carga_kg, repeticoes, is_aquecimento}). Variacao anormal (>20%) NAO entra no guiado no G1.
+
+G1 = sem historico (so prescricao). G2 = historico serie a serie ("no seu ultimo treino voce fez...", le series_detalhe da ultima execucao; cuidado: historico hoje casa por exercicio+posicao, pular desloca posicao - resolver no G2).
+
+PENDENCIA NOVA (Igor pediu pra NAO esquecer): SERIES EXTRAS - hoje o auto-avanco dispara exatamente no nº de validas prescrito; permitir series validas ALEM do prescrito (drop set / extra) fica pra depois.
+=================================================================
