@@ -99,6 +99,35 @@ def get_historico_exercicio(
     )
 
 
+def get_ultima_execucao(
+    user_id: int,
+    exercicio_norm: str,
+    treino_nome: str | None,
+    db: Session,
+    excluir_data: date | None = None,
+) -> RegistroExercicio | None:
+    """
+    Registro mais recente do exercício no mesmo treino (dia), de sessão anterior.
+    Casa por exercício + treino_nome (não por posição), pois na sessão guiada
+    a posição varia quando exercícios são pulados.
+    """
+    q = db.query(RegistroExercicio).filter(
+        RegistroExercicio.user_id == user_id,
+        RegistroExercicio.exercicio == exercicio_norm,
+    )
+    if treino_nome:
+        q = q.filter(RegistroExercicio.treino_nome == treino_nome)
+    if excluir_data is not None:
+        q = q.filter(RegistroExercicio.sessao_data != excluir_data)
+    return (
+        q.order_by(
+            RegistroExercicio.sessao_data.desc(),
+            RegistroExercicio.criado_em.desc(),
+        )
+        .first()
+    )
+
+
 # ---------------------------------------------------------------------------
 # Validação de variação
 # ---------------------------------------------------------------------------

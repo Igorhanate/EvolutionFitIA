@@ -2897,11 +2897,34 @@ async def process_message(
             "is_aquecimento": is_aq,
         }
 
+    def _historico_exercicio_str(nome_ex: str) -> str:
+        sessao = sessao_treino_service.get_sessao_ativa(user.id, db)
+        treino_nome = sessao.treino_nome if sessao else None
+        exercicio_norm = exercicio_service.normalizar_nome(nome_ex)
+        ultimo = exercicio_service.get_ultima_execucao(
+            user.id, exercicio_norm, treino_nome, db, excluir_data=sessao_data
+        )
+        if not ultimo:
+            return "📊 Sem histórico ainda — bora marcar a primeira!"
+        detalhe = ultimo.series_detalhe
+        if detalhe:
+            aquec = [s for s in detalhe if s.get("is_aquecimento")]
+            validas = [s for s in detalhe if not s.get("is_aquecimento")]
+            partes = []
+            if aquec:
+                partes.append("aquec " + " · ".join(f"{s.get('repeticoes')}×{s.get('carga_kg'):g}kg" for s in aquec))
+            if validas:
+                partes.append("válidas " + " · ".join(f"{s.get('repeticoes')}×{s.get('carga_kg'):g}kg" for s in validas))
+            if partes:
+                return "📊 Último: " + " · ".join(partes)
+        return f"📊 Último: {ultimo.series}×{ultimo.repeticoes} @ {ultimo.carga_kg:g}kg"
+
     def _anunciar_exercicio_guiado(exercicios: list, idx: int) -> str:
         ex = exercicios[idx]
         nome_ex = (ex.get("nome") or "exercício").strip()
         return (
             f"Exercício {idx + 1}/{len(exercicios)} — *{nome_ex}*: {_prescricao_str(ex)}\n"
+            f"{_historico_exercicio_str(nome_ex)}\n"
             "Manda cada série: *reps x peso* (ex: 8 x80). "
             "Aquecimento: comece com \"aquecimento\" (ex: aquecimento 12 x40). "
             "Pra pular: *pular*."
