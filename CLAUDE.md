@@ -898,3 +898,44 @@ Isso confirma que a Parte 3 depende essencialmente das Partes 1 (vínculo sessã
 
 **Status do produto:** migration 014 em produção. Extração estruturada funcionando nos dois fluxos (id=140 e id=141). Tool registrar_exercicio aceita series_detalhe (validado em produção). PRÓXIMA SESSÃO: alinhamento de terminologia PLANO/TREINO/EXERCÍCIO.
 
+
+=================================================================
+ATUALIZACAO 01/06/2026 (MAIS RECENTE - substitui qualquer "estado/proximo passo" anterior deste arquivo)
+=================================================================
+
+METODO (lembrete que se provou essencial): Claude Code COLAPSA outputs > ~18 linhas. Recon de codigo SEMPRE por janelas pequenas (awk 'NR>=X && NR<=Y {printf "%d|%s\n",NR,$0}'), nunca confiar no RESUMO do Claude Code. Mudanca em fluxo central: revisar DIFF LITERAL (copiar p/ Desktop e anexar no chat) antes de qualquer push. py_compile e gate de sintaxe, nao de logica.
+
+GLOSSARIO: PLANO = Treino no banco (1 linha). TREINO = dia em conteudo["dias"][i] (ex "Peito A"). EXERCICIO = item em dias[i].exercicios[j]. treino_nome (SessaoTreino/RegistroExercicio) = nome do TREINO (dia).
+
+EPICO DE TREINOS - estado:
+[OK] E1 - registros antigos apagados (recomeco limpo).
+[OK] E2 - "treinar" oferece os TREINOS (dias), nao os PLANOS. Commit 028e774, VALIDADO em producao 01/06.
+     - escolhendo_treino agora carrega dias_nomes + plano_id (era ids/labels).
+     - NOVO estado escolhendo_plano: 2+ planos -> pergunta o plano primeiro; 1 plano -> direto pros dias; 0 -> menu lista_vazia (inalterado).
+     - Q1: nome de dia digitado casa contra os dias do plano (case-insensitive, parcial) -> nome canonico; 0/ambiguo -> repergunta.
+     - Q2: plano sem "dias" -> aceita nome de dia livre.
+     - Helpers _dias_do_plano e _casar_dia (inline em process_message, ~apos _eh_comando_reservado).
+
+[ATIVO] E3 - APRESENTACAO DO TREINO ANTES DE INICIAR  <- PROXIMO PASSO
+     - Apos escolher o TREINO (dia), o bot NAO abre sessao na hora. Apresenta os exercicios estruturados:
+         "Segue seu treino de *Peito A*:
+          - Supino reto: 2 aquecimentos + 3 series de 8-10
+          - Crucifixo: 3 series de 12-15
+          Envie *treinar* para iniciar."
+     - Le conteudo["dias"][i].exercicios (campos: nome, series_validas, aquecimento, reps, descanso_seg, observacoes).
+     - NOVO estado "aguardando_inicio_treino" (carrega nome do dia + plano_id + dia escolhido).
+     - So quando o usuario manda "treinar" (confirmacao) e que iniciar_sessao abre a SessaoTreino. Sem confirmacao, sessao NAO abre.
+     - HOJE a msg "Sessao iniciada... manda os exercicios" e o comportamento antigo; E3 troca por apresentar->confirmar.
+     - RECON antes de codar: campos de exercicio em dias[i].exercicios; TODOS os call-sites atuais de iniciar_sessao (escolhendo_treino numero/nome; transicao do escolhendo_plano; "treinar [nome]" direto ~2944-2950) -> DECIDIR se "treinar [nome]" direto tambem apresenta+confirma.
+
+[PENDENTE] E4 - deteccao de exercicio fora do treino (match parcial case-insensitive; perguntar adicionar/pontual). plano_id da sessao provavelmente precisara ser persistido (migration?).
+[PENDENTE] E5 - historico serie a serie ao registrar (le series_detalhe dos ultimos registros do mesmo exercicio + treino_nome).
+
+PENDENCIAS NOVAS (mini-epico "gestao de planos" - DEPOIS de E3/E4/E5; pedido Igor 01/06):
+  P1 - Adesao de 90 dias: a partir da criacao do 1o plano, o bot NAO fica oferecendo criar novos; em vez disso reforca manter o mesmo plano por >=90 dias (pra ver resultados e refinar), permitindo editar 1 exercicio ou outro. Se o cliente insistir em criar novo apos o aviso, PERMITIR.
+       A DEFINIR: ancora = data de criacao do 1o Treino (verificar se Treino tem created_at); reforco dispara so ao pedir plano novo na janela ou tambem proativo?; ONDE o bot hoje oferece criar (provavel /menu).
+  P2 - 1 plano por MODALIDADE por usuario (anti-compartilhamento de conta). PROVAVEL MIGRATION: coluna "modalidade" no Treino.
+       A DEFINIR: o que e "modalidade" (opcoes do menu de criacao? musculacao/hibrido/funcional?); ao criar 2o da mesma modalidade -> BLOQUEAR ou SUBSTITUIR.
+  CONFLITO P1xP2: se so pode 1 por modalidade e o cliente insiste em criar outro da mesma -> vira SUBSTITUIR o atual, nao coexistir. ALINHAR.
+
+LANCAMENTO (inalterado): Kiwify (tokens/links), OPENAI_API_KEY (Whisper/audio), upgrade Render (free dorme 50s), teste compra ponta-a-ponta, alerta de saldo baixo Anthropic.
