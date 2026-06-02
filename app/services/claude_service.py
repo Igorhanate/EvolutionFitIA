@@ -2847,14 +2847,18 @@ async def process_message(
         return base
 
     def _apresentar_treino(nome_dia: str, exercicios: list) -> str:
-        linhas = [f"Segue seu treino de *{nome_dia}*:\n"]
+        linhas_ex = []
         for ex in exercicios:
             if not isinstance(ex, dict):
                 continue
             nome_ex = (ex.get("nome") or "exercício").strip()
-            linhas.append(f"{nome_ex} - {_prescricao_str(ex)}")
-        linhas.append("\nEnvie *treinar* para iniciarmos o treino")
-        return "\n".join(linhas)
+            linhas_ex.append(f"*{nome_ex}* - {_prescricao_str(ex)}")
+        corpo = "\n\n".join(linhas_ex)
+        return (
+            f"Segue seu treino de *{nome_dia}*:\n\n"
+            f"{corpo}\n\n"
+            "Envie *treinar* para iniciarmos o treino"
+        )
 
     def _apresentar_ou_iniciar(nome_treino: str, plano_id) -> str:
         # E3: se o dia tem exercicios estruturados, apresenta e aguarda confirmacao;
