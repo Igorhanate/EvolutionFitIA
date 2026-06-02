@@ -2902,7 +2902,7 @@ async def process_message(
         treino_nome = sessao.treino_nome if sessao else None
         exercicio_norm = exercicio_service.normalizar_nome(nome_ex)
         ultimo = exercicio_service.get_ultima_execucao(
-            user.id, exercicio_norm, treino_nome, db, excluir_data=sessao_data
+            user.id, exercicio_norm, treino_nome, db
         )
         if not ultimo:
             return "📊 Sem histórico ainda — bora marcar a primeira!"
@@ -2927,7 +2927,7 @@ async def process_message(
             f"{_historico_exercicio_str(nome_ex)}\n"
             "Manda cada série: *reps x peso* (ex: 8 x80). "
             "Aquecimento: comece com \"aquecimento\" (ex: aquecimento 12 x40). "
-            "Pra pular: *pular*."
+            "Pra pular: *pular*. Pra encerrar: *finalizar*."
         )
 
     def _registrar_guiado(exercicio_dict: dict, buffer: list, treino_nome: str) -> bool:
@@ -3261,7 +3261,12 @@ async def process_message(
         if not exercicios or idx >= len(exercicios):
             return _finalizar()
 
-        if stripped_lower == "cancelar":
+        if stripped_lower in {"finalizar", "finalizar treino", "encerrar", "encerrar treino"}:
+            ex_nome = (exercicios[idx].get("nome") or "exercício").strip()
+            registrou = _registrar_guiado(exercicios[idx], buffer, nome_treino)
+            prefixo = f"{ex_nome} registrado!\n\n" if registrou else ""
+            return _finalizar(prefixo)
+        elif stripped_lower == "cancelar":
             sessao = sessao_treino_service.get_sessao_ativa(user.id, db)
             if sessao:
                 sessao.finalizada_em = datetime.utcnow()
@@ -3288,7 +3293,7 @@ async def process_message(
             if parsed is None:
                 return _persistir(
                     "Não entendi. Manda a série: *reps x peso* (ex: 8 x80). "
-                    "Aquecimento: \"aquecimento 12 x40\". Ou *próximo* / *pular* / *cancelar*.",
+                    "Aquecimento: \"aquecimento 12 x40\". Ou *próximo* / *pular* / *finalizar* / *cancelar*.",
                     estado,
                 )
             ex_atual = exercicios[idx]
