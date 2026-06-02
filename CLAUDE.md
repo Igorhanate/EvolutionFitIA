@@ -939,3 +939,34 @@ PENDENCIAS NOVAS (mini-epico "gestao de planos" - DEPOIS de E3/E4/E5; pedido Igo
   CONFLITO P1xP2: se so pode 1 por modalidade e o cliente insiste em criar outro da mesma -> vira SUBSTITUIR o atual, nao coexistir. ALINHAR.
 
 LANCAMENTO (inalterado): Kiwify (tokens/links), OPENAI_API_KEY (Whisper/audio), upgrade Render (free dorme 50s), teste compra ponta-a-ponta, alerta de saldo baixo Anthropic.
+
+=================================================================
+ATUALIZACAO 01/06/2026 #2 (MAIS RECENTE - substitui blocos de estado anteriores)
+=================================================================
+
+EPICO DE TREINOS:
+[OK] E1, E2 (commit 028e774, validado em producao).
+[~] E3 COMMIT 1 - CAMINHO DO MENU: apresenta os exercicios do dia + exige confirmacao "treinar" antes de abrir a sessao.
+    - 4 edits em claude_service.py, diff revisado e APROVADO; py_compile OK (+90/-12).
+    - Helpers novos: _exercicios_do_dia, _apresentar_treino, _apresentar_ou_iniciar. Estado novo: aguardando_inicio_treino.
+    - Fluxo: escolhe dia -> _apresentar_ou_iniciar -> se o dia tem exercicios estruturados, APRESENTA + seta estado aguardando_inicio_treino; senao (plano sem dias / Q2) inicia direto. Confirmacao com treinar/sim/iniciar/bora/comecar/vamos abre a sessao.
+    - CONFIRMAR NO INICIO DA PROXIMA SESSAO: (1) commit/push foi feito? rodar git log --oneline -3 (msg "feat(treino): E3 commit 1..."); (2) VALIDAR em producao no WhatsApp: treinar -> escolhe plano -> escolhe dia -> deve aparecer "Segue seu treino de *X*: ... Envie *treinar* para iniciar" -> treinar -> "Sessao iniciada".
+    - NAO tocados: atalho "treinar [nome]" direto (~L3066) e handler legado aguardando_nome_treino (~L3046) continuam abrindo sessao direto.
+
+[PENDENTE] E3 COMMIT 2 - ATALHO "treinar [nome]" direto (Igor: opcao B expandida). Spec:
+    - [nome] casa com um TREINO (dia): apresenta aquele dia + confirma. Mesmo nome em 2+ planos -> perguntar qual plano.
+    - [nome] casa com um PLANO: mostra os dias daquele plano (como escolher o plano no menu).
+    - [nome] NAO casa nada: perguntar -> (a) PONTUAL (one-off com o nome, sem vinculo a plano); (b) ADICIONAR a um treino (criar [nome] como novo dia num plano existente, definir exercicios); (c) CRIAR um (fluxo criar plano do zero).
+    - DEFINIR ANTES DE CODAR (Q1-Q5): semantica exata de "adicionar" e "criar". ATENCAO: interage com a regra futura "1 plano por modalidade" (Igor lembrou) -> criar/adicionar tem que respeitar esse limite.
+
+[PENDENTE] E4 - deteccao de exercicio fora do treino (match parcial case-insensitive; perguntar adicionar/pontual). plano_id da sessao provavelmente precisara ser persistido (migration?).
+[PENDENTE] E5 - historico serie a serie ao registrar (le series_detalhe do mesmo exercicio + treino_nome).
+
+PENDENCIAS NOVAS (mini-epico "gestao de planos", DEPOIS de E3/E4/E5):
+  P1 - Adesao 90 dias: a partir do 1o plano, NAO oferecer criar novos; reforcar manter o plano >=90 dias (permite editar 1 exercicio ou outro); se insistir apos o aviso, permitir. Definir: ancora (created_at do 1o Treino?), gatilho (so ao pedir novo, ou proativo?), onde o bot hoje oferece criar.
+  P2 - 1 plano por MODALIDADE por usuario (anti-compartilhamento de conta). Provavel migration (coluna "modalidade" no Treino). Definir: o que e "modalidade"; 2o da mesma modalidade -> bloquear ou substituir.
+  CONFLITO P1xP2: insistir em criar outro da mesma modalidade -> SUBSTITUIR, nao coexistir. Alinhar.
+
+METODO (manter sempre): recon por janelas pequenas (Claude Code COLAPSA outputs >~18 linhas e o RESUMO dele NAO e confiavel - ja errou linha 3177 vs 1516); para mudanca em fluxo central: dump do diff -> copiar pro Desktop -> ANEXAR no chat -> revisar literal ANTES do push. py_compile e gate de sintaxe, nao de logica.
+
+LANCAMENTO (inalterado): Kiwify, OPENAI_API_KEY (Whisper/audio), upgrade Render, teste compra ponta-a-ponta, alerta saldo Anthropic.
