@@ -2833,19 +2833,27 @@ async def process_message(
                 return exs if isinstance(exs, list) and exs else None
         return None
 
+    def _prescricao_str(ex: dict) -> str:
+        sv = ex.get("series_validas") or 0
+        aq = ex.get("aquecimento") or 0
+        reps = (ex.get("reps") or "").strip()
+        partes = []
+        if aq:
+            partes.append(f"{aq} aquecimento{'s' if aq > 1 else ''}")
+        partes.append(f"{sv} série{'s' if sv != 1 else ''} válida{'s' if sv != 1 else ''}")
+        base = " e ".join(partes)
+        if reps:
+            base += f" com {reps} repetições"
+        return base
+
     def _apresentar_treino(nome_dia: str, exercicios: list) -> str:
-        linhas = [f"Segue seu treino de *{nome_dia}*:"]
+        linhas = [f"Segue seu treino de *{nome_dia}*:\n"]
         for ex in exercicios:
             if not isinstance(ex, dict):
                 continue
             nome_ex = (ex.get("nome") or "exercício").strip()
-            sv = ex.get("series_validas") or 0
-            aq = ex.get("aquecimento") or 0
-            reps = (ex.get("reps") or "").strip()
-            parte_aq = f"{aq} aquecimento{'s' if aq > 1 else ''} + " if aq else ""
-            sufixo = f" de {reps}" if reps else ""
-            linhas.append(f"- {nome_ex}: {parte_aq}{sv} série{'s' if sv != 1 else ''}{sufixo}")
-        linhas.append("\nEnvie *treinar* para iniciar.")
+            linhas.append(f"{nome_ex} - {_prescricao_str(ex)}")
+        linhas.append("\nEnvie *treinar* para iniciarmos o treino")
         return "\n".join(linhas)
 
     def _apresentar_ou_iniciar(nome_treino: str, plano_id) -> str:
@@ -2867,6 +2875,53 @@ async def process_message(
             f"Sessão iniciada: *{nome_treino}* 💪\n"
             "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
         )
+
+    def _parse_set(texto: str):
+        t = texto.strip().lower()
+        is_aq = False
+        for pref in ("aquecimento", "aquec", "aq"):
+            if t.startswith(pref):
+                is_aq = True
+                t = t[len(pref):].strip()
+                break
+        m = re.match(r'^(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?$', t)
+        if not m:
+            return None
+        return {
+            "repeticoes": int(m.group(1)),
+            "carga_kg": float(m.group(2).replace(",", ".")),
+            "is_aquecimento": is_aq,
+        }
+
+    def _anunciar_exercicio_guiado(exercicios: list, idx: int) -> str:
+        ex = exercicios[idx]
+        nome_ex = (ex.get("nome") or "exercício").strip()
+        return (
+            f"Exercício {idx + 1}/{len(exercicios)} — *{nome_ex}*: {_prescricao_str(ex)}\n"
+            "Manda cada série: *reps x peso* (ex: 8 x80). "
+            "Aquecimento: comece com \"aquecimento\" (ex: aquecimento 12 x40). "
+            "Pra pular: *pular*."
+        )
+
+    def _registrar_guiado(exercicio_dict: dict, buffer: list, treino_nome: str) -> bool:
+        agregados = _derivar_agregados_de_series(buffer)
+        if agregados is None:
+            return False
+        nome_ex = (exercicio_dict.get("nome") or "exercício").strip()
+        posicao = exercicio_service.get_proxima_posicao(user.id, sessao_data, db)
+        exercicio_service.registrar(
+            user_id=user.id,
+            sessao_data=sessao_data,
+            posicao=posicao,
+            exercicio_display=nome_ex,
+            series=agregados["series"],
+            repeticoes=agregados["repeticoes"],
+            carga_kg=agregados["carga_kg"],
+            db=db,
+            treino_nome=treino_nome,
+            series_detalhe=buffer,
+        )
+        return True
 
     # Handler: usuário está escolhendo treino da lista numerada
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "escolhendo_treino":
@@ -3102,11 +3157,25 @@ async def process_message(
         mensagens_tmp: list[dict] = list(conversa.mensagens or [])
         if stripped_lower in {"treinar", "sim", "iniciar", "bora", "comecar", "começar", "vamos"}:
             sessao_treino_service.iniciar_sessao(user.id, nome_treino, db)
-            conversa.estado_pendente = None
-            reply = (
-                f"Sessão iniciada: *{nome_treino}* 💪\n"
-                "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
-            )
+            plano_id = estado.get("plano_id")
+            plano = db.query(Treino).filter(Treino.id == plano_id).first() if plano_id else None
+            exercicios = _exercicios_do_dia(plano, nome_treino) if plano else None
+            if exercicios:
+                conversa.estado_pendente = {
+                    "tipo": "sessao_guiada",
+                    "treino_nome": nome_treino,
+                    "plano_id": plano_id,
+                    "idx": 0,
+                    "buffer": [],
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
+                reply = "Bora! 💪\n\n" + _anunciar_exercicio_guiado(exercicios, 0)
+            else:
+                conversa.estado_pendente = None
+                reply = (
+                    f"Sessão iniciada: *{nome_treino}* 💪\n"
+                    "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
+                )
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
@@ -3135,6 +3204,87 @@ async def process_message(
             db.add(conversa)
             db.commit()
             return reply
+
+    # Handler: sessao guiada - bot conduz exercicio a exercicio (G1)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "sessao_guiada":
+        estado = conversa.estado_pendente
+        plano_id = estado.get("plano_id")
+        nome_treino = estado.get("treino_nome", "")
+        idx = estado.get("idx", 0)
+        buffer = list(estado.get("buffer", []))
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+
+        def _persistir(reply_text: str, novo_estado):
+            conversa.estado_pendente = novo_estado
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply_text, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply_text
+
+        def _finalizar(prefixo: str = ""):
+            sessao = sessao_treino_service.get_sessao_ativa(user.id, db)
+            if sessao:
+                sessao.finalizada_em = datetime.utcnow()
+            return _persistir(f"{prefixo}Treino concluído 💪", None)
+
+        plano = db.query(Treino).filter(Treino.id == plano_id).first() if plano_id else None
+        exercicios = _exercicios_do_dia(plano, nome_treino) if plano else None
+        if not exercicios or idx >= len(exercicios):
+            return _finalizar()
+
+        if stripped_lower == "cancelar":
+            sessao = sessao_treino_service.get_sessao_ativa(user.id, db)
+            if sessao:
+                sessao.finalizada_em = datetime.utcnow()
+            return _persistir("Treino encerrado. Quando quiser, manda *treinar*.", None)
+        elif stripped_lower in {"pular", "pular esse", "pular exercicio", "pular exercício", "skip"}:
+            novo_idx = idx + 1
+            if novo_idx >= len(exercicios):
+                return _finalizar("Pulado. ")
+            return _persistir("Pulado. " + _anunciar_exercicio_guiado(exercicios, novo_idx), {**estado, "idx": novo_idx, "buffer": []})
+        elif stripped_lower in {"proximo", "próximo", "next", "ok", "feito"}:
+            ex_nome = (exercicios[idx].get("nome") or "exercício").strip()
+            registrou = _registrar_guiado(exercicios[idx], buffer, nome_treino)
+            prefixo = f"{ex_nome} registrado!\n\n" if registrou else ""
+            novo_idx = idx + 1
+            if novo_idx >= len(exercicios):
+                return _finalizar(prefixo)
+            return _persistir(prefixo + _anunciar_exercicio_guiado(exercicios, novo_idx), {**estado, "idx": novo_idx, "buffer": []})
+        elif _eh_comando_reservado(stripped_lower):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            parsed = _parse_set(stripped)
+            if parsed is None:
+                return _persistir(
+                    "Não entendi. Manda a série: *reps x peso* (ex: 8 x80). "
+                    "Aquecimento: \"aquecimento 12 x40\". Ou *próximo* / *pular* / *cancelar*.",
+                    estado,
+                )
+            ex_atual = exercicios[idx]
+            aq_prescrito = ex_atual.get("aquecimento") or 0
+            aq_no_buffer = sum(1 for s in buffer if s.get("is_aquecimento"))
+            if not parsed["is_aquecimento"] and aq_no_buffer < aq_prescrito:
+                parsed["is_aquecimento"] = True
+            buffer.append(parsed)
+            validas = [s for s in buffer if not s.get("is_aquecimento")]
+            sv_prescrito = ex_atual.get("series_validas") or 0
+            peso_fmt = f"{parsed['carga_kg']:g}"
+            if parsed["is_aquecimento"]:
+                ack = f"Aquecimento: {parsed['repeticoes']} reps × {peso_fmt}kg ✅"
+            else:
+                ack = f"Válida {len(validas)}/{sv_prescrito}: {parsed['repeticoes']} reps × {peso_fmt}kg ✅"
+            if sv_prescrito and len(validas) >= sv_prescrito:
+                ex_nome = (ex_atual.get("nome") or "exercício").strip()
+                _registrar_guiado(ex_atual, buffer, nome_treino)
+                novo_idx = idx + 1
+                if novo_idx >= len(exercicios):
+                    return _finalizar(f"{ack} — {ex_nome} registrado!\n\n")
+                return _persistir(f"{ack} — {ex_nome} registrado!\n\n" + _anunciar_exercicio_guiado(exercicios, novo_idx), {**estado, "idx": novo_idx, "buffer": []})
+            return _persistir(ack, {**estado, "buffer": buffer})
 
     _m = re.match(r'^treinar(?:\s+(.+))?$', stripped_lower)
     if _m:
