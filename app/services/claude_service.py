@@ -3302,8 +3302,8 @@ async def process_message(
                     "tipo": "sessao_guiada",
                     "treino_nome": nome_treino,
                     "plano_id": plano_id,
-                    "idx": 0,
-                    "buffer": [],
+                    "ordem": list(range(len(exercicios))),
+                    "buffers": {},
                     "criado_em": datetime.utcnow().isoformat(),
                 }
                 reply = "Bora! 💪\n\n" + _anunciar_exercicio_guiado(exercicios, 0)
@@ -3347,8 +3347,8 @@ async def process_message(
         estado = conversa.estado_pendente
         plano_id = estado.get("plano_id")
         nome_treino = estado.get("treino_nome", "")
-        idx = estado.get("idx", 0)
-        buffer = list(estado.get("buffer", []))
+        ordem = list(estado.get("ordem", []))
+        buffers = dict(estado.get("buffers", {}))
         mensagens_tmp: list[dict] = list(conversa.mensagens or [])
 
         def _persistir(reply_text: str, novo_estado):
@@ -3366,14 +3366,26 @@ async def process_message(
                 sessao.finalizada_em = datetime.utcnow()
             return _persistir(f"{prefixo}Treino concluído 💪", None)
 
+        def _estado_guiado():
+            return {**estado, "ordem": ordem, "buffers": buffers}
+
         plano = db.query(Treino).filter(Treino.id == plano_id).first() if plano_id else None
         exercicios = _exercicios_do_dia(plano, nome_treino) if plano else None
-        if not exercicios or idx >= len(exercicios):
+        if not exercicios or not ordem:
             return _finalizar()
 
+        idx = ordem[0]
+        while idx >= len(exercicios):
+            ordem.pop(0)
+            if not ordem:
+                return _finalizar()
+            idx = ordem[0]
+        ex_atual = exercicios[idx]
+        buffer = list(buffers.get(str(idx), []))
+
         if stripped_lower in {"finalizar", "finalizar treino", "encerrar", "encerrar treino"}:
-            ex_nome = (exercicios[idx].get("nome") or "exercício").strip()
-            registrou = _registrar_guiado(exercicios[idx], buffer, nome_treino)
+            ex_nome = (ex_atual.get("nome") or "exercício").strip()
+            registrou = _registrar_guiado(ex_atual, buffer, nome_treino)
             prefixo = f"{ex_nome} registrado!\n\n" if registrou else ""
             return _finalizar(prefixo)
         elif stripped_lower == "cancelar":
@@ -3381,19 +3393,33 @@ async def process_message(
             if sessao:
                 sessao.finalizada_em = datetime.utcnow()
             return _persistir("Treino encerrado. Quando quiser, manda *treinar*.", None)
+        elif stripped_lower in {"ocupado", "ta ocupado", "tá ocupado", "esta ocupado", "está ocupado", "equipamento ocupado"}:
+            if len(ordem) < 2:
+                return _persistir(
+                    "Esse é o último da fila, não tem com quem trocar. Manda a série, ou *finalizar*.",
+                    _estado_guiado(),
+                )
+            ordem[0], ordem[1] = ordem[1], ordem[0]
+            return _persistir(
+                "Beleza, troquei com o próximo. Volto nesse exercício depois.\n\n"
+                + _anunciar_exercicio_guiado(exercicios, ordem[0]),
+                _estado_guiado(),
+            )
         elif stripped_lower in {"pular", "pular esse", "pular exercicio", "pular exercício", "skip"}:
-            novo_idx = idx + 1
-            if novo_idx >= len(exercicios):
+            buffers.pop(str(idx), None)
+            ordem.pop(0)
+            if not ordem:
                 return _finalizar("Pulado. ")
-            return _persistir("Pulado. " + _anunciar_exercicio_guiado(exercicios, novo_idx), {**estado, "idx": novo_idx, "buffer": []})
+            return _persistir("Pulado. " + _anunciar_exercicio_guiado(exercicios, ordem[0]), _estado_guiado())
         elif stripped_lower in {"proximo", "próximo", "next", "ok", "feito"}:
-            ex_nome = (exercicios[idx].get("nome") or "exercício").strip()
-            registrou = _registrar_guiado(exercicios[idx], buffer, nome_treino)
+            ex_nome = (ex_atual.get("nome") or "exercício").strip()
+            registrou = _registrar_guiado(ex_atual, buffer, nome_treino)
             prefixo = f"{ex_nome} registrado!\n\n" if registrou else ""
-            novo_idx = idx + 1
-            if novo_idx >= len(exercicios):
+            buffers.pop(str(idx), None)
+            ordem.pop(0)
+            if not ordem:
                 return _finalizar(prefixo)
-            return _persistir(prefixo + _anunciar_exercicio_guiado(exercicios, novo_idx), {**estado, "idx": novo_idx, "buffer": []})
+            return _persistir(prefixo + _anunciar_exercicio_guiado(exercicios, ordem[0]), _estado_guiado())
         elif _eh_comando_reservado(stripped_lower):
             conversa.estado_pendente = None
             db.add(conversa)
@@ -3411,7 +3437,7 @@ async def process_message(
                     return _persistir(
                         "Não entendi. Manda a série: *reps x peso* (ex: 8 x80). "
                         "Aquecimento: \"aquecimento 12 x40\". Ou *próximo* / *pular* / *finalizar* / *cancelar*.",
-                        estado,
+                        _estado_guiado(),
                     )
                 carga_txt = f" a {avulso['carga_kg']:g}kg" if avulso.get("carga_kg") else ""
                 return _persistir(
@@ -3421,17 +3447,17 @@ async def process_message(
                     "2️⃣ Deixa pra lá",
                     {
                         "tipo": "exercicio_fora_treino",
-                        "guiado": estado,
+                        "guiado": _estado_guiado(),
                         "avulso": avulso,
                         "criado_em": datetime.utcnow().isoformat(),
                     },
                 )
-            ex_atual = exercicios[idx]
             aq_prescrito = ex_atual.get("aquecimento") or 0
             aq_no_buffer = sum(1 for s in buffer if s.get("is_aquecimento"))
             if not parsed["is_aquecimento"] and aq_no_buffer < aq_prescrito:
                 parsed["is_aquecimento"] = True
             buffer.append(parsed)
+            buffers[str(idx)] = buffer
             validas = [s for s in buffer if not s.get("is_aquecimento")]
             sv_prescrito = ex_atual.get("series_validas") or 0
             peso_fmt = f"{parsed['carga_kg']:g}"
@@ -3442,11 +3468,12 @@ async def process_message(
             if sv_prescrito and len(validas) >= sv_prescrito:
                 ex_nome = (ex_atual.get("nome") or "exercício").strip()
                 _registrar_guiado(ex_atual, buffer, nome_treino)
-                novo_idx = idx + 1
-                if novo_idx >= len(exercicios):
+                buffers.pop(str(idx), None)
+                ordem.pop(0)
+                if not ordem:
                     return _finalizar(f"{ack} — {ex_nome} registrado!\n\n")
-                return _persistir(f"{ack} — {ex_nome} registrado!\n\n" + _anunciar_exercicio_guiado(exercicios, novo_idx), {**estado, "idx": novo_idx, "buffer": []})
-            return _persistir(ack, {**estado, "buffer": buffer})
+                return _persistir(f"{ack} — {ex_nome} registrado!\n\n" + _anunciar_exercicio_guiado(exercicios, ordem[0]), _estado_guiado())
+            return _persistir(ack, _estado_guiado())
 
     # Handler: exercicio fora do treino durante o guiado (E4 c1: pontual)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "exercicio_fora_treino":
@@ -3466,7 +3493,8 @@ async def process_message(
 
         g_plano_id = guiado.get("plano_id")
         g_nome_treino = guiado.get("treino_nome", "")
-        g_idx = guiado.get("idx", 0)
+        g_ordem = guiado.get("ordem", [])
+        g_idx = g_ordem[0] if g_ordem else 0
         g_plano = db.query(Treino).filter(Treino.id == g_plano_id).first() if g_plano_id else None
         g_exs = _exercicios_do_dia(g_plano, g_nome_treino) if g_plano else None
         g_ex_nome = (g_exs[g_idx].get("nome") or "exercício").strip() if g_exs and g_idx < len(g_exs) else "exercício"
