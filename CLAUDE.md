@@ -990,3 +990,41 @@ G1 = sem historico (so prescricao). G2 = historico serie a serie ("no seu ultimo
 
 PENDENCIA NOVA (Igor pediu pra NAO esquecer): SERIES EXTRAS - hoje o auto-avanco dispara exatamente no nº de validas prescrito; permitir series validas ALEM do prescrito (drop set / extra) fica pra depois.
 =================================================================
+
+=================================================================
+ATUALIZACAO 02/06/2026 #4 (MAIS RECENTE - substitui blocos de estado anteriores)
+=================================================================
+
+EPICO DE TREINOS - estado consolidado:
+[OK] E1, E2 (028e774), E3 commit 1 (42f7092) - validados em producao.
+[OK] G1 - SESSAO GUIADA: ao confirmar "treinar", o bot conduz exercicio a exercicio. VALIDADO em producao.
+     - Apresentacao: "Segue seu treino de *X*:" + por exercicio "*nome* - A aquecimentos e V series validas com R repeticoes" (nome em NEGRITO, linha em branco entre exercicios) + "Envie *treinar* para iniciarmos o treino". (commit 9ab4ea6 = formatacao negrito/espacamento, validado)
+     - Guiado: "Bora!" + "Exercicio n/total - *nome*: prescricao". Set REPS x PESO (ex: 8 x80). Aquecimento: prefixo "aquecimento"/"aq". Rotulo hibrido (sem prefixo = aquecimento ate bater o prescrito, depois validas; prefixo forca aquecimento). AUTO-AVANCO ao atingir as validas prescritas. "proximo" forca avanco; "pular" pula sem registrar; fim -> finalizada_em + "Treino concluido".
+     - Helpers: _prescricao_str, _parse_set, _anunciar_exercicio_guiado, _registrar_guiado. Estado novo: sessao_guiada.
+[OK] FINALIZAR (commit 1589669) - CODIGO NO AR, VALIDAR: comando "finalizar"/"finalizar treino"/"encerrar"/"encerrar treino" SALVA o exercicio em andamento (buffer parcial) e fecha a sessao. "cancelar" virou elif (descarta sem salvar). Opcao *finalizar* aparece no anuncio e na msg de "nao entendi".
+[OK] G2 - HISTORICO no anuncio guiado (cobre o antigo E5) - CODIGO NO AR, VALIDAR:
+     - Cada exercicio mostra "Sem historico ainda - bora marcar a primeira!" OU "Ultimo: aquec 12x40kg ... validas 8x80kg ...", lendo series_detalhe da ultima execucao.
+     - Casa por exercicio + treino_nome (NAO por posicao) - resolve o "pular" deslocar posicoes. Nova funcao exercicio_service.get_ultima_execucao. Helper _historico_exercicio_str (self-fetch do treino_nome via get_sessao_ativa).
+     - Commit 1589669 tambem REMOVEU excluir_data=sessao_data -> historico considera o MESMO dia (testavel hoje).
+     - VALIDAR: treinar o MESMO dia ja feito -> "Ultimo:" tem que vir DETALHADO (prova que series_detalhe gravou). Se vier so agregado, investigar o write. Admin: GET /admin/users/1/registros-exercicio?limit=8.
+
+PENDENTE DE VALIDACAO (proxima sessao): (1) historico detalhado no WhatsApp; (2) finalizar no meio de um exercicio salva parcial + fecha.
+
+EPICO DE TREINOS - restante:
+[PENDENTE] E3 COMMIT 2 - atalho "treinar [nome]" direto (Igor: opcao B expandida).
+    - [nome] casa um TREINO (dia): apresenta + confirma; mesmo nome em 2+ planos -> pergunta qual plano.
+    - [nome] casa um PLANO: mostra os dias.
+    - [nome] NAO casa: pergunta -> (a) PONTUAL; (b) ADICIONAR como novo dia num plano existente; (c) CRIAR plano do zero.
+    - Definir semantica de "adicionar"/"criar". Interage com a regra futura "1 plano por modalidade".
+[PENDENTE] E4 - deteccao de exercicio fora do treino durante a sessao (match parcial case-insensitive; perguntar adicionar/pontual). plano_id da sessao provavelmente precisara ser persistido (migration?).
+[PENDENTE] SERIES EXTRAS - hoje o auto-avanco dispara EXATAMENTE no nº de validas prescrito; permitir validas ALEM do prescrito (drop set/extra) fica pra depois.
+
+MINI-EPICO "gestao de planos" (DEPOIS do epico de treino):
+  P1 - Adesao 90 dias: a partir do 1o plano, NAO oferecer criar novos; reforcar manter o plano >=90 dias (permite editar 1 exercicio ou outro); se insistir apos o aviso, permitir. Definir: ancora (created_at do 1o Treino?), gatilho (so ao pedir novo, ou proativo?), onde o bot hoje oferece criar.
+  P2 - 1 plano por MODALIDADE por usuario (anti-compartilhamento). Provavel migration (coluna "modalidade" no Treino). Definir: o que e "modalidade"; 2o da mesma -> bloquear ou substituir.
+  CONFLITO P1xP2: insistir em criar outro da mesma modalidade -> SUBSTITUIR, nao coexistir.
+
+METODO (manter sempre): Claude Code COLAPSA outputs >~18 linhas e o RESUMO dele NAO e confiavel. Recon por janelas pequenas (awk). Mudanca em fluxo central: dump do diff -> Desktop -> ANEXAR no chat -> revisar LITERAL antes do push. py_compile = gate de sintaxe, nao de logica. Uma coisa de cada vez, validar em producao entre etapas.
+
+LANCAMENTO (inalterado): Kiwify (tokens/links), OPENAI_API_KEY (Whisper/audio), upgrade Render (free dorme ~50s), teste compra ponta-a-ponta, alerta saldo baixo Anthropic.
+=================================================================
