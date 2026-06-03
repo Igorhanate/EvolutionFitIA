@@ -1045,3 +1045,5 @@ RESTANTE / PROXIMOS:
 [PENDENTE] SERIES EXTRAS - permitir validas alem do prescrito (drop set); auto-avanco hoje dispara exatamente no prescrito.
 [PENDENTE] MINI-EPICO gestao de planos: P1 (adesao 90 dias), P2 (1 plano por modalidade - provavel migration), conflito P1xP2 -> substituir.
 =================================================================
+
+[02/06 #6] E4 c1 NO AR (VALIDAR no WhatsApp): no guiado, detecta exercicio fora do treino (nome + NxR + peso opcional), pergunta se registra pontual ou ignora; volta pro exercicio do guiado preservando buffer/idx. Guard anti-falso-positivo: se o nome casar com algum do dia, cai no "nao entendi". c2 (adicionar ao plano) pendente. Series extras: DESCARTADO.
