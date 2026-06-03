@@ -2980,7 +2980,7 @@ async def process_message(
             f"{_historico_exercicio_str(nome_ex)}\n"
             "Manda cada série: *reps x peso* (ex: 8 x80). "
             "Aquecimento: comece com \"aquecimento\" (ex: aquecimento 12 x40). "
-            "Pra pular: *pular*. Pra encerrar: *finalizar*."
+            "Pra pular: *pular*. Equipamento ocupado? *ocupado*. Pra encerrar: *finalizar*."
         )
 
     def _registrar_guiado(exercicio_dict: dict, buffer: list, treino_nome: str) -> bool:
