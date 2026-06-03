@@ -1047,3 +1047,13 @@ RESTANTE / PROXIMOS:
 =================================================================
 
 [02/06 #6] E4 c1 NO AR (VALIDAR no WhatsApp): no guiado, detecta exercicio fora do treino (nome + NxR + peso opcional), pergunta se registra pontual ou ignora; volta pro exercicio do guiado preservando buffer/idx. Guard anti-falso-positivo: se o nome casar com algum do dia, cai no "nao entendi". c2 (adicionar ao plano) pendente. Series extras: DESCARTADO.
+
+[02/06 #7] E4 COMPLETO + EPICO DE TREINO 100% FECHADO.
+- Motor do guiado virou FILA REORDENAVEL: estado sessao_guiada usa "ordem" (fila de indices restantes; atual = ordem[0]) e "buffers" {str(idx): series} (series por exercicio, preservadas ao reordenar). Substituiu idx/buffer unico. Anuncio mostra o n° ORIGINAL do exercicio no plano (ordem[0]+1).
+- "ocupado": troca o atual com o proximo (1,2,3,4 na 2 -> 1,3,2,4); repetido empurra mais. Aparece no anuncio.
+- E4 pontual (c1): exercicio fora do plano (nome+NxR+peso opc) -> menu registrar pontual / deixa pra la, volta pro atual.
+- E4 jump: nomear exercicio DO dia -> pendente: "e o n°X, vai fazer agora? SIM/NAO" (SIM move pro inicio da fila, volta pro interrompido depois); atual: "ja esta nesse"; ja feito: "ja fez". Substituiu o "nao entendi" confuso.
+- Aquecimento aceito no inicio E no fim ("10 x 12 aquecimento").
+- Detalhes: jump/pontual disparam so com nome+serie (regra nome+carga); a serie digitada pra referenciar e DESCARTADA no SIM do jump (loga normal depois).
+
+RESTAM (fora do epico de treino): mini-epico gestao de planos (P1 adesao 90 dias, P2 1 plano por modalidade - provavel migration) e o bloco de LANCAMENTO (Kiwify tokens/links, OPENAI/Whisper, upgrade Render, teste compra ponta-a-ponta, alerta saldo Anthropic).
