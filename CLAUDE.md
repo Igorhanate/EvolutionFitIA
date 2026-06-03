@@ -1028,3 +1028,20 @@ METODO (manter sempre): Claude Code COLAPSA outputs >~18 linhas e o RESUMO dele 
 
 LANCAMENTO (inalterado): Kiwify (tokens/links), OPENAI_API_KEY (Whisper/audio), upgrade Render (free dorme ~50s), teste compra ponta-a-ponta, alerta saldo baixo Anthropic.
 =================================================================
+
+=================================================================
+ATUALIZACAO 02/06/2026 #5 (MAIS RECENTE)
+=================================================================
+[OK] E3 COMMIT 2 (E3c2) - atalho "treinar [nome]" esperto. VALIDADO em producao.
+    - [nome] casa um DIA (em qualquer plano) -> apresenta + confirma (_apresentar_ou_iniciar). Mesmo dia em 2+ planos -> escolhendo_plano.
+    - [nome] casa um PLANO -> lista os dias (helper novo _mostrar_dias_plano -> escolhendo_treino).
+    - [nome] NAO casa -> estado treinar_nao_casou, menu: 1 pontual (sessao livre) / 2 importar (_handle_menu_item(2)) / 3 criar do zero (_iniciar_coleta_treino) / 4 cancelar.
+    - Precedencia: dia -> plano -> nada. NAO toca em modalidade (P2 gateia o "criar" no futuro, num lugar so).
+
+EPICO DE TREINOS FECHADO: E1, E2, E3c1, E3c2, G1, G2, finalizar - todos no ar e validados.
+
+RESTANTE / PROXIMOS:
+[PENDENTE] E4 - deteccao de exercicio fora do treino durante a sessao guiada (match parcial; adicionar/pontual). plano_id da sessao provavelmente precisa ser persistido (migration?).
+[PENDENTE] SERIES EXTRAS - permitir validas alem do prescrito (drop set); auto-avanco hoje dispara exatamente no prescrito.
+[PENDENTE] MINI-EPICO gestao de planos: P1 (adesao 90 dias), P2 (1 plano por modalidade - provavel migration), conflito P1xP2 -> substituir.
+=================================================================
