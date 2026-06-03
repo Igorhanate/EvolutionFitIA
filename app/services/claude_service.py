@@ -3428,27 +3428,48 @@ async def process_message(
             parsed = _parse_set(stripped)
             if parsed is None:
                 avulso = _parse_exercicio_avulso(stripped)
-                if avulso is not None:
-                    nomes_dia = [(e.get("nome") or "").strip().lower() for e in exercicios if isinstance(e, dict)]
-                    nome_av = avulso["nome"].lower()
-                    if any(n and (nome_av in n or n in nome_av) for n in nomes_dia):
-                        avulso = None
                 if avulso is None:
                     return _persistir(
                         "Não entendi. Manda a série: *reps x peso* (ex: 8 x80). "
                         "Aquecimento: \"aquecimento 12 x40\". Ou *próximo* / *pular* / *finalizar* / *cancelar*.",
                         _estado_guiado(),
                     )
-                carga_txt = f" a {avulso['carga_kg']:g}kg" if avulso.get("carga_kg") else ""
+                nome_av = avulso["nome"].lower()
+                alvo = None
+                for i, e in enumerate(exercicios):
+                    if not isinstance(e, dict):
+                        continue
+                    n = (e.get("nome") or "").strip().lower()
+                    if n and (nome_av in n or n in nome_av):
+                        alvo = i
+                        break
+                if alvo is None:
+                    carga_txt = f" a {avulso['carga_kg']:g}kg" if avulso.get("carga_kg") else ""
+                    return _persistir(
+                        f"*{avulso['nome']}* não está no treino de hoje. "
+                        f"Quer registrar {avulso['series']}x{avulso['reps']}{carga_txt} só pra hoje?\n\n"
+                        "1️⃣ Sim, registrar (pontual)\n"
+                        "2️⃣ Deixa pra lá",
+                        {
+                            "tipo": "exercicio_fora_treino",
+                            "guiado": _estado_guiado(),
+                            "avulso": avulso,
+                            "criado_em": datetime.utcnow().isoformat(),
+                        },
+                    )
+                nome_alvo = (exercicios[alvo].get("nome") or "exercício").strip()
+                if alvo == idx:
+                    return _persistir(f"Você já está no *{nome_alvo}* — manda a série (ex: 8 x80).", _estado_guiado())
+                if alvo not in ordem:
+                    return _persistir(f"*{nome_alvo}* você já fez hoje. Manda a série do atual, ou *próximo*/*pular*.", _estado_guiado())
                 return _persistir(
-                    f"*{avulso['nome']}* não está no treino de hoje. "
-                    f"Quer registrar {avulso['series']}x{avulso['reps']}{carga_txt} só pra hoje?\n\n"
-                    "1️⃣ Sim, registrar (pontual)\n"
-                    "2️⃣ Deixa pra lá",
+                    f"*{nome_alvo}* é o exercício n°{alvo + 1} do treino. Vai fazer agora?\n\n"
+                    "1️⃣ SIM, vou fazer agora\n"
+                    "2️⃣ NÃO, sigo a ordem",
                     {
-                        "tipo": "exercicio_fora_treino",
+                        "tipo": "jump_exercicio",
                         "guiado": _estado_guiado(),
-                        "avulso": avulso,
+                        "alvo_idx": alvo,
                         "criado_em": datetime.utcnow().isoformat(),
                     },
                 )
@@ -3530,6 +3551,55 @@ async def process_message(
         else:
             return _persistir_eft(
                 "Responda *1* (registrar pontual) ou *2* (deixa pra lá).",
+                estado,
+            )
+
+    # Handler: pulo pra um exercicio do dia (E4: "vai fazer agora?")
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "jump_exercicio":
+        estado = conversa.estado_pendente
+        guiado = estado.get("guiado") or {}
+        alvo_idx = estado.get("alvo_idx")
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+
+        def _persistir_jump(reply_text: str, novo_estado):
+            conversa.estado_pendente = novo_estado
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply_text, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply_text
+
+        g_plano_id = guiado.get("plano_id")
+        g_nome_treino = guiado.get("treino_nome", "")
+        g_ordem = list(guiado.get("ordem", []))
+        g_plano = db.query(Treino).filter(Treino.id == g_plano_id).first() if g_plano_id else None
+        g_exs = _exercicios_do_dia(g_plano, g_nome_treino) if g_plano else None
+        atual_idx = g_ordem[0] if g_ordem else 0
+        atual_nome = (g_exs[atual_idx].get("nome") or "exercício").strip() if g_exs and atual_idx < len(g_exs) else "exercício"
+
+        if stripped == "1" or stripped_lower in {"sim", "agora", "vou fazer agora"}:
+            if not g_exs or not g_ordem:
+                return _persistir_jump("Treino concluído 💪", None)
+            if alvo_idx in g_ordem:
+                g_ordem.remove(alvo_idx)
+                g_ordem.insert(0, alvo_idx)
+            return _persistir_jump(
+                "Bora! 💪\n\n" + _anunciar_exercicio_guiado(g_exs, g_ordem[0]),
+                {**guiado, "ordem": g_ordem},
+            )
+        elif stripped == "2" or stripped_lower in {"nao", "não", "ordem", "seguir", "seguir a ordem"}:
+            return _persistir_jump(
+                f"Beleza, seguindo a ordem. Você está no *{atual_nome}* — manda a série.",
+                guiado,
+            )
+        elif _eh_comando_reservado(stripped_lower):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            return _persistir_jump(
+                "Responda *1* (SIM, vou fazer agora) ou *2* (NÃO, sigo a ordem).",
                 estado,
             )
 
