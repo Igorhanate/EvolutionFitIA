@@ -2923,6 +2923,29 @@ async def process_message(
             "is_aquecimento": is_aq,
         }
 
+    def _parse_exercicio_avulso(texto: str):
+        t = texto.strip()
+        m = re.search(r'(\d+)\s*[x×]\s*(\d+)', t)
+        if not m:
+            return None
+        carga = None
+        mp = re.search(r'(\d+(?:[.,]\d+)?)\s*kg', t, re.IGNORECASE)
+        if mp:
+            carga = float(mp.group(1).replace(",", "."))
+        nome = t
+        if mp:
+            nome = nome.replace(mp.group(0), " ")
+        nome = nome.replace(m.group(0), " ")
+        nome = re.sub(r"\s+", " ", nome).strip()
+        if not nome or not re.search(r"[A-Za-zÀ-ÿ]", nome):
+            return None
+        return {
+            "nome": nome,
+            "series": int(m.group(1)),
+            "reps": int(m.group(2)),
+            "carga_kg": carga,
+        }
+
     def _historico_exercicio_str(nome_ex: str) -> str:
         sessao = sessao_treino_service.get_sessao_ativa(user.id, db)
         treino_nome = sessao.treino_nome if sessao else None
@@ -3374,10 +3397,30 @@ async def process_message(
         else:
             parsed = _parse_set(stripped)
             if parsed is None:
+                avulso = _parse_exercicio_avulso(stripped)
+                if avulso is not None:
+                    nomes_dia = [(e.get("nome") or "").strip().lower() for e in exercicios if isinstance(e, dict)]
+                    nome_av = avulso["nome"].lower()
+                    if any(n and (nome_av in n or n in nome_av) for n in nomes_dia):
+                        avulso = None
+                if avulso is None:
+                    return _persistir(
+                        "Não entendi. Manda a série: *reps x peso* (ex: 8 x80). "
+                        "Aquecimento: \"aquecimento 12 x40\". Ou *próximo* / *pular* / *finalizar* / *cancelar*.",
+                        estado,
+                    )
+                carga_txt = f" a {avulso['carga_kg']:g}kg" if avulso.get("carga_kg") else ""
                 return _persistir(
-                    "Não entendi. Manda a série: *reps x peso* (ex: 8 x80). "
-                    "Aquecimento: \"aquecimento 12 x40\". Ou *próximo* / *pular* / *finalizar* / *cancelar*.",
-                    estado,
+                    f"*{avulso['nome']}* não está no treino de hoje. "
+                    f"Quer registrar {avulso['series']}x{avulso['reps']}{carga_txt} só pra hoje?\n\n"
+                    "1️⃣ Sim, registrar (pontual)\n"
+                    "2️⃣ Deixa pra lá",
+                    {
+                        "tipo": "exercicio_fora_treino",
+                        "guiado": estado,
+                        "avulso": avulso,
+                        "criado_em": datetime.utcnow().isoformat(),
+                    },
                 )
             ex_atual = exercicios[idx]
             aq_prescrito = ex_atual.get("aquecimento") or 0
@@ -3400,6 +3443,63 @@ async def process_message(
                     return _finalizar(f"{ack} — {ex_nome} registrado!\n\n")
                 return _persistir(f"{ack} — {ex_nome} registrado!\n\n" + _anunciar_exercicio_guiado(exercicios, novo_idx), {**estado, "idx": novo_idx, "buffer": []})
             return _persistir(ack, {**estado, "buffer": buffer})
+
+    # Handler: exercicio fora do treino durante o guiado (E4 c1: pontual)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "exercicio_fora_treino":
+        estado = conversa.estado_pendente
+        guiado = estado.get("guiado") or {}
+        avulso = estado.get("avulso") or {}
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+
+        def _persistir_eft(reply_text: str, novo_estado):
+            conversa.estado_pendente = novo_estado
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply_text, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply_text
+
+        g_plano_id = guiado.get("plano_id")
+        g_nome_treino = guiado.get("treino_nome", "")
+        g_idx = guiado.get("idx", 0)
+        g_plano = db.query(Treino).filter(Treino.id == g_plano_id).first() if g_plano_id else None
+        g_exs = _exercicios_do_dia(g_plano, g_nome_treino) if g_plano else None
+        g_ex_nome = (g_exs[g_idx].get("nome") or "exercício").strip() if g_exs and g_idx < len(g_exs) else "exercício"
+
+        if stripped == "1" or stripped_lower in {"sim", "pontual", "registrar"}:
+            posicao = exercicio_service.get_proxima_posicao(user.id, sessao_data, db)
+            exercicio_service.registrar(
+                user_id=user.id,
+                sessao_data=sessao_data,
+                posicao=posicao,
+                exercicio_display=avulso.get("nome", "exercício"),
+                series=avulso.get("series") or 1,
+                repeticoes=avulso.get("reps") or 0,
+                carga_kg=avulso.get("carga_kg") or 0,
+                db=db,
+                treino_nome=g_nome_treino,
+                series_detalhe=None,
+            )
+            return _persistir_eft(
+                f"*{avulso.get('nome', 'exercício')}* registrado (pontual) ✅\n"
+                f"Voltando pro *{g_ex_nome}* — manda a próxima série.",
+                guiado,
+            )
+        elif stripped == "2" or stripped_lower in {"nao", "não", "deixa", "deixa pra la", "deixa pra lá", "cancelar"}:
+            return _persistir_eft(
+                f"Beleza, ignorei. Voltando pro *{g_ex_nome}* — manda a série.",
+                guiado,
+            )
+        elif _eh_comando_reservado(stripped_lower):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            return _persistir_eft(
+                "Responda *1* (registrar pontual) ou *2* (deixa pra lá).",
+                estado,
+            )
 
     _m = re.match(r'^treinar(?:\s+(.+))?$', stripped_lower)
     if _m:
