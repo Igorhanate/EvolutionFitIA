@@ -2909,10 +2909,14 @@ async def process_message(
     def _parse_set(texto: str):
         t = texto.strip().lower()
         is_aq = False
-        for pref in ("aquecimento", "aquec", "aq"):
-            if t.startswith(pref):
+        for kw in ("aquecimento", "aquec", "aq"):
+            if t.startswith(kw):
                 is_aq = True
-                t = t[len(pref):].strip()
+                t = t[len(kw):].strip()
+                break
+            if t.endswith(kw):
+                is_aq = True
+                t = t[:-len(kw)].strip()
                 break
         m = re.match(r'^(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?$', t)
         if not m:
