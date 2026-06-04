@@ -24,6 +24,18 @@ def listar_treinos(user_id: int, db: Session) -> list[Treino]:
     return [t for t in treinos if _is_real(t)]
 
 
+def planos_da_modalidade(user_id: int, modalidade: str, db: Session) -> list[Treino]:
+    """Planos REAIS do usuário daquela modalidade (mais recentes primeiro)."""
+    if not modalidade:
+        return []
+    out = []
+    for t in listar_treinos(user_id, db):
+        cont = t.conteudo if isinstance(t.conteudo, dict) else {}
+        if (cont.get("modalidade") or "") == modalidade:
+            out.append(t)
+    return out
+
+
 def cadastrar_treino_proprio(
     user_id: int, nome: str, texto: str, db: Session, exercicios: str = ""
 ) -> Treino:

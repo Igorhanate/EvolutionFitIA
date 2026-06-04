@@ -2238,6 +2238,19 @@ async def _handle_coleta_treino(
     fase = estado.get("fase", "coletando")
     dados = dict(estado.get("dados", {}))
 
+    # --- Fase de confirmacao de substituicao (P1/P2: 1 plano por modalidade) ---
+    if fase == "confirmando_substituicao":
+        txt = message_text.strip()
+        resp = _normalizar_confirmacao(message_text)
+        if txt == "1" or resp == "sim":
+            return await _gerar_treino_de_dados(dados, user, conversa, db, confirmado=True)
+        if txt == "2" or resp == "nao" or txt.lower() in {"cancelar", "/menu", "menu"}:
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Beleza, mantive seu plano atual. 💪"
+        return "Responda *1* (SIM, substituir) ou *2* (NÃO, manter o atual)."
+
     # --- Fase de nomeação do treino (fase final — grava com nome) ---
     if fase == "nomeando_treino":
         nome = message_text.strip()
@@ -2260,6 +2273,10 @@ async def _handle_coleta_treino(
         estrutura = estado.get("estrutura")
         if isinstance(estrutura, dict) and isinstance(estrutura.get("dias"), list):
             conteudo_treino["dias"] = estrutura["dias"]
+        _sub = estado.get("substituir_modalidade")
+        if _sub:
+            _antigos = treino_service.planos_da_modalidade(user.id, _sub, db)
+            treino_service.apagar_treinos(user.id, [t.id for t in _antigos], db)
         db.add(Treino(user_id=user.id, conteudo=conteudo_treino))
         conversa.estado_pendente = None
         db.add(conversa)
@@ -2430,6 +2447,7 @@ async def _gerar_treino_de_dados(
     user: Usuario,
     conversa: Conversa,
     db: Session,
+    confirmado: bool = False,
 ) -> str:
     primeiro_nome = (user.nome or "").split()[0] if user.nome else None
 
@@ -2505,6 +2523,32 @@ async def _gerar_treino_de_dados(
     tempo_p   = (dados.get("tempo_sessao") or "").strip()[:20] or None
     lesoes_p  = dados.get("lesoes") or None  # TEXT — sem limite de tamanho
 
+    # P1/P2: 1 plano por modalidade — se ja existe um da mesma, pergunta substituir
+    modalidade = tipo_p
+    if not confirmado and modalidade:
+        existentes = treino_service.planos_da_modalidade(user.id, modalidade, db)
+        if existentes:
+            antigo = existentes[-1]
+            dias_desde = (datetime.utcnow() - antigo.criado_em).days if antigo.criado_em else 0
+            nome_mod = tipo_map.get(dados.get("tipo_treino") or "", modalidade)
+            aviso_90 = ""
+            if dias_desde < 90:
+                aviso_90 = f" Você começou o atual há {dias_desde} dia(s) — o ideal é manter o mesmo plano por pelo menos 90 dias pra ver evolução."
+            conversa.estado_pendente = {
+                "tipo": "criando_treino",
+                "fase": "confirmando_substituicao",
+                "dados": dados,
+                "criado_em": datetime.utcnow().isoformat(),
+            }
+            db.add(conversa)
+            db.commit()
+            return (
+                f"Você já tem um plano de *{nome_mod}*. Só dá pra ter *1 plano por modalidade* — todos os treinos dessa modalidade ficam juntos num plano só.{aviso_90}\n\n"
+                "Quer criar um novo? Ele vai *substituir* o atual.\n\n"
+                "1️⃣ SIM, substituir\n"
+                "2️⃣ NÃO, manter o atual"
+            )
+
     nome_str = f" para {primeiro_nome}" if primeiro_nome else ""
     prompt = (
         f"Crie um treino personalizado{nome_str} com os seguintes dados coletados:\n\n"
@@ -2570,6 +2614,7 @@ async def _gerar_treino_de_dados(
         "texto_gerado": reply,
         "estrutura": estrutura,
         "modalidade": tipo_p,
+        "substituir_modalidade": tipo_p if confirmado else None,
         "criado_em": datetime.utcnow().isoformat(),
     }
     db.add(conversa)
