@@ -1864,24 +1864,67 @@ def _process_tool_cadastrar_dieta(tool_input: dict, user: Usuario, db: Session) 
     )
 
 
-async def _process_tool_cadastrar_treino(tool_input: dict, user: Usuario, db: Session) -> str:
-    texto_original = tool_input["texto_original"]
+# Modalidades de treino — fonte unica compartilhada (criar do zero + importar)
+MODALIDADE_MAP = {
+    "1": "Musculação (academia)", "2": "Calistenia", "3": "Yoga",
+    "4": "Pilates", "5": "Corrida / endurance", "6": "Treino híbrido",
+    "7": "Treino funcional", "8": "CrossFit", "9": "Mobilidade",
+}
+MODALIDADE_CANON = {
+    "1": "musculacao", "2": "calistenia", "3": "yoga",
+    "4": "pilates",    "5": "corrida",    "6": "hibrido",
+    "7": "funcional",  "8": "crossfit",   "9": "mobilidade",
+}
+
+
+def _finalizar_importacao(user: Usuario, estado: dict, modalidade: str, db: Session, substituir: bool) -> None:
+    """Salva o plano importado gravando a modalidade no conteudo. Se substituir=True,
+    apaga os planos antigos da mesma modalidade no MESMO ciclo — o commit é do chamador,
+    entao a troca e atomica (nunca fica sem plano se o save falhar)."""
+    if substituir:
+        antigos = treino_service.planos_da_modalidade(user.id, modalidade, db)
+        treino_service.apagar_treinos(user.id, [t.id for t in antigos], db)
     treino = treino_service.cadastrar_treino_proprio(
         user_id=user.id,
-        nome=tool_input["nome_treino"],
-        texto=texto_original,
+        nome=estado.get("nome") or "Plano importado",
+        texto=estado.get("texto") or "",
         db=db,
-        exercicios=tool_input.get("exercicios_extraidos", ""),
+        exercicios=estado.get("exercicios") or "",
     )
+    novo = dict(treino.conteudo)
+    novo["modalidade"] = modalidade
+    if estado.get("dias"):
+        novo["dias"] = estado["dias"]
+    treino.conteudo = novo
+    db.flush()
+
+
+async def _process_tool_cadastrar_treino(tool_input: dict, user: Usuario, conversa: Conversa, db: Session) -> str:
+    texto_original = tool_input["texto_original"]
+    nome_treino = tool_input["nome_treino"]
+    exercicios = tool_input.get("exercicios_extraidos", "")
     estrutura = await extrair_estrutura_treino(texto_original, client)
-    if estrutura and isinstance(estrutura.get("dias"), list) and len(estrutura["dias"]) > 0:
-        novo_conteudo = dict(treino.conteudo)
-        novo_conteudo["dias"] = estrutura["dias"]
-        treino.conteudo = novo_conteudo
-        db.flush()
+    dias = (
+        estrutura["dias"]
+        if estrutura and isinstance(estrutura.get("dias"), list) and len(estrutura["dias"]) > 0
+        else None
+    )
+    # Nao salva ainda: 1 plano por modalidade — pergunta a modalidade antes de gravar
+    conversa.estado_pendente = {
+        "tipo": "importando_modalidade",
+        "nome": nome_treino,
+        "texto": texto_original,
+        "exercicios": exercicios,
+        "dias": dias,
+        "criado_em": datetime.utcnow().isoformat(),
+    }
+    db.add(conversa)
+    lista = "\n".join(f"{k}. {v}" for k, v in MODALIDADE_MAP.items())
     return (
-        f"TREINO_CADASTRADO: '{tool_input['nome_treino']}' registrado com sucesso. "
-        "Confirme e informe que pode reportar cargas normalmente para acompanhar evolução e 1RM."
+        "IMPORTACAO_PENDENTE_MODALIDADE: NAO confirme o cadastro ainda. "
+        "Pergunte ao usuario qual a modalidade desse plano, apresentando EXATAMENTE esta lista "
+        "numerada e pedindo que ele responda apenas com o numero:\n\n"
+        f"Qual a modalidade desse plano? Responda com o número:\n{lista}"
     )
 
 
@@ -2452,11 +2495,7 @@ async def _gerar_treino_de_dados(
     primeiro_nome = (user.nome or "").split()[0] if user.nome else None
 
     # Maps descritivos — usados APENAS no prompt (Claude e cliente veem texto longo)
-    tipo_map = {
-        "1": "Musculação (academia)", "2": "Calistenia", "3": "Yoga",
-        "4": "Pilates", "5": "Corrida / endurance", "6": "Treino híbrido",
-        "7": "Treino funcional", "8": "CrossFit", "9": "Mobilidade",
-    }
+    tipo_map = MODALIDADE_MAP
     local_map = {"1": "Academia", "2": "Em casa", "3": "Ao ar livre"}
     obj_map = {
         "1": "Ganhar massa muscular", "2": "Perder gordura",
@@ -2476,11 +2515,7 @@ async def _gerar_treino_de_dados(
     }
 
     # Maps canônicos — usados APENAS para salvar no perfil (dentro dos limites VARCHAR)
-    tipo_canon = {
-        "1": "musculacao", "2": "calistenia", "3": "yoga",
-        "4": "pilates",    "5": "corrida",    "6": "hibrido",
-        "7": "funcional",  "8": "crossfit",   "9": "mobilidade",
-    }
+    tipo_canon = MODALIDADE_CANON
     local_canon   = {"1": "academia",      "2": "casa",           "3": "ar_livre"}
     obj_canon     = {
         "1": "ganhar_massa", "2": "perder_gordura",
@@ -3189,6 +3224,77 @@ async def process_message(
                     "plano_id": plano.id if plano else None,
                     "criado_em": datetime.utcnow().isoformat(),
                 }
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
+    # Handler: importacao de plano externo — usuario escolhe a modalidade (P1/P2)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "importando_modalidade":
+        estado = conversa.estado_pendente
+        if _eh_comando_reservado(stripped_lower):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+            modalidade = MODALIDADE_CANON.get(stripped)
+            if stripped_lower == "cancelar":
+                conversa.estado_pendente = None
+                reply = "Beleza, cancelei a importação. Nada foi salvo."
+            elif not modalidade:
+                lista = "\n".join(f"{k}. {v}" for k, v in MODALIDADE_MAP.items())
+                reply = "Não entendi 🤔 Responde com o *número* da modalidade desse plano:\n" + lista
+            else:
+                nome_mod = MODALIDADE_MAP.get(stripped, modalidade)
+                existentes = treino_service.planos_da_modalidade(user.id, modalidade, db)
+                if existentes:
+                    antigo = existentes[-1]
+                    dias_desde = (datetime.utcnow() - antigo.criado_em).days if antigo.criado_em else 0
+                    aviso_90 = ""
+                    if dias_desde < 90:
+                        aviso_90 = f" Você começou o atual há {dias_desde} dia(s) — o ideal é manter o mesmo plano por pelo menos 90 dias pra ver evolução."
+                    conversa.estado_pendente = {**estado, "tipo": "importando_substituicao", "modalidade": modalidade}
+                    reply = (
+                        f"Você já tem um plano de *{nome_mod}*. Só dá pra ter *1 plano por modalidade* — todos os treinos dessa modalidade ficam juntos num plano só.{aviso_90}\n\n"
+                        "Quer importar esse novo? Ele vai *substituir* o atual.\n\n"
+                        "1️⃣ SIM, substituir\n"
+                        "2️⃣ NÃO, manter o atual"
+                    )
+                else:
+                    _finalizar_importacao(user, estado, modalidade, db, substituir=False)
+                    conversa.estado_pendente = None
+                    reply = f"Plano de *{nome_mod}* cadastrado! ✅ Agora é só registrar suas cargas normalmente que eu acompanho sua evolução e o 1RM. 💪"
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
+    # Handler: importacao — confirma substituicao do plano da mesma modalidade (P1/P2)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "importando_substituicao":
+        estado = conversa.estado_pendente
+        modalidade = estado.get("modalidade")
+        nome_mod = next((v for k, v in MODALIDADE_MAP.items() if MODALIDADE_CANON.get(k) == modalidade), modalidade)
+        if _eh_comando_reservado(stripped_lower):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            mensagens_tmp = list(conversa.mensagens or [])
+            resp = _normalizar_confirmacao(stripped)
+            if stripped == "1" or resp == "sim":
+                _finalizar_importacao(user, estado, modalidade, db, substituir=True)
+                conversa.estado_pendente = None
+                reply = f"Plano de *{nome_mod}* substituído! ✅ O anterior foi removido. Pode registrar suas cargas normalmente. 💪"
+            elif stripped == "2" or resp == "nao" or stripped_lower == "cancelar":
+                conversa.estado_pendente = None
+                reply = "Beleza, mantive seu plano atual. O plano importado foi descartado."
+            else:
+                reply = "Responda *1* (SIM, substituir) ou *2* (NÃO, descartar a importação)."
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
@@ -3976,7 +4082,7 @@ async def process_message(
                 elif block.name == "cadastrar_dieta_propria":
                     result = _process_tool_cadastrar_dieta(block.input, user, db)
                 elif block.name == "cadastrar_treino_proprio":
-                    result = await _process_tool_cadastrar_treino(block.input, user, db)
+                    result = await _process_tool_cadastrar_treino(block.input, user, conversa, db)
                 elif block.name == "iniciar_coleta_fotos_corpo":
                     if image_b64:
                         primeiro_nome = _process_tool_iniciar_coleta(
