@@ -1081,3 +1081,43 @@ C) GRANDE (imagem/card - sessao propria, pipeline gerar imagem + enviar via Meta
 D) PRODUTO/ANALISE:
   - Definir lista de modalidades disponiveis.
   - Analisar as skills de geracao de treino e dieta.
+
+[04/06 #9] MINI-ÉPICO GESTÃO DE PLANOS (P1/P2) — ENTREGUE, PENDENTE DE TESTE
+
+REGRA: 1 plano por modalidade. Modalidade = musculacao/calistenia/yoga/pilates/
+corrida/hibrido/funcional/crossfit/mobilidade (tipo_canon). Estrutura SEMPRE
+Plano→Treinos(dias): todos os treinos de uma modalidade ficam num plano só.
+
+COMPORTAMENTO:
+- Criar/importar de modalidade NOVA → cria direto.
+- Criar/importar de modalidade que JÁ tem plano → bot para e pergunta substituir
+  (1 SIM apaga o antigo e salva o novo / 2 NÃO mantém o atual e descarta).
+- Aviso 90 dias muda só o TOM: <90 dias reforça "ideal manter"; >90 não cobra.
+- Âncora 90 dias = plano mais antigo daquela modalidade (Treino.criado_em).
+
+ONDE FICA: modalidade gravada em Treino.conteudo["modalidade"] (JSON, sem migration).
+Planos criados ANTES do 1a ficam sem a tag → invisíveis ao gate (esperado/aceito).
+
+IMPLEMENTAÇÃO:
+- treino_service.planos_da_modalidade(user_id, modalidade, db) → planos reais da
+  modalidade (usa listar_treinos, checa conteudo["modalidade"]).
+- Fonte única de modalidades: MODALIDADE_MAP / MODALIDADE_CANON (claude_service,
+  nível de módulo). _gerar_treino_de_dados referencia elas (tipo_map/tipo_canon).
+- CRIAR DO ZERO (1a commit 6b09c0e + 1b): _gerar_treino_de_dados ganhou confirmado:bool.
+  Gate antes da chamada da IA. Estado criando_treino fase confirmando_substituicao.
+  Apaga antigo no save (fase nomeando_treino) se substituir_modalidade setado. Atômico.
+- IMPORTAR (Estágio 2, commit 5b0870a): _process_tool_cadastrar_treino NÃO salva na
+  hora — extrai dias, faz stash no estado importando_modalidade, devolve instrução
+  pra IA perguntar a modalidade (lista numerada, resposta = número). Handlers
+  determinísticos importando_modalidade / importando_substituicao em process_message.
+  Save real via helper _finalizar_importacao (apaga antigo + cadastrar_treino_proprio
+  + patch modalidade/dias, commit único do handler = atômico).
+
+PENDENTE DE TESTE (créditos Anthropic zerados em 04/06 — bot parou; ver lançamento).
+Validar no WhatsApp quando recarregar:
+1. GERADO: criar musculação → criar outro musculação (aviso + SIM/NÃO) → criar corrida (direto).
+2. IMPORTADO: colar plano → bot pergunta modalidade → número → se conflito, substituir SIM/NÃO.
+Conferir /admin/users/1/treinos: 1 plano por modalidade, com tag modalidade no conteudo.
+
+PRÓXIMO: backlog A (prompt/correções) → B (fluxo) → C (card imagem) → D (produto);
+lançamento (Kiwify, OPENAI_API_KEY/Whisper, upgrade Render, teste compra, alerta saldo Anthropic).
