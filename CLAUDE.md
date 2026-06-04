@@ -1057,3 +1057,27 @@ RESTANTE / PROXIMOS:
 - Detalhes: jump/pontual disparam so com nome+serie (regra nome+carga); a serie digitada pra referenciar e DESCARTADA no SIM do jump (loga normal depois).
 
 RESTAM (fora do epico de treino): mini-epico gestao de planos (P1 adesao 90 dias, P2 1 plano por modalidade - provavel migration) e o bloco de LANCAMENTO (Kiwify tokens/links, OPENAI/Whisper, upgrade Render, teste compra ponta-a-ponta, alerta saldo Anthropic).
+
+[02/06 #8] BACKLOG (anotado).
+
+P1/P2 PLANOS (EM ANDAMENTO - decisoes travadas):
+- Ao criar plano, bot PERGUNTA a modalidade (musculacao, corrida, crossfit, yoga...).
+- Modalidade nova -> cria normal. Ja tem plano dessa modalidade -> msg de adesao (manter >=90 dias do 1o plano DAQUELA modalidade); se insistir -> SUBSTITUI o existente.
+- Ancora 90 dias = 1o plano de cada modalidade. P1 dispara so ao pedir criar plano de modalidade que JA tem.
+- 1 por modalidade (varios planos ok, 1 por modalidade). Modalidade provavelmente no Treino.conteudo (JSON) p/ evitar migration.
+
+OUTRAS PENDENCIAS (ordem sugerida A->B->C, D no meio):
+A) RAPIDOS (prompt/correcao):
+  - Parar de direcionar cliente p/ app/site/plataforma (NAO existe - so WhatsApp).
+  - NUNCA indicar remedio/hormonio; se pedirem -> "procure um medico, a Evolution nao faz isso". (seguranca)
+  - Historico de refeicoes POR DIA (00:01-23:59), completo. Hoje junta tudo num dia so (bug de data).
+B) MEDIOS (fluxo):
+  - Dieta UNICA por cliente (criar nova apaga a anterior).
+  - Comando "limpar meus dados": apaga tudo registrado, EXCETO itens nao-editaveis do perfil. (destrutivo -> confirmacao dupla)
+  - Redesenho /menu: "gerar card" / "treinar" / "ver minhas refeicoes feitas" / "ver meu plano alimentar".
+C) GRANDE (imagem/card - sessao propria, pipeline gerar imagem + enviar via Meta):
+  - Card de fim de treino (IMAGEM): gasto calorico total, tempo de treino, kg total levantado, % evolucao (ou n° reps se sem evolucao positiva).
+  - Submenu "gerar card": 1 ultimo treino, 2 exercicio especifico, 3 treino especifico. (layout a definir)
+D) PRODUTO/ANALISE:
+  - Definir lista de modalidades disponiveis.
+  - Analisar as skills de geracao de treino e dieta.
