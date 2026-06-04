@@ -2254,6 +2254,7 @@ async def _handle_coleta_treino(
         conteudo_treino = {
             "texto": texto_gerado,
             "nome": nome,
+            "modalidade": estado.get("modalidade"),
             "gerado_em": datetime.utcnow().isoformat(),
         }
         estrutura = estado.get("estrutura")
@@ -2568,6 +2569,7 @@ async def _gerar_treino_de_dados(
         "fase": "nomeando_treino",
         "texto_gerado": reply,
         "estrutura": estrutura,
+        "modalidade": tipo_p,
         "criado_em": datetime.utcnow().isoformat(),
     }
     db.add(conversa)
