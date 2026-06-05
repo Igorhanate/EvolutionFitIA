@@ -1841,17 +1841,7 @@ def _process_tool_iniciar_coleta(
     return primeiro_nome  # usado para montar a mensagem de resposta no caller
 
 
-def _process_tool_cadastrar_dieta(tool_input: dict, user: Usuario, db: Session) -> str:
-    meta = nutricao_service.cadastrar_meta(
-        user_id=user.id,
-        nome=tool_input["nome_dieta"],
-        texto=tool_input.get("texto_original"),
-        calorias=tool_input["calorias_alvo"],
-        proteinas=tool_input.get("proteinas_alvo_g"),
-        carboidratos=tool_input.get("carboidratos_alvo_g"),
-        gorduras=tool_input.get("gorduras_alvo_g"),
-        db=db,
-    )
+def _dieta_resumo(meta) -> str:
     macros = []
     if meta.proteinas_alvo_g:
         macros.append(f"P:{meta.proteinas_alvo_g}g")
@@ -1859,10 +1849,56 @@ def _process_tool_cadastrar_dieta(tool_input: dict, user: Usuario, db: Session) 
         macros.append(f"C:{meta.carboidratos_alvo_g}g")
     if meta.gorduras_alvo_g:
         macros.append(f"G:{meta.gorduras_alvo_g}g")
+    return f"{meta.calorias_alvo} kcal/dia" + (f" | {' '.join(macros)}" if macros else "")
+
+
+def _salvar_dieta(user: Usuario, dados: dict, db: Session, substituir: bool) -> "MetaNutricional":
+    """Salva a dieta. Se substituir=True, apaga TODAS as anteriores do usuario
+    no mesmo ciclo — commit e do chamador, entao a troca e atomica."""
+    if substituir:
+        ids = [d.id for d in nutricao_service.listar_dietas(user.id, db)]
+        nutricao_service.apagar_dietas(user.id, ids, db)
+    return nutricao_service.cadastrar_meta(
+        user_id=user.id,
+        nome=dados["nome"],
+        texto=dados.get("texto"),
+        calorias=dados["calorias"],
+        proteinas=dados.get("proteinas"),
+        carboidratos=dados.get("carboidratos"),
+        gorduras=dados.get("gorduras"),
+        db=db,
+    )
+
+
+def _process_tool_cadastrar_dieta(tool_input: dict, user: Usuario, conversa: "Conversa", db: Session) -> str:
+    dados = {
+        "nome": tool_input["nome_dieta"],
+        "texto": tool_input.get("texto_original"),
+        "calorias": tool_input["calorias_alvo"],
+        "proteinas": tool_input.get("proteinas_alvo_g"),
+        "carboidratos": tool_input.get("carboidratos_alvo_g"),
+        "gorduras": tool_input.get("gorduras_alvo_g"),
+    }
+    existente = nutricao_service.get_meta_ativa(user.id, db)
+    if existente is not None:
+        conversa.estado_pendente = {
+            "tipo": "confirmando_dieta_substituicao",
+            "dieta": dados,
+            "criado_em": datetime.utcnow().isoformat(),
+        }
+        db.add(conversa)
+        return (
+            "DIETA_PENDENTE_SUBSTITUICAO: NAO cadastre ainda. O usuario ja tem uma dieta ativa "
+            f"('{existente.nome}', {existente.calorias_alvo} kcal/dia) e so pode ter 1 dieta por vez. "
+            "Pergunte se quer SUBSTITUIR pela nova (a anterior sera apagada), apresentando EXATAMENTE:\n\n"
+            "Você já tem uma dieta ativa. Só dá pra ter *1 dieta por vez*. Quer substituir pela nova?\n\n"
+            "1️⃣ SIM, substituir\n"
+            "2️⃣ NÃO, manter a atual"
+        )
+    meta = _salvar_dieta(user, dados, db, substituir=False)
     return (
-        f"DIETA_CADASTRADA: '{meta.nome}' com meta de {meta.calorias_alvo} kcal/dia"
-        + (f" | {' '.join(macros)}" if macros else "")
-        + ". Confirme o cadastro e informe que o balanço diário aparecerá nas análises de foto."
+        f"DIETA_CADASTRADA: '{meta.nome}' com meta de {_dieta_resumo(meta)}"
+        ". Confirme o cadastro e informe que o balanço diário aparecerá nas análises de foto."
     )
 
 
@@ -3233,6 +3269,32 @@ async def process_message(
             db.commit()
             return reply
 
+    # Handler: 1 dieta por cliente — confirma substituicao da dieta ativa (backlog B)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "confirmando_dieta_substituicao":
+        estado = conversa.estado_pendente
+        if _eh_comando_reservado(stripped_lower):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+            resp = _normalizar_confirmacao(stripped)
+            if stripped == "1" or resp == "sim":
+                meta = _salvar_dieta(user, estado.get("dieta", {}), db, substituir=True)
+                conversa.estado_pendente = None
+                reply = f"Dieta *{meta.nome}* cadastrada! ✅ Meta: {_dieta_resumo(meta)}. A anterior foi removida — o balanço diário já usa essa."
+            elif stripped == "2" or resp == "nao" or stripped_lower == "cancelar":
+                conversa.estado_pendente = None
+                reply = "Beleza, mantive sua dieta atual. A nova foi descartada."
+            else:
+                reply = "Responda *1* (SIM, substituir) ou *2* (NÃO, manter a atual)."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
     # Handler: importacao de plano externo — usuario escolhe a modalidade (P1/P2)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "importando_modalidade":
         estado = conversa.estado_pendente
@@ -4082,7 +4144,7 @@ async def process_message(
                 elif block.name == "analisar_refeicao":
                     result = _process_tool_refeicao(block.input, conversa, user, db)
                 elif block.name == "cadastrar_dieta_propria":
-                    result = _process_tool_cadastrar_dieta(block.input, user, db)
+                    result = _process_tool_cadastrar_dieta(block.input, user, conversa, db)
                 elif block.name == "cadastrar_treino_proprio":
                     result = await _process_tool_cadastrar_treino(block.input, user, conversa, db)
                 elif block.name == "iniciar_coleta_fotos_corpo":
