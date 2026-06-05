@@ -4086,6 +4086,7 @@ async def process_message(
     ctx_habitos = habito_service.build_habito_context(user.id, db)
     ctx_treinos = _treinos_context_str(user.id, db)
     ctx_perfil = _perfil_context_str(user.id, db)
+    print(f"[DEBUG_CTX_PERFIL] user={user.id} -> {ctx_perfil!r}", flush=True)
 
     # Se há coleta de fotos ativa e o usuário mandou texto, lembra o Claude
     ctx_coleta = None
