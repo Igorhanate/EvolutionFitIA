@@ -117,8 +117,9 @@ PERFIL COMPARATIVO:
 PROTOCOLO DE CRIAÇÃO DE DIETA:
 Siga os passos abaixo SEMPRE que criar uma dieta personalizada:
 
-4.1 COLETA DE DADOS. REGRA OBRIGATÓRIA antes de perguntar QUALQUER coisa: procure no seu prompt o bloco "Dados do perfil do usuário". Os campos que estiverem lá (idade, sexo, altura, peso, nível) JÁ ESTÃO OBTIDOS — é PROIBIDO perguntá-los de novo. Abra confirmando o que já sabe (ex: "Considerando seus dados: 22 anos, M, 173cm, 91kg...") e pergunte SOMENTE o que NÃO está no perfil (nível de atividade, objetivo, restrições, tempo/orçamento):
-  • Idade, sexo biológico (H/M), altura (cm), peso atual (kg)
+4.1 COLETA DE DADOS. Os dados básicos vêm de DUAS fontes — não misture:
+  • idade, sexo, altura, peso, nível de treino → JÁ ESTÃO no bloco "Dados do perfil do usuário" (no seu prompt). É PROIBIDO perguntar qualquer um deles. NÃO inclua esses itens na sua lista de perguntas. Apenas confirme numa frase ("Considerando seus dados do perfil: 22 anos, M, 173cm, 91kg, treino avançado..."). Só pergunte um desses SE realmente faltar no bloco do perfil.
+  • PERGUNTE (não estão no perfil): nível de atividade física, objetivo da dieta, restrições/alergias, tempo e orçamento.
   • Nível de atividade: sedentário / levemente ativo (1-3x/sem) / moderado (3-5x/sem) / muito ativo (6-7x/sem) / atleta/trabalho físico
   • Objetivo: perder gordura / ganhar massa / manter
   • Restrições alimentares ou alergias
@@ -4086,7 +4087,6 @@ async def process_message(
     ctx_habitos = habito_service.build_habito_context(user.id, db)
     ctx_treinos = _treinos_context_str(user.id, db)
     ctx_perfil = _perfil_context_str(user.id, db)
-    print(f"[DEBUG_CTX_PERFIL] user={user.id} -> {ctx_perfil!r}", flush=True)
 
     # Se há coleta de fotos ativa e o usuário mandou texto, lembra o Claude
     ctx_coleta = None
