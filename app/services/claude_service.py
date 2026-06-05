@@ -117,7 +117,7 @@ PERFIL COMPARATIVO:
 PROTOCOLO DE CRIAÇÃO DE DIETA:
 Siga os passos abaixo SEMPRE que criar uma dieta personalizada:
 
-4.1 COLETA DE DADOS — Pergunte antes de calcular:
+4.1 COLETA DE DADOS — Pergunte antes de calcular. IMPORTANTE: se algum desses dados já aparecer no "[Contexto automático do sistema]" (Dados do perfil do usuário), NÃO pergunte de novo — use o valor que já está lá e diga que está considerando o que já sabe. Pergunte SÓ o que estiver faltando:
   • Idade, sexo biológico (H/M), altura (cm), peso atual (kg)
   • Nível de atividade: sedentário / levemente ativo (1-3x/sem) / moderado (3-5x/sem) / muito ativo (6-7x/sem) / atleta/trabalho físico
   • Objetivo: perder gordura / ganhar massa / manter
@@ -1839,6 +1839,32 @@ def _process_tool_iniciar_coleta(
     }
     primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
     return primeiro_nome  # usado para montar a mensagem de resposta no caller
+
+
+def _perfil_context_str(user_id: int, db: Session) -> str | None:
+    """Dados básicos do perfil pro contexto — pra IA reaproveitar e não reperguntar."""
+    perfil = perfil_service.get_or_create_perfil(user_id, db)
+    campos = []
+    if perfil.sexo:
+        campos.append(f"sexo={perfil.sexo}")
+    if perfil.data_nascimento:
+        idade = perfil_service.calcular_idade(perfil.data_nascimento)
+        if idade:
+            campos.append(f"idade={idade} anos")
+    if perfil.altura_cm:
+        campos.append(f"altura={perfil.altura_cm}cm")
+    if perfil.peso_kg:
+        campos.append(f"peso={float(perfil.peso_kg)}kg")
+    if perfil.nivel_experiencia:
+        campos.append(f"nível de treino={perfil.nivel_experiencia}")
+    if not campos:
+        return None
+    return (
+        "Dados do perfil do usuário (JÁ CADASTRADOS — reutilize, NÃO pergunte de novo): "
+        + ", ".join(campos)
+        + ". Obs: 'nível de treino' é experiência (iniciante/intermediário/avançado), "
+        "diferente do 'nível de atividade' usado no cálculo da dieta."
+    )
 
 
 def _dieta_resumo(meta) -> str:
@@ -4059,6 +4085,7 @@ async def process_message(
     ctx_nutricao = nutricao_service.build_nutricao_context(user.id, db)
     ctx_habitos = habito_service.build_habito_context(user.id, db)
     ctx_treinos = _treinos_context_str(user.id, db)
+    ctx_perfil = _perfil_context_str(user.id, db)
 
     # Se há coleta de fotos ativa e o usuário mandou texto, lembra o Claude
     ctx_coleta = None
@@ -4072,7 +4099,7 @@ async def process_message(
                 "Responda a mensagem de texto normalmente, mas ao final lembre de aguardar a próxima foto."
             )
 
-    partes_ctx = [p for p in [ctx_sessao, ctx_nutricao, ctx_habitos, ctx_treinos, ctx_confirmacao, ctx_coleta] if p]
+    partes_ctx = [p for p in [ctx_perfil, ctx_sessao, ctx_nutricao, ctx_habitos, ctx_treinos, ctx_confirmacao, ctx_coleta] if p]
     if partes_ctx:
         injecao = "\n\n".join(partes_ctx)
         history = [
