@@ -1121,3 +1121,44 @@ Conferir /admin/users/1/treinos: 1 plano por modalidade, com tag modalidade no c
 
 PRÓXIMO: backlog A (prompt/correções) → B (fluxo) → C (card imagem) → D (produto);
 lançamento (Kiwify, OPENAI_API_KEY/Whisper, upgrade Render, teste compra, alerta saldo Anthropic).
+
+[04/06 #10] BACKLOG A + B(dieta unica) + BUG PERFIL (ABERTO)
+
+ENTREGUE E NO AR:
+- A(a)/A(b) (commit 66c13ab, testado OK) — SYSTEM_PROMPT: bot so funciona no WhatsApp
+  (nunca manda pra app/site/painel/area do aluno); nunca indica remedio/hormonio/TRT/ciclos
+  -> encaminha ao medico. Suplementos do protocolo (whey/creatina/D/omega-3) seguem liberados.
+- B: DIETA UNICA POR CLIENTE (commit 203296a) — modelo da dieta = MetaNutricional.
+  cadastrar_meta ja desativava antigas; agora o gate APAGA. Choke point unico =
+  _process_tool_cadastrar_dieta: se get_meta_ativa existe, NAO salva -> stash em estado
+  confirmando_dieta_substituicao + pergunta (1 SIM substitui apagando a anterior / 2 NAO mantem).
+  Helpers _salvar_dieta (listar_dietas+apagar_dietas+cadastrar_meta, commit do handler = atomico)
+  e _dieta_resumo. Handler deterministico em process_message. DEPLOYADO, teste no WhatsApp PENDENTE.
+
+EM OBSERVACAO:
+- A(c) historico de refeicoes "junta tudo num dia so": NAO reproduzivel. Banco correto
+  (admin /users/1/refeicoes: data_refeicao certos, 22/05 x 27/05 separados). RegistroRefeicao
+  grava data_refeicao=date.today() (UTC no Render) — so erraria refeicao registrada apos 21h BRT.
+  Re-testar; se reaparecer, capturar msg do bot + datas reais + curl /refeicoes. OBS: mesmo
+  date.today()-UTC afeta medidas (linha 2827) e sessao_data de treino (2857) — follow-up.
+
+ABERTO — PRIORIDADE Nº1 PROXIMA SESSAO: PERFIL NAO REAPROVEITADO NA DIETA.
+- Perfil ESTA salvo (admin /users/1/perfil: M, nasc 2003-10-03, 173cm, 91kg, avancado), mas o
+  bot repergunta idade/sexo/altura/peso ao criar dieta.
+- FALHARAM: commit 2392fdc (_perfil_context_str injeta perfil no [Contexto automatico] + nota no
+  PROTOCOLO 4.1) e commit b598b88 (perfil movido pro SYSTEM PROMPT + regra 4.1 OBRIGATORIA).
+  Mesmo no system prompt o bot ignora -> improvavel pra modelo capaz, aponta pra ctx_perfil VAZIO.
+- HIPOTESE FORTE: Igor testou de um numero que NAO e user_id=1 (user de teste sem perfil ->
+  ctx_perfil=None -> bot pergunta certo). CONFIRMAR de qual numero testar.
+- PROXIMO PASSO (antes de codar): adicionar log temporario apos ctx_perfil em process_message:
+  print(f"[DEBUG_CTX_PERFIL] user={user.id} -> {ctx_perfil!r}", flush=True)
+  deployar, confirmar deploy LIVE no Render, pedir dieta, ler a linha no log do Render.
+  user!=1 -> testar do numero certo. user=1 -> None -> bug na montagem. user=1 -> 'Dados...' ->
+  modelo ignora -> plano B deterministico (pre-preencher idade/sexo/altura/peso, IA coleta o resto).
+- Infra (ref): perfil_service.get_or_create_perfil e calcular_idade OK; _perfil_context_str e
+  injecao no system_with_cache de process_message ja estao no codigo (HEAD b598b88, SEM debug).
+
+BACKLOG RESTANTE: B — "limpar meus dados" (destrutivo, confirmacao dupla); redesenho /menu;
+adicionar treino(dia) a plano existente sem substituir. C — card de fim de treino (imagem).
+D — lista de modalidades (MODALIDADE_MAP ja e base) / analisar skills. LANCAMENTO — Kiwify,
+OPENAI_API_KEY/Whisper, upgrade Render, teste compra, alerta/auto-reload saldo Anthropic.
