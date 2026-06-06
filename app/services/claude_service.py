@@ -1948,21 +1948,13 @@ async def _iniciar_coleta_dieta(user: Usuario, conversa: Conversa, db: Session) 
     if perfil.peso_kg:   base.append(f"{float(perfil.peso_kg)}kg")
     else:                faltando.append("peso (kg)")
 
-    _falta = perfil_service.faltam_medidas_ou_fotos(user.id, db)
-    extras = []
-    if _falta["medidas"]:
-        extras.append("• Suas *medidas corporais* atuais (cintura, quadril, braço...)")
-    if _falta["fotos"]:
-        extras.append("• Uma *análise de composição corporal por foto* (opção *9* do menu)")
-    if extras:
-        precisao = (
-            "\n\n📏 *Para uma dieta muito mais precisa* (opcional, mas faz diferença real):\n"
-            + "\n".join(extras)
-            + "\n\n_Quanto mais eu souber do seu corpo hoje, mais certeiro fica o cálculo de "
-            "calorias e macros — não é obrigatório, mas recomendo bastante pra você ter o melhor resultado._ 💪"
-        )
-    else:
-        precisao = ""
+    precisao = (
+        "\n\n📏 *Para uma dieta muito mais precisa* (opcional, mas faz diferença real):\n"
+        "• Suas *medidas corporais* atuais (cintura, quadril, braço...)\n"
+        "• Uma *análise de composição corporal por foto* (opção *9* do menu)\n"
+        "\n_Quanto mais eu souber do seu corpo hoje, mais certeiro fica o cálculo de "
+        "calorias e macros — não é obrigatório, mas recomendo bastante pra você ter o melhor resultado._ 💪"
+    )
 
     conversa.estado_pendente = {
         "tipo": "criando_dieta",
