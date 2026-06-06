@@ -2106,6 +2106,111 @@ async def _handle_coleta_dieta(conversa: Conversa, message_text: str, user: Usua
     )
 
 
+async def _handle_cadastro_dieta_externa(conversa: Conversa, message_text: str, user: Usuario, db: Session) -> str:
+    """Cadastra uma dieta PRONTA (do nutricionista) enviada via menu 6. Extrai os totais
+    e salva pelo gate de dieta unica. NAO pergunta cadastrar-vs-criar (intencao ja e clara)."""
+    texto_dieta = (message_text or "").strip()
+    if len(texto_dieta) < 15:
+        return (
+            "Não consegui ler a dieta. Me manda o *texto da dieta* (refeições, alimentos, "
+            "quantidades e/ou as metas de calorias e macros) que eu cadastro. 🥗"
+        )
+
+    prompt = (
+        "O usuário enviou esta DIETA JÁ PRONTA (de nutricionista/profissional) para CADASTRAR. "
+        "NÃO crie uma dieta nova e NÃO pergunte se ele quer criar — ele já escolheu cadastrar esta. "
+        "Sua tarefa é só extrair os totais diários.\n\n"
+        f"Dieta enviada:\n{texto_dieta}\n\n"
+        "Responda EXATAMENTE com este bloco (só números; se algum macro não estiver claro, estime "
+        "a partir das refeições):\n"
+        "###META###\n"
+        '{"kcal": 0, "prot": 0, "carb": 0, "gord": 0}\n'
+        "###FIM###"
+    )
+
+    system_with_cache = [
+        {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
+    ]
+
+    try:
+        response = await client.messages.create(
+            model=settings.CLAUDE_MODEL,
+            max_tokens=600,
+            system=system_with_cache,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        reply = next((b.text for b in response.content if hasattr(b, "text")), "")
+    except anthropic.APIError as e:
+        logger.error("cadastro_dieta_externa_error", extra={"user_id": user.id, "error": str(e)})
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return "Desculpe, tive um problema ao cadastrar sua dieta. Pode tentar de novo em instantes."
+
+    def _num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    kcal = prot = carb = gord = None
+    m = re.search(r"###META###\s*(\{.*?\})\s*###FIM###", reply, re.DOTALL)
+    if m:
+        try:
+            j = json.loads(m.group(1))
+            _k = _num(j.get("kcal"))
+            kcal = int(_k) if _k else None
+            prot = _num(j.get("prot"))
+            carb = _num(j.get("carb"))
+            gord = _num(j.get("gord"))
+        except (ValueError, TypeError):
+            pass
+
+    if not kcal:
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return (
+            "Não consegui identificar a *meta de calorias* nessa dieta. Me reenvia incluindo o "
+            "total diário de calorias (e macros, se tiver) que eu cadastro. 🥗"
+        )
+
+    dados = {
+        "nome": "Dieta (nutricionista)",
+        "texto": texto_dieta,
+        "calorias": kcal,
+        "proteinas": prot,
+        "carboidratos": carb,
+        "gorduras": gord,
+    }
+
+    existente = nutricao_service.get_meta_ativa(user.id, db)
+    if existente is not None:
+        conversa.estado_pendente = {
+            "tipo": "confirmando_dieta_substituicao",
+            "dieta": dados,
+            "criado_em": datetime.utcnow().isoformat(),
+        }
+        db.add(conversa)
+        db.commit()
+        return (
+            f"Peguei sua dieta: *{kcal} kcal/dia*.\n\n"
+            f"Mas você já tem uma dieta ativa (*{existente.nome}*, {existente.calorias_alvo} kcal/dia). "
+            "Só dá pra ter *1 dieta por vez*. Quer substituir pela nova?\n\n"
+            "1️⃣ SIM, substituir\n"
+            "2️⃣ NÃO, manter a atual"
+        )
+
+    meta = _salvar_dieta(user, dados, db, substituir=False)
+    conversa.estado_pendente = None
+    db.add(conversa)
+    db.commit()
+    return (
+        f"✅ Dieta cadastrada! Meta: {_dieta_resumo(meta)}. "
+        "O balanço diário já usa essa — é só mandar foto das refeições. 💪"
+    )
+
+
 # Modalidades de treino — fonte unica compartilhada (criar do zero + importar)
 MODALIDADE_MAP = {
     "1": "Musculação (academia)", "2": "Calistenia", "3": "Yoga",
@@ -2958,6 +3063,12 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
         return await _iniciar_coleta_dieta(user, conversa, db)
 
     if item == 6:  # Cadastrar dieta (do nutricionista)
+        conversa.estado_pendente = {
+            "tipo": "cadastrando_dieta_externa",
+            "criado_em": datetime.utcnow().isoformat(),
+        }
+        db.add(conversa)
+        db.commit()
         return (
             "Me manda a *dieta da sua nutricionista* e eu cadastro no sistema! 🥗\n\n"
             "Pode ser em qualquer formato: texto, cardápio semanal, metas de macros...\n\n"
@@ -4185,6 +4296,21 @@ async def process_message(
             db.flush()
         else:
             reply = await _handle_coleta_dieta(conversa, message_text, user, db)
+            mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+            mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens
+            db.add(conversa)
+            db.commit()
+            return reply
+
+    # 3.45 Cadastro de dieta externa (menu 6) — intercepta antes do fluxo geral
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "cadastrando_dieta_externa":
+        if _eh_comando_reservado((message_text or "").strip().lower()):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            reply = await _handle_cadastro_dieta_externa(conversa, message_text, user, db)
             mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
             mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens
