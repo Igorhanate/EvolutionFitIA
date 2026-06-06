@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 from datetime import date, datetime
@@ -1929,6 +1930,184 @@ def _process_tool_cadastrar_dieta(tool_input: dict, user: Usuario, conversa: "Co
     )
 
 
+async def _iniciar_coleta_dieta(user: Usuario, conversa: Conversa, db: Session) -> str:
+    """Inicia a criacao de dieta de forma deterministica: pre-preenche o perfil
+    (fonte unica = perfil_service) e NUNCA repergunta idade/sexo/altura/peso."""
+    primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
+    perfil = perfil_service.get_or_create_perfil(user.id, db)
+
+    base = []
+    faltando = []
+    idade = perfil_service.calcular_idade(perfil.data_nascimento) if perfil.data_nascimento else None
+    if perfil.sexo:      base.append(f"sexo {perfil.sexo}")
+    else:                faltando.append("sexo (H/M)")
+    if idade:            base.append(f"{idade} anos")
+    else:                faltando.append("idade")
+    if perfil.altura_cm: base.append(f"{perfil.altura_cm}cm")
+    else:                faltando.append("altura (cm)")
+    if perfil.peso_kg:   base.append(f"{float(perfil.peso_kg)}kg")
+    else:                faltando.append("peso (kg)")
+
+    _falta = perfil_service.faltam_medidas_ou_fotos(user.id, db)
+    if _falta["medidas"] and _falta["fotos"]:
+        aviso = "📝 _Você ainda não enviou medidas nem fotos — opcional, mas calibra melhor o cálculo._\n\n"
+    elif _falta["medidas"]:
+        aviso = "📝 _Você ainda não enviou medidas corporais — opcional, mas ajuda a calibrar._\n\n"
+    elif _falta["fotos"]:
+        aviso = "📝 _Você ainda não enviou fotos pra análise — opcional, mas ajuda a calibrar._\n\n"
+    else:
+        aviso = ""
+
+    conversa.estado_pendente = {
+        "tipo": "criando_dieta",
+        "fase": "coletando",
+        "criado_em": datetime.utcnow().isoformat(),
+    }
+    db.add(conversa)
+    db.commit()
+
+    base_str = ("Tenho seus dados salvos: " + ", ".join(base) + ".\n\n") if base else ""
+    pedir = []
+    if faltando:
+        pedir.append("• Dados que ainda faltam: " + ", ".join(faltando))
+    pedir.append("• *Nível de atividade*: sedentário / leve (1-3x/sem) / moderado (3-5x/sem) / intenso (6-7x/sem)")
+    pedir.append("• *Objetivo*: perder gordura / ganhar massa / manter")
+    pedir.append("• *Restrições* ou alergias (ou 'nenhuma')")
+
+    return (
+        aviso
+        + f"Bora montar sua dieta, {primeiro_nome}! 🥗\n\n"
+        + base_str
+        + "Me responde tudo numa mensagem só:\n"
+        + "\n".join(pedir)
+    )
+
+
+async def _handle_coleta_dieta(conversa: Conversa, message_text: str, user: Usuario, db: Session) -> str:
+    """Recebe as respostas, gera a dieta numa chamada 'gerar-agora-sem-perguntar'
+    (perfil embutido) e salva pelo gate de dieta unica."""
+    primeiro_nome = (user.nome or "").split()[0] if user.nome else None
+
+    # Fonte unica do perfil — embute pra IA NAO reperguntar idade/sexo/altura/peso
+    perfil_str = _perfil_context_str(user.id, db) or "Perfil basico ainda nao cadastrado."
+
+    prompt = (
+        "Monte uma DIETA personalizada para o usuário com base em:\n\n"
+        f"{perfil_str}\n\n"
+        "Respostas do usuário (nível de atividade / objetivo / restrições e o que mais disse):\n"
+        f"{message_text}\n\n"
+        "Gere a dieta completa AGORA seguindo seu protocolo de criação de dieta — plano alimentar "
+        "com refeições, alimentos, quantidades e o total diário de calorias e macros. "
+        "NÃO pergunte nada: todos os dados já estão acima; se algo não foi informado, assuma um valor "
+        "razoável e siga.\n\n"
+        "Ao FINAL da resposta, acrescente EXATAMENTE este bloco com os totais diários (só números):\n"
+        "###META###\n"
+        '{"kcal": 0, "prot": 0, "carb": 0, "gord": 0}\n'
+        "###FIM###"
+    )
+
+    system_with_cache = [
+        {
+            "type": "text",
+            "text": SYSTEM_PROMPT + (f"\n\nNome do usuário: {primeiro_nome}" if primeiro_nome else ""),
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+    try:
+        response = await client.messages.create(
+            model=settings.CLAUDE_MODEL,
+            max_tokens=2500,
+            system=system_with_cache,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        reply = next((b.text for b in response.content if hasattr(b, "text")), "")
+    except anthropic.APIError as e:
+        logger.error("gerar_dieta_error", extra={"user_id": user.id, "error": str(e)})
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return "Desculpe, tive um problema ao montar sua dieta. Pode tentar de novo em instantes."
+
+    if not reply.strip():
+        logger.error("gerar_dieta_reply_vazio", extra={"user_id": user.id})
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return "Desculpe, tive um problema ao montar sua dieta. Pode tentar de novo em instantes."
+
+    def _num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    kcal = prot = carb = gord = None
+    texto_exibido = reply
+    m = re.search(r"###META###\s*(\{.*?\})\s*###FIM###", reply, re.DOTALL)
+    if m:
+        texto_exibido = reply[:m.start()].rstrip()
+        try:
+            j = json.loads(m.group(1))
+            _k = _num(j.get("kcal"))
+            kcal = int(_k) if _k else None
+            prot = _num(j.get("prot"))
+            carb = _num(j.get("carb"))
+            gord = _num(j.get("gord"))
+        except (ValueError, TypeError):
+            pass
+
+    # Sem calorias nao da pra cadastrar a meta — entrega a dieta, mas nao ativa o balanco
+    if not kcal:
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return (
+            texto_exibido
+            + "\n\n---\n\n_(Não consegui calcular a meta de calorias automaticamente — "
+            "sua dieta está acima, mas o balanço diário não foi ativado.)_"
+        )
+
+    dados = {
+        "nome": "Dieta personalizada",
+        "texto": texto_exibido,
+        "calorias": kcal,
+        "proteinas": prot,
+        "carboidratos": carb,
+        "gorduras": gord,
+    }
+
+    # Gate de dieta unica — reusa o handler 'confirmando_dieta_substituicao' (linha ~3300)
+    existente = nutricao_service.get_meta_ativa(user.id, db)
+    if existente is not None:
+        conversa.estado_pendente = {
+            "tipo": "confirmando_dieta_substituicao",
+            "dieta": dados,
+            "criado_em": datetime.utcnow().isoformat(),
+        }
+        db.add(conversa)
+        db.commit()
+        return (
+            texto_exibido
+            + "\n\n---\n\n"
+            + f"Você já tem uma dieta ativa (*{existente.nome}*, {existente.calorias_alvo} kcal/dia). "
+            "Só dá pra ter *1 dieta por vez*. Quer substituir pela nova?\n\n"
+            "1️⃣ SIM, substituir\n"
+            "2️⃣ NÃO, manter a atual"
+        )
+
+    meta = _salvar_dieta(user, dados, db, substituir=False)
+    conversa.estado_pendente = None
+    db.add(conversa)
+    db.commit()
+    return (
+        texto_exibido
+        + "\n\n---\n\n"
+        + f"✅ Dieta salva! Meta: {_dieta_resumo(meta)}. O balanço diário já usa essa — "
+        "é só mandar foto das refeições. 💪"
+    )
+
+
 # Modalidades de treino — fonte unica compartilhada (criar do zero + importar)
 MODALIDADE_MAP = {
     "1": "Musculação (academia)", "2": "Calistenia", "3": "Yoga",
@@ -2778,29 +2957,7 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
 
     # 🥗 NUTRIÇÃO
     if item == 5:  # Criar dieta personalizada
-        _falta = perfil_service.faltam_medidas_ou_fotos(user.id, db)
-        if _falta["medidas"] and _falta["fotos"]:
-            _aviso = "📝 _Aviso: você ainda não enviou medidas corporais nem fotos pra análise. É opcional, mas ajuda a calibrar melhor. Pode enviar a qualquer momento._\n\n"
-        elif _falta["medidas"]:
-            _aviso = "📝 _Aviso: você ainda não enviou medidas corporais. É opcional, mas ajuda a calibrar melhor. Pode enviar a qualquer momento._\n\n"
-        elif _falta["fotos"]:
-            _aviso = "📝 _Aviso: você ainda não enviou fotos pra análise de composição corporal. É opcional, mas ajuda a calibrar melhor. Pode enviar a qualquer momento._\n\n"
-        else:
-            _aviso = ""
-        return (
-            _aviso
-            + f"Vamos criar sua dieta personalizada, {primeiro_nome}! 🥗\n\n"
-            "Preciso de alguns dados:\n"
-            "• *Idade*, *sexo* (H/M), *altura* (cm), *peso* (kg)\n"
-            "• *Nível de atividade*: sedentário / leve (1-3x/sem) / moderado (3-5x/sem) / intenso (6-7x/sem)\n"
-            "• *Objetivo*: perder gordura / ganhar massa / manter\n"
-            "• *Restrições alimentares* ou alergias?\n\n"
-            "📏 *Para uma dieta muito mais precisa* (opcional, mas faz diferença real):\n"
-            "• Suas *medidas corporais* atuais (cintura, quadril, braço...)\n"
-            "• Uma *análise de composição corporal por foto* (opção *9* do menu)\n\n"
-            "_Quanto mais eu souber do seu corpo hoje, mais certeiro fica o cálculo de calorias e macros — "
-            "não é obrigatório, mas recomendo bastante pra você ter o melhor resultado._ 💪"
-        )
+        return await _iniciar_coleta_dieta(user, conversa, db)
 
     if item == 6:  # Cadastrar dieta (do nutricionista)
         return (
@@ -4021,6 +4178,21 @@ async def process_message(
         db.add(conversa)
         db.commit()
         return reply
+
+    # 3.4 Coleta estruturada de dieta — intercepta antes do fluxo geral
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "criando_dieta":
+        if _eh_comando_reservado((message_text or "").strip().lower()):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            reply = await _handle_coleta_dieta(conversa, message_text, user, db)
+            mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+            mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens
+            db.add(conversa)
+            db.commit()
+            return reply
 
     # 3.5 Fluxo de exclusão de registro — intercepta antes do fluxo geral (não chama a IA)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "apagando_registro":
