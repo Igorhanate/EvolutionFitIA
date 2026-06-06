@@ -1162,3 +1162,16 @@ BACKLOG RESTANTE: B — "limpar meus dados" (destrutivo, confirmacao dupla); red
 adicionar treino(dia) a plano existente sem substituir. C — card de fim de treino (imagem).
 D — lista de modalidades (MODALIDADE_MAP ja e base) / analisar skills. LANCAMENTO — Kiwify,
 OPENAI_API_KEY/Whisper, upgrade Render, teste compra, alerta/auto-reload saldo Anthropic.
+
+[06/06 #11] DIETA — COLETA DETERMINISTICA NO MENU (item 5). BUG DO PERFIL REPERGUNTADO: FECHADO.
+PROBLEMA: ao criar dieta o bot reperguntava idade/sexo/altura/peso mesmo com perfil salvo. Causa dupla:
+  (a) menu item 5 era TEXTO FIXO hardcoded que sempre pedia tudo (nunca lia o perfil);
+  (b) texto livre "monta minha dieta" cai na IA, que ignorava as instrucoes de prompt pra reaproveitar o perfil (3 tentativas de prompt falharam — 2392fdc/b598b88/bfeaca7 — confirmado por log: o dado CHEGAVA no system prompt e o modelo perguntava mesmo assim).
+SOLUCAO (deterministica — tira as perguntas do controle da IA):
+  - menu item 5 -> _iniciar_coleta_dieta: le o perfil (FONTE UNICA = perfil_service.get_or_create_perfil), PRE-PREENCHE idade/sexo/altura/peso/nivel (NUNCA pergunta), pede so nivel de atividade / objetivo / restricoes numa msg. Seta estado "criando_dieta". No fim, recomendacao FIXA de medidas + analise por foto (opcao 9).
+  - resposta do usuario -> _handle_coleta_dieta: chamada a IA "gerar-agora-sem-perguntar" (molde do _gerar_treino_de_dados; perfil embutido via _perfil_context_str). O texto gerado termina com bloco ###META### {kcal,prot,carb,gord} ###FIM### que e parseado (regex+json) e removido do texto exibido. Salva pela GATE de dieta unica ja existente (tem dieta ativa -> estado confirmando_dieta_substituicao 1/2; senao -> _salvar_dieta).
+  - dispatch novo no process_message bloco "3.4" (logo apos o 3. criando_treino), com escape pra comando reservado (derivado de message_text, sem depender de var de escopo).
+FUNCOES NOVAS em app/services/claude_service.py: _iniciar_coleta_dieta, _handle_coleta_dieta (apos _process_tool_cadastrar_dieta).
+TEXTO LIVRE "monta minha dieta": continua na IA (best-effort, ajustes de prompt seguem la). Caminho OFICIAL e a prova de falha de dieta = MENU 5.
+PRINCIPIO (Igor): PERFIL = base unica de TODOS os servicos (sempre lido de perfil_service); servicos futuros leem dali e NAO reperguntam. ITER FUTURA: coleta de dieta gravar de volta no perfil os basicos coletados de usuario novo (hoje so pre-preenche pra perfil ja completo).
+COMMITS: 40f6d1f + cb00b57 + 2db39f7. HEAD = 2db39f7. TESTADO EM PRODUCAO (user_id=1): perfil NAO reperguntado, dieta gerada+salva, recomendacao OK. FECHADO.
