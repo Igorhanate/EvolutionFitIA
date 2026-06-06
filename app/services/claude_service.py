@@ -1949,14 +1949,20 @@ async def _iniciar_coleta_dieta(user: Usuario, conversa: Conversa, db: Session) 
     else:                faltando.append("peso (kg)")
 
     _falta = perfil_service.faltam_medidas_ou_fotos(user.id, db)
-    if _falta["medidas"] and _falta["fotos"]:
-        aviso = "📝 _Você ainda não enviou medidas nem fotos — opcional, mas calibra melhor o cálculo._\n\n"
-    elif _falta["medidas"]:
-        aviso = "📝 _Você ainda não enviou medidas corporais — opcional, mas ajuda a calibrar._\n\n"
-    elif _falta["fotos"]:
-        aviso = "📝 _Você ainda não enviou fotos pra análise — opcional, mas ajuda a calibrar._\n\n"
+    extras = []
+    if _falta["medidas"]:
+        extras.append("• Suas *medidas corporais* atuais (cintura, quadril, braço...)")
+    if _falta["fotos"]:
+        extras.append("• Uma *análise de composição corporal por foto* (opção *9* do menu)")
+    if extras:
+        precisao = (
+            "\n\n📏 *Para uma dieta muito mais precisa* (opcional, mas faz diferença real):\n"
+            + "\n".join(extras)
+            + "\n\n_Quanto mais eu souber do seu corpo hoje, mais certeiro fica o cálculo de "
+            "calorias e macros — não é obrigatório, mas recomendo bastante pra você ter o melhor resultado._ 💪"
+        )
     else:
-        aviso = ""
+        precisao = ""
 
     conversa.estado_pendente = {
         "tipo": "criando_dieta",
@@ -1975,11 +1981,11 @@ async def _iniciar_coleta_dieta(user: Usuario, conversa: Conversa, db: Session) 
     pedir.append("• *Restrições* ou alergias (ou 'nenhuma')")
 
     return (
-        aviso
-        + f"Bora montar sua dieta, {primeiro_nome}! 🥗\n\n"
+        f"Bora montar sua dieta, {primeiro_nome}! 🥗\n\n"
         + base_str
         + "Me responde tudo numa mensagem só:\n"
         + "\n".join(pedir)
+        + precisao
     )
 
 
