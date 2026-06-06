@@ -905,7 +905,8 @@ def _iniciar_exclusao_treino(user: Usuario, conversa: Conversa, db: Session) -> 
 
 
 def _iniciar_exclusao_dieta(user: Usuario, conversa: Conversa, db: Session) -> str:
-    """Lista as dietas do usuário e arma o estado de exclusão. Se vazia, não cria estado."""
+    """Apaga a dieta do usuário. Como só há 1 dieta por cliente, pula a escolha e vai
+    direto pra confirmação única."""
     dietas = nutricao_service.listar_dietas(user.id, db)
     if not dietas:
         return "Você ainda não tem nenhuma dieta cadastrada para apagar. 🙂"
@@ -915,19 +916,16 @@ def _iniciar_exclusao_dieta(user: Usuario, conversa: Conversa, db: Session) -> s
     conversa.estado_pendente = {
         "tipo": "apagando_registro",
         "alvo": "dieta",
-        "etapa": "aguardando_escolha",
-        "ids": ids,
-        "labels": labels,
+        "etapa": "aguardando_confirmacao",
+        "escolhido_ids": ids,
+        "escolhido_labels": labels,
+        "todos": True,
     }
-
-    linhas = ["Qual *dieta* você quer apagar? 🗑️\n"]
-    for i, label in enumerate(labels, start=1):
-        linhas.append(f"*{i}.* {label}")
-    linhas.append(
-        "\nResponda com o *número* (ou vários: ex. *1, 3*), *todas* para apagar todas, "
-        "ou *cancelar* para desistir."
+    lista_nominal = "\n".join(f"• {l}" for l in labels)
+    return (
+        f"Vou apagar a sua dieta:\n{lista_nominal}\n\n"
+        "Tem certeza? Responda *sim* para apagar ou *não* para cancelar."
     )
-    return "\n".join(linhas)
 
 
 def _iniciar_exclusao_suplemento(user: Usuario, conversa: Conversa, db: Session) -> str:
