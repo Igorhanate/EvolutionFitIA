@@ -1181,3 +1181,45 @@ FUNCOES NOVAS em app/services/claude_service.py: _iniciar_coleta_dieta, _handle_
 TEXTO LIVRE "monta minha dieta": continua na IA (best-effort, ajustes de prompt seguem la). Caminho OFICIAL e a prova de falha de dieta = MENU 5.
 PRINCIPIO (Igor): PERFIL = base unica de TODOS os servicos (sempre lido de perfil_service); servicos futuros leem dali e NAO reperguntam. ITER FUTURA: coleta de dieta gravar de volta no perfil os basicos coletados de usuario novo (hoje so pre-preenche pra perfil ja completo).
 COMMITS: 40f6d1f + cb00b57 + 2db39f7. HEAD = 2db39f7. TESTADO EM PRODUCAO (user_id=1): perfil NAO reperguntado, dieta gerada+salva, recomendacao OK. FECHADO.
+
+[07/06 #12] DIETA — MENU 6 DETERMINISTICO + EXCLUIR DIETA EM 1 PASSO. AMBOS NO AR.
+
+MENU 6 (cadastrar dieta externa). Igor colava plano + macros e a IA as vezes perguntava "cadastrar a sua, ou criar uma nova?", ou interpretava como pedido de criacao. Causa: caia no caminho de IA livre.
+SOLUCAO: item 6 do menu seta estado "cadastrando_dieta_externa". _handle_cadastro_dieta_externa extrai bloco ###META###{kcal,prot,carb,gord}###FIM### do texto colado (mesmo regex+json do menu 5) e salva pela GATE de dieta unica ja existente (apaga ativa se houver). Sem IA no caminho.
+COMMIT: 0ca6223. Dispatch bloco "3.45" em process_message. TESTADO OK.
+
+EXCLUIR DIETA. Como ja so existe 1 dieta por cliente, o bot perguntar "qual dieta?" e ruido. _iniciar_exclusao_dieta agora arma direto etapa "aguardando_confirmacao" (escolhido_ids/labels/todos com a unica ativa). _handle_apagar_registro confirma (sim -> apagar_dietas). 1 passo so.
+COMMIT: 6f7d00d. TESTADO OK.
+
+PRINCIPIO REAFIRMADO: TUDO QUE PODE SER DETERMINISTICO, FORA DA IA. Menu 5 (criar) + Menu 6 (cadastrar externo) + Excluir dieta — 3 fluxos de dieta agora deterministicos. So texto livre ("monta minha dieta", "apaga minha dieta") segue na IA como atalho.
+
+[07/06 #13] PERFIL — EPICO "LIMPAR MEUS DADOS" + ONBOARDING PULA CAMPOS JA PREENCHIDOS. NO AR.
+
+OBJETIVO: cliente quer "comecar do zero" sem perder conta/assinatura. Apaga ATIVIDADE; mantem IDENTIDADE.
+ESCOPO TRAVADO:
+- APAGA: Treino, MetaNutricional, RegistroExercicio, SessaoTreino, MedidaCorporal, FotoComposicao, RegistroRefeicao, HabitoDia, PerfilHabitos. Zera campos do perfil: peso_kg, nivel_experiencia, e treino-prefs (tipo_treino_padrao, local_treino_padrao, objetivo_padrao, dias_semana_padrao, tempo_sessao_padrao, horario_treino_padrao, lesoes). Reseta conversa.mensagens.
+- MANTEM: User (conta/assinatura/nome) + Perfil.sexo + data_nascimento + altura_cm (IDENTIDADE PERMANENTE, anti-compartilhamento de conta).
+APOS WIPE: o gate "perfil_minimo_completo" em process_message bloqueia tudo ate re-preencher peso_kg + nivel_experiencia.
+
+ETAPA 1a — ONBOARDING PULA O QUE JA TEM (entregue junto). _iniciar_cadastro_perfil pre-carrega dados do perfil existente (se identidade ja existe: seed nome/sexo/nascimento/altura; seed peso/nivel se existirem) e jump pra 1a fase faltante. _handle_cadastro_perfil, ao avancar, chama helper novo _pular_preenchidas(fase, dados) que retorna a 1a etapa de ETAPAS_CADASTRO_PERFIL cujo campo ainda nao esta em dados (None se todas preenchidas). Resultado: re-cadastro pos-wipe pede so peso + nivel; perfil totalmente novo segue coletando tudo.
+
+ETAPA 2 — WIPE. Novo perfil_service.limpar_dados_usuario(user_id, db) faz db.query(M).filter(user_id == user_id).delete() pra cada modelo + zera campos editaveis do perfil; flush; commit fica com o chamador. Em claude_service.py novo handler _handle_limpar_dados (logo apos _handle_apagar_registro): "APAGAR TUDO" -> limpar_dados_usuario + conversa.mensagens=[] (rollback + msg de erro em except) + _iniciar_cadastro_perfil (emenda direto o re-cadastro de peso/nivel); CANCELAR/NAO -> cancela; senao pede confirmar.
+
+GATILHO + DISPATCH (em process_message, logo apos o gate "0.5 Guard: perfil obrigatorio", bloco "0.6"): se estado_pendente == "confirmando_limpar_dados" -> _handle_limpar_dados. Se message_text.strip().lower() in {"limpar meus dados","apagar meus dados","apagar todos os meus dados","limpar tudo","resetar meus dados","zerar meus dados","limpar dados","apagar dados"} -> seta estado + manda aviso forte "Digite APAGAR TUDO ou CANCELAR".
+
+DESCOBERTAS DO RECON (foundation que ja existia, nao precisou criar):
+- Onboarding ja era deterministico: ETAPAS_CADASTRO_PERFIL state machine (confirmar_nome -> sexo -> data_nascimento -> altura_cm -> peso_kg -> nivel_experiencia -> oferta_extras).
+- Gate em process_message linha ~3186 intercepta ANTES de tudo: se estado=="cadastro_perfil" -> _handle_cadastro_perfil; se NOT perfil_minimo_completo -> _iniciar_cadastro_perfil. BLOQUEIA o uso enquanto perfil incompleto -> por isso pos-wipe vira gate-on automatico.
+- Tool de editar perfil (SYSTEM_PROMPT) so aceita peso_kg e nivel_experiencia desde sempre -> identidade ja imutavel pela IA, nao precisou mudar nada la.
+
+COMMIT: "feat(perfil): limpar meus dados + onboarding pula campos ja preenchidos". TESTADO OK em producao (user_id=1: apagou tudo, re-cadastro pediu so peso + nivel, gate liberou apos completar).
+
+PENDENTE (nao subiu, fica em standby):
+- ETAPA 3 PARTE A — confirmacao de permanencia no 1o cadastro. 3 edits prontos em claude_service.py: (1) detecta primeira_vez = perfil.data_nascimento is None ANTES de salvar; (2) ramo "if primeira_vez" abre fase "confirmar_permanencia" com aviso "nome/sexo/nascimento/altura sao PERMANENTES" e retorna SIM/CORRIGIR; (3) handler da fase: SIM -> fase oferta_extras (libera medidas/fotos/pular); CORRIGIR -> zera identidade do perfil + chama _iniciar_cadastro_perfil (refaz do zero). Cadastro POS-WIPE skipa (identidade ja existia -> primeira_vez=False -> vai direto pro oferta_extras existente, sem regredir).
+- BLOQUEADO EM TESTE: requer numero novo no WhatsApp (user_id=1 ja tem identidade e nao consegue cair no caminho de 1a vez). Igor decidiu testar depois com num novo; sobe junto com o teste.
+- ETAPA 3 PARTE B (opcional) — altura editavel so pra <17. Hoje altura 100% travada de qualquer forma, e so refinamento.
+
+PRINCIPIOS:
+- IDENTIDADE PERMANENTE: nome/sexo/data_nascimento/altura_cm sao TRAVADOS apos 1o cadastro (anti-compartilhamento de conta).
+- WIPE NAO MEXE EM IDENTIDADE NEM EM ASSINATURA. Cliente "comeca do zero" sem perder o que pagou e sem precisar criar conta nova.
+- PERFIL CONTINUA SENDO BASE UNICA (reafirma o principio do bloco #11): todo servico le de perfil_service.get_or_create_perfil e nao repergunta.
