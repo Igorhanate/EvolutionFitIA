@@ -54,3 +54,45 @@ def atualizar_nivel_perfil(user_id: int, nivel: str, db: Session) -> dict:
     perfil.nivel_experiencia = nivel
     db.flush()
     return {"anterior": anterior, "novo": nivel}
+
+
+def limpar_dados_usuario(user_id: int, db: Session) -> dict:
+    """Apaga TODA a atividade do usuario e zera os campos editaveis do perfil.
+    MANTEM identidade (sexo, data_nascimento, altura_cm) + conta + assinatura.
+    Commit e responsabilidade do chamador. Retorna contagem por tipo."""
+    from app.models.treino import Treino
+    from app.models.meta_nutricional import MetaNutricional
+    from app.models.registro_exercicio import RegistroExercicio
+    from app.models.sessao_treino import SessaoTreino
+    from app.models.medida_corporal import MedidaCorporal
+    from app.models.foto_composicao import FotoComposicao
+    from app.models.registro_refeicao import RegistroRefeicao
+    from app.models.habito_dia import HabitoDia
+    from app.models.perfil_habitos import PerfilHabitos
+
+    contagem: dict = {}
+    for nome, modelo in (
+        ("treinos", Treino),
+        ("dietas", MetaNutricional),
+        ("registros_exercicio", RegistroExercicio),
+        ("sessoes", SessaoTreino),
+        ("medidas", MedidaCorporal),
+        ("fotos", FotoComposicao),
+        ("refeicoes", RegistroRefeicao),
+        ("habitos", HabitoDia),
+        ("perfil_habitos", PerfilHabitos),
+    ):
+        contagem[nome] = db.query(modelo).filter(modelo.user_id == user_id).delete(synchronize_session=False)
+
+    perfil = get_or_create_perfil(user_id, db)
+    perfil.peso_kg = None
+    perfil.nivel_experiencia = None
+    perfil.tipo_treino_padrao = None
+    perfil.local_treino_padrao = None
+    perfil.objetivo_padrao = None
+    perfil.dias_semana_padrao = None
+    perfil.tempo_sessao_padrao = None
+    perfil.horario_treino_padrao = None
+    perfil.lesoes = None
+    db.flush()
+    return contagem

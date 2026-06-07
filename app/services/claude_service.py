@@ -1082,6 +1082,35 @@ async def _handle_apagar_registro(
     return "Exclusão cancelada. Nada foi apagado."
 
 
+async def _handle_limpar_dados(conversa: Conversa, message_text: str, user: Usuario, db: Session) -> str:
+    txt = (message_text or "").strip()
+    if txt.upper() == "APAGAR TUDO":
+        try:
+            perfil_service.limpar_dados_usuario(user.id, db)
+            conversa.mensagens = []
+        except Exception as e:
+            db.rollback()
+            logger.error("limpar_dados_error", extra={"user_id": user.id, "error": str(e)})
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Ops, tive um problema ao limpar seus dados. Nada foi apagado — tenta de novo em instantes."
+        # perfil ficou incompleto (peso/nivel = None) -> ja inicia o re-cadastro (so o que falta)
+        prox = _iniciar_cadastro_perfil(user, conversa, db)
+        return (
+            "✅ Pronto! Apaguei seus treinos, dietas, refeições, medidas, fotos, registros e hábitos. "
+            "Seu cadastro (nome, nascimento, sexo, altura) e assinatura continuam.\n\n"
+            "Pra voltar a usar, preciso atualizar só uns dados:\n\n"
+            + prox
+        )
+    if txt.upper() in {"CANCELAR", "CANCELA", "NAO", "NÃO"}:
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return "Beleza, cancelei. Nada foi apagado. 👍"
+    return "Pra confirmar, digite *APAGAR TUDO* (exatamente assim) ou *CANCELAR*."
+
+
 # ---------------------------------------------------------------------------
 # Edição de registros pelo usuário
 # ---------------------------------------------------------------------------
@@ -2345,19 +2374,58 @@ def _process_tool_foto(tool_input: dict, user: Usuario, db: Session) -> str:
 # Cadastro de perfil obrigatório
 # ---------------------------------------------------------------------------
 
+def _pular_preenchidas(fase: str | None, dados: dict) -> str | None:
+    """A partir de `fase`, retorna a primeira etapa do cadastro cujo campo ainda NAO foi
+    preenchido em `dados`, ou None se todas (dali pra frente) ja estiverem preenchidas.
+    Permite reaproveitar dados ja salvos (ex: identidade travada apos 'limpar meus dados')."""
+    if fase is None:
+        return None
+    nomes = [c for c, _ in ETAPAS_CADASTRO_PERFIL]
+    try:
+        inicio = nomes.index(fase)
+    except ValueError:
+        return fase
+    for campo in nomes[inicio:]:
+        chave = "nome" if campo == "confirmar_nome" else campo
+        if dados.get(chave) is None:
+            return campo
+    return None
+
+
 def _iniciar_cadastro_perfil(user: Usuario, conversa: Conversa, db: Session) -> str:
+    perfil = perfil_service.get_or_create_perfil(user.id, db)
+    # Identidade ja cadastrada (sexo+nascimento+altura) => re-cadastro: NAO repergunta esses
+    tem_identidade = bool(perfil.sexo and perfil.data_nascimento and perfil.altura_cm)
+    dados: dict = {}
+    if tem_identidade:
+        dados["nome"] = user.nome
+        dados["sexo"] = perfil.sexo
+        dados["data_nascimento"] = perfil.data_nascimento.isoformat()
+        dados["altura_cm"] = perfil.altura_cm
+    if perfil.peso_kg is not None:
+        dados["peso_kg"] = float(perfil.peso_kg)
+    if perfil.nivel_experiencia:
+        dados["nivel_experiencia"] = perfil.nivel_experiencia
+
+    fase = _pular_preenchidas(ETAPAS_CADASTRO_PERFIL[0][0], dados)
+    if fase is None:
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return "Seu perfil já está completo! Digite */menu* pra começar. 💪"
+
     conversa.estado_pendente = {
         "tipo": "cadastro_perfil",
-        "fase": "confirmar_nome",
-        "dados": {},
+        "fase": fase,
+        "dados": dados,
         "criado_em": datetime.utcnow().isoformat(),
     }
     db.add(conversa)
     db.commit()
     primeiro_nome = (user.nome or "").split()[0].strip() if user.nome else ""
-    if primeiro_nome:
-        _, pergunta = ETAPAS_CADASTRO_PERFIL[0]
-        return pergunta.replace("{nome_kiwify}", primeiro_nome)
+    for etapa_nome, etapa_pergunta in ETAPAS_CADASTRO_PERFIL:
+        if etapa_nome == fase:
+            return etapa_pergunta.replace("{nome_kiwify}", primeiro_nome) if primeiro_nome else etapa_pergunta
     return "Bora pro seu cadastro! 💪\n\nQual é o seu nome?"
 
 
@@ -2477,6 +2545,8 @@ async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: U
     else:
         proxima_fase = None
 
+    if proxima_fase is not None:
+        proxima_fase = _pular_preenchidas(proxima_fase, dados)
     if proxima_fase is not None:
         conversa.estado_pendente = {
             "tipo": "cadastro_perfil",
@@ -3189,6 +3259,22 @@ async def process_message(
     _perfil = perfil_service.get_or_create_perfil(user.id, db)
     if not perfil_service.perfil_minimo_completo(_perfil):
         return _iniciar_cadastro_perfil(user, conversa, db)
+
+    # 0.6. Guard: "limpar meus dados" — fluxo destrutivo (confirmacao unica por frase)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "confirmando_limpar_dados":
+        return await _handle_limpar_dados(conversa, message_text, user, db)
+    if (message_text or "").strip().lower() in {
+        "limpar meus dados", "apagar meus dados", "apagar todos os meus dados",
+        "limpar tudo", "resetar meus dados", "zerar meus dados", "limpar dados", "apagar dados",
+    }:
+        conversa.estado_pendente = {"tipo": "confirmando_limpar_dados", "criado_em": datetime.utcnow().isoformat()}
+        db.add(conversa)
+        db.commit()
+        return (
+            "⚠️ Isso apaga *TODOS* os seus treinos, dietas, refeições, medidas, fotos, registros "
+            "e hábitos — *sem volta*. Seu perfil (nome, nascimento, sexo, altura) e assinatura ficam.\n\n"
+            "Tem certeza? Digite *APAGAR TUDO* ou *CANCELAR*."
+        )
 
     # 0.8. Guard: comando "treinar [nome]" — inicia sessão de treino
     stripped = message_text.strip()
