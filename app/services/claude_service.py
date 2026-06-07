@@ -3953,7 +3953,10 @@ async def process_message(
             treinos_lista = treino_service.listar_treinos(user.id, db)
             if not treinos_lista:
                 conversa.estado_pendente = None
-                reply = "Você ainda não tem plano. Crie um pelo */menu* opção 1 e depois volte aqui."
+                reply = (
+                    f"📋 Vou criar um plano novo com o treino *{nome}* dentro.\n\n"
+                    "🚧 Escolha de modalidade + geração pela IA ainda em construção — próxima etapa do E3."
+                )
             elif len(treinos_lista) == 1:
                 _plano = treinos_lista[0]
                 conversa.estado_pendente = None
