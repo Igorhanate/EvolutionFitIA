@@ -2511,6 +2511,39 @@ async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: U
         else:
             return "Responda *1*, *2* ou *3*."
 
+    elif fase == "confirmar_permanencia":
+        r = resposta.lower()
+        if r in ("sim", "s", "confirmo", "ok", "correto", "certo", "tudo certo", "isso"):
+            conversa.estado_pendente = {
+                "tipo": "cadastro_perfil",
+                "fase": "oferta_extras",
+                "criado_em": estado.get("criado_em"),
+            }
+            db.add(conversa)
+            db.commit()
+            return (
+                "Perfeito, cadastro confirmado! 🎯\n\n"
+                "Pra deixar tudo ainda mais preciso, posso registrar suas *medidas corporais* "
+                "(cintura, quadril, braço, etc.) e fazer uma *análise por fotos* — opcional.\n\n"
+                "1️⃣ Registrar medidas\n"
+                "2️⃣ Enviar fotos\n"
+                "3️⃣ Pular por agora"
+            )
+        elif r in ("corrigir", "corrige", "errado", "nao", "não", "refazer", "mudar"):
+            perfil = perfil_service.get_or_create_perfil(user.id, db)
+            perfil.sexo = None
+            perfil.data_nascimento = None
+            perfil.altura_cm = None
+            perfil.peso_kg = None
+            perfil.nivel_experiencia = None
+            db.flush()
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Sem problema — vamos refazer do zero.\n\n" + _iniciar_cadastro_perfil(user, conversa, db)
+        else:
+            return "Responda *SIM* pra confirmar, ou *CORRIGIR* pra refazer."
+
     elif fase == "oferta_extras":
         r = resposta.lower()
         if r in ("1", "medidas", "medida"):
@@ -2563,6 +2596,7 @@ async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: U
 
     # Todas as fases concluídas — persiste no perfil e abre oferta de extras
     perfil = perfil_service.get_or_create_perfil(user.id, db)
+    primeira_vez = perfil.data_nascimento is None  # identidade ainda nao existia -> 1o cadastro
     perfil.sexo = dados.get("sexo")
     if dados.get("data_nascimento"):
         perfil.data_nascimento = date.fromisoformat(dados["data_nascimento"])
@@ -2571,6 +2605,30 @@ async def _handle_cadastro_perfil(conversa: Conversa, message_text: str, user: U
         perfil.peso_kg = dados["peso_kg"]
     perfil.nivel_experiencia = dados.get("nivel_experiencia")
     db.flush()
+
+    # 1a vez (identidade recem-criada): confirma permanencia ANTES de liberar o uso
+    if primeira_vez:
+        _pn = (user.nome or "").split()[0] if user.nome else ""
+        _sx = {"M": "Masculino", "F": "Feminino"}.get(dados.get("sexo", ""), "—")
+        _dt = date.fromisoformat(dados["data_nascimento"]) if dados.get("data_nascimento") else None
+        _id = perfil_service.calcular_idade(_dt)
+        conversa.estado_pendente = {
+            "tipo": "cadastro_perfil",
+            "fase": "confirmar_permanencia",
+            "criado_em": estado.get("criado_em"),
+        }
+        db.add(conversa)
+        db.commit()
+        return (
+            "Cadastro quase pronto! Confere seus dados:\n\n"
+            f"👤 {_pn}\n"
+            f"⚧ {_sx}\n"
+            + (f"🎂 {_id} anos\n" if _id else "")
+            + f"📏 {dados.get('altura_cm')}cm\n\n"
+            "⚠️ *Importante:* nome, sexo, data de nascimento e altura são *permanentes* "
+            "e não poderão ser alterados depois.\n\n"
+            "Está tudo certo? Digite *SIM* pra confirmar, ou *CORRIGIR* pra refazer."
+        )
 
     nome_salvo = user.nome or ""
     primeiro_nome = nome_salvo.split()[0] if nome_salvo else ""
