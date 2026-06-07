@@ -3704,6 +3704,69 @@ async def process_message(
             db.commit()
             return reply
 
+    # E3a: Handler — usuário está escolhendo o PLANO destino do treino novo
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "escolhendo_plano_para_novo_treino":
+        estado = conversa.estado_pendente
+        plano_ids = estado.get("plano_ids", [])
+        plano_labels = estado.get("plano_labels", [])
+        nome_treino_novo = estado.get("nome_treino", "treino")
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+        plano_escolhido_id = None
+
+        if stripped_lower == "cancelar":
+            conversa.estado_pendente = None
+            reply = "Beleza, cancelei. Quando quiser, manda *treinar*."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif stripped.isdigit():
+            idx = int(stripped) - 1
+            if 0 <= idx < len(plano_ids):
+                plano_escolhido_id = plano_ids[idx]
+            else:
+                reply = f"Número inválido. Responda *1* a *{len(plano_ids)}* ou o nome do plano (ou *cancelar*)."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+        elif stripped and not _eh_comando_reservado(stripped_lower):
+            alvo = stripped.lower()
+            candidatos = [pid for pid, lb in zip(plano_ids, plano_labels) if alvo in lb.lower() or lb.lower() in alvo]
+            if len(candidatos) == 1:
+                plano_escolhido_id = candidatos[0]
+            else:
+                reply = "Não achei esse plano. Responda com o *número* ou o *nome* (ou *cancelar*)."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+        else:
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+
+        if plano_escolhido_id is not None:
+            plano = db.query(Treino).filter(Treino.id == plano_escolhido_id).first()
+            nome_plano = _nome_display_treino(plano) if plano else "plano"
+            conversa.estado_pendente = None  # E3a placeholder — proximo estado vira no E3b
+            reply = (
+                f"📋 Vou criar o treino *{nome_treino_novo}* no plano *{nome_plano}*.\n\n"
+                "🚧 Geração pela IA ainda em construção — próxima etapa do E3."
+            )
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
     # Handler: 1 dieta por cliente — confirma substituicao da dieta ativa (backlog B)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "confirmando_dieta_substituicao":
         estado = conversa.estado_pendente
@@ -3885,15 +3948,34 @@ async def process_message(
             db.commit()
             return reply
         elif stripped == "3":
-            # E2: "Criar um treino" (adicionar ao plano com proposta da IA) ainda nao implementado.
-            # Mantem o estado_pendente=treinar_nao_casou pro usuario poder escolher 1 (avulso) ou 4 (cancelar).
-            reply = (
-                f"Criar um treino novo (com proposta da IA pra adicionar *{nome}* ao seu plano) "
-                "ainda está em construção 🚧\n\n"
-                "Por enquanto: responda *1* pra treinar avulso só hoje (eu registro os exercícios), "
-                "ou *4* pra cancelar."
-            )
+            # E3a: criar um treino novo - primeiro descobre o plano destino.
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            treinos_lista = treino_service.listar_treinos(user.id, db)
+            if not treinos_lista:
+                conversa.estado_pendente = None
+                reply = "Você ainda não tem plano. Crie um pelo */menu* opção 1 e depois volte aqui."
+            elif len(treinos_lista) == 1:
+                _plano = treinos_lista[0]
+                conversa.estado_pendente = None
+                reply = (
+                    f"📋 Vou criar o treino *{nome}* no plano *{_nome_display_treino(_plano)}*.\n\n"
+                    "🚧 Geração pela IA ainda em construção — próxima etapa do E3."
+                )
+            else:
+                _plano_lista = treinos_lista[:10]
+                _plano_labels = [_nome_display_treino(p) for p in _plano_lista]
+                _linhas = [f"Em qual plano você quer adicionar o treino *{nome}*?\n"]
+                for _i, _lb in enumerate(_plano_labels, 1):
+                    _linhas.append(f"*{_i}.* {_lb}")
+                _linhas.append("\nResponda com o *número* ou o *nome* (ou *cancelar*).")
+                reply = "\n".join(_linhas)
+                conversa.estado_pendente = {
+                    "tipo": "escolhendo_plano_para_novo_treino",
+                    "plano_ids": [p.id for p in _plano_lista],
+                    "plano_labels": _plano_labels,
+                    "nome_treino": nome,
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
             db.add(conversa)
