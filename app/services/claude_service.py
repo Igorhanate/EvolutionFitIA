@@ -3885,8 +3885,15 @@ async def process_message(
             db.commit()
             return reply
         elif stripped == "3":
+            # E2: "Criar um treino" (adicionar ao plano com proposta da IA) ainda nao implementado.
+            # Mantem o estado_pendente=treinar_nao_casou pro usuario poder escolher 1 (avulso) ou 4 (cancelar).
+            reply = (
+                f"Criar um treino novo (com proposta da IA pra adicionar *{nome}* ao seu plano) "
+                "ainda está em construção 🚧\n\n"
+                "Por enquanto: responda *1* pra treinar avulso só hoje (eu registro os exercícios), "
+                "ou *4* pra cancelar."
+            )
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
-            reply = _iniciar_coleta_treino(user, conversa, db)
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
             db.add(conversa)
@@ -3897,7 +3904,7 @@ async def process_message(
             db.add(conversa)
             db.flush()
         else:
-            reply = "Responda *1* (treinar assim mesmo), *2* (importar), *3* (criar do zero) ou *4* (cancelar)."
+            reply = "Responda *1* (treinar assim mesmo), *2* (importar), *3* (criar um treino) ou *4* (cancelar)."
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
@@ -4314,7 +4321,7 @@ async def process_message(
                     f"Não achei nenhum treino ou plano chamado *{nome_busca}*. O que você quer fazer?\n\n"
                     "1️⃣ Treinar assim mesmo (eu registro os exercícios que você mandar)\n"
                     "2️⃣ Importar um treino que já tenho\n"
-                    "3️⃣ Criar um plano do zero\n"
+                    "3️⃣ Criar um treino\n"
                     "4️⃣ Cancelar"
                 )
         else:
