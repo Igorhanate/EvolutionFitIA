@@ -3102,6 +3102,24 @@ def _apresentar_proposta_dia(dia: dict, nome_plano: str | None = None) -> str:
     )
 
 
+def _salvar_dia_no_plano(plano_id: int, dia_dict: dict, db: Session) -> "Treino | None":
+    """E3b2: adiciona um dia novo ao Treino.conteudo['dias']. Numero = len+1.
+    Retorna o Treino atualizado ou None se o plano não existir. Faz db.flush() (commit fica com o handler chamador).
+    """
+    plano = db.query(Treino).filter(Treino.id == plano_id).first()
+    if plano is None:
+        return None
+    conteudo = plano.conteudo if isinstance(plano.conteudo, dict) else {}
+    dias = list(conteudo.get("dias", []) or [])
+    novo_dia = dict(dia_dict)
+    novo_dia["numero"] = len(dias) + 1
+    dias.append(novo_dia)
+    # Spread cria novo dict para SQLAlchemy detectar mudança no campo JSON
+    plano.conteudo = {**conteudo, "dias": dias}
+    db.flush()
+    return plano
+
+
 async def _gerar_treino_de_dados(
     dados: dict,
     user: Usuario,
@@ -3943,9 +3961,42 @@ async def process_message(
 
         r = stripped_lower
         if r in ("sim", "s", "ok", "aprovar", "iniciar", "vamos"):
-            # E3b2 (próxima etapa) — save real + iniciar sessão
+            # E3b2: salva o dia no plano + inicia sessão
+            plano_id = estado.get("plano_id")
+            nome_treino_novo = estado.get("nome_treino", "Treino novo")
+            proposta = dict(estado.get("proposta", {}) or {})
+            # Força o nome do dia pra ser o que o user pediu (pra ele conseguir treinar [nome] depois)
+            proposta["nome"] = nome_treino_novo
+
+            if plano_id is None:
+                # E3b3 (próxima etapa) — caso 0-planos: cria plano novo antes de salvar
+                conversa.estado_pendente = None
+                reply = "🚧 Criação de plano novo (caso 0-planos) ainda em construção — próxima etapa do E3 (E3b3)."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+
+            plano_atualizado = _salvar_dia_no_plano(plano_id, proposta, db)
+            if plano_atualizado is None:
+                conversa.estado_pendente = None
+                reply = "❌ Não consegui salvar o treino. Plano não encontrado. Tenta de novo."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+
+            sessao_treino_service.iniciar_sessao(user.id, nome_treino_novo, db)
             conversa.estado_pendente = None
-            reply = "🚧 Save da proposta + início da sessão ainda em construção — próxima etapa do E3 (E3b2)."
+            reply = (
+                f"✅ Treino *{nome_treino_novo}* adicionado ao plano *{_nome_display_treino(plano_atualizado)}*!\n\n"
+                f"Sessão iniciada 💪\n"
+                "Manda os exercícios que você for fazendo (ex: 'supino 80kg 3x10') e eu vou registrando."
+            )
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
