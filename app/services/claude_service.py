@@ -2903,6 +2903,35 @@ _TOOL_EXTRACAO_TREINO = {
 }
 
 
+_TOOL_PROPOR_DIA = {
+    "name": "propor_dia_treino",
+    "description": "Propõe um dia de treino (1 sessão) em formato estruturado. Use SOMENTE quando solicitado a gerar uma proposta de treino novo pra ser adicionado a um plano existente.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "nome": {"type": "string", "description": "Nome curto do treino/dia (ex: 'Peito A', 'Push', 'Pernas')"},
+            "foco": {"type": "string", "description": "Grupos musculares ou foco (ex: 'Peito + Tríceps')"},
+            "exercicios": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "nome": {"type": "string", "description": "Nome do exercício"},
+                        "series_validas": {"type": "integer", "description": "Séries de trabalho (sem contar aquecimento)"},
+                        "aquecimento": {"type": "integer", "description": "Séries de aquecimento (sempre >= 1 em exercícios pesados)"},
+                        "reps": {"type": "string", "description": "Faixa de repetições (ex: '8-10', '12', 'até falha')"},
+                        "descanso_seg": {"type": "integer", "description": "Tempo de descanso em segundos"},
+                        "observacoes": {"type": "string", "description": "Observação opcional"},
+                    },
+                    "required": ["nome", "series_validas", "aquecimento", "reps", "descanso_seg"],
+                },
+            },
+        },
+        "required": ["nome", "foco", "exercicios"],
+    },
+}
+
+
 async def extrair_estrutura_treino(texto_plano: str, anthropic_client) -> dict | None:
     """Faz 2ª chamada Claude com tool salvar_treino_estruturado pra extrair dias/exercícios do texto livre.
     Retorna dict com {nome_plano, dias: [...]} se sucesso, ou None após 2 tentativas (degradação graciosa).
@@ -2956,6 +2985,121 @@ async def extrair_estrutura_treino(texto_plano: str, anthropic_client) -> dict |
 
     logger.error("extrair_estrutura_treino_falhou_todas_tentativas")
     return None
+
+
+async def _gerar_proposta_dia(
+    user: Usuario,
+    nome_treino: str,
+    modalidade: str | None,
+    plano: "Treino | None",
+    db: Session,
+) -> dict | None:
+    """E3b1: chama Claude com forced tool use pra gerar uma proposta de 1 dia de treino.
+    Retorna dict {nome, foco, exercicios: [...]} ou None.
+    """
+    perfil_ctx = _perfil_context_str(user.id, db) or "Perfil não disponível."
+
+    dias_existentes_str = ""
+    if plano and isinstance(plano.conteudo, dict):
+        dias = plano.conteudo.get("dias", []) or []
+        if dias:
+            linhas = []
+            for d in dias:
+                nome_d = d.get("nome", "?")
+                exs = ", ".join(e.get("nome", "?") for e in d.get("exercicios", []))
+                linhas.append(f"  - {nome_d}: {exs}")
+            dias_existentes_str = "\nDias já existentes no plano destino (NÃO repita exercícios deles):\n" + "\n".join(linhas)
+
+    modalidade_legivel = MODALIDADE_MAP.get(modalidade or "", modalidade or "musculação")
+
+    prompt = (
+        f"Você é um personal trainer experiente. Gere uma proposta de UM dia de treino "
+        f"chamado \"{nome_treino}\" pra adicionar ao plano do aluno. Use a tool propor_dia_treino.\n\n"
+        f"DADOS DO ALUNO:\n{perfil_ctx}\n\n"
+        f"MODALIDADE DO PLANO: {modalidade_legivel}\n"
+        f"NOME DO TREINO SOLICITADO: \"{nome_treino}\""
+        f"{dias_existentes_str}\n\n"
+        "REGRAS:\n"
+        "1. SEMPRE inclua aquecimento (aquecimento >= 1) nos exercícios pesados/principais.\n"
+        "2. NUNCA use 'RPE' ou 'RPE alvo' — só séries, reps e descanso.\n"
+        "3. Respeite as lesões do aluno (se houver) — não inclua exercícios que agravem.\n"
+        "4. Decida a QUANTIDADE de exercícios de acordo com nível e foco (sem range fixo).\n"
+        "5. Use a modalidade pra escolher tipo de exercício certo.\n"
+        "6. NÃO repita exercícios dos outros dias do plano (listados acima).\n"
+        "7. Faixa de reps adequada ao nível e objetivo.\n"
+        "8. Descanso em segundos (60, 90, 120...).\n"
+        "9. 'foco' = grupos musculares trabalhados (ex: 'Peito + Tríceps')."
+    )
+
+    for tentativa in range(2):
+        try:
+            prompt_atual = prompt
+            if tentativa > 0:
+                prompt_atual = prompt + (
+                    "\n\nATENÇÃO: sua resposta anterior estava INCOMPLETA. "
+                    "Retorne a estrutura COMPLETA agora com TODOS os exercícios e o aquecimento."
+                )
+            resp = await client.messages.create(
+                model=settings.CLAUDE_MODEL,
+                max_tokens=2000,
+                tools=[_TOOL_PROPOR_DIA],
+                tool_choice={"type": "tool", "name": "propor_dia_treino"},
+                messages=[{"role": "user", "content": prompt_atual}],
+            )
+            for block in resp.content:
+                if hasattr(block, "name") and block.name == "propor_dia_treino":
+                    dados = block.input
+                    if isinstance(dados, dict) and isinstance(dados.get("exercicios"), list) and len(dados["exercicios"]) > 0:
+                        return dados
+                    logger.warning(
+                        "gerar_proposta_dia_validacao_falhou",
+                        extra={"tentativa": tentativa + 1, "dados": str(dados)[:200]},
+                    )
+                    break
+            else:
+                logger.warning("gerar_proposta_dia_tool_nao_usada", extra={"tentativa": tentativa + 1})
+        except Exception as e:
+            logger.warning("gerar_proposta_dia_erro", extra={"tentativa": tentativa + 1, "error": str(e)})
+
+    logger.error("gerar_proposta_dia_falhou_todas_tentativas")
+    return None
+
+
+def _apresentar_proposta_dia(dia: dict, nome_plano: str | None = None) -> str:
+    """E3b1: formata um dia proposto pra apresentação no WhatsApp."""
+    nome = dia.get("nome", "Treino novo")
+    foco = (dia.get("foco") or "").strip()
+    exs = dia.get("exercicios", []) or []
+
+    header = f"📋 Proposta — *{nome}*"
+    if foco:
+        header += f" ({foco})"
+    if nome_plano:
+        header += f"\nPlano: *{nome_plano}*"
+
+    linhas_ex = []
+    for i, e in enumerate(exs, 1):
+        nome_e = e.get("nome", "?")
+        sv = e.get("series_validas", 0)
+        aq = e.get("aquecimento", 0)
+        reps = e.get("reps", "?")
+        desc = e.get("descanso_seg", 60)
+        obs = (e.get("observacoes") or "").strip()
+
+        linha = f"*{i}.* {nome_e} — {sv} séries de {reps} · {desc}s descanso"
+        if aq > 0:
+            linha += f" ({aq} aquec)"
+        if obs:
+            linha += f"\n   _{obs}_"
+        linhas_ex.append(linha)
+
+    return (
+        f"{header}\n\n"
+        + "\n".join(linhas_ex)
+        + "\n\n"
+        + "Aprovar? Responda *SIM* / *NÃO* / *CANCELAR*\n"
+        + "_(SIM = salva e inicia · NÃO = me diz o que mudar · CANCELAR = sai)_"
+    )
 
 
 async def _gerar_treino_de_dados(
@@ -3753,13 +3897,86 @@ async def process_message(
             db.flush()
 
         if plano_escolhido_id is not None:
+            # E3b1: plano escolhido -> gera proposta
             plano = db.query(Treino).filter(Treino.id == plano_escolhido_id).first()
             nome_plano = _nome_display_treino(plano) if plano else "plano"
-            conversa.estado_pendente = None  # E3a placeholder — proximo estado vira no E3b
-            reply = (
-                f"📋 Vou criar o treino *{nome_treino_novo}* no plano *{nome_plano}*.\n\n"
-                "🚧 Geração pela IA ainda em construção — próxima etapa do E3."
-            )
+            modalidade = (plano.conteudo or {}).get("modalidade") if (plano and isinstance(plano.conteudo, dict)) else None
+            proposta = await _gerar_proposta_dia(user, nome_treino_novo, modalidade, plano, db)
+            if proposta is None:
+                conversa.estado_pendente = None
+                reply = "❌ Não consegui gerar uma proposta agora. Tenta de novo daqui a pouco."
+            else:
+                conversa.estado_pendente = {
+                    "tipo": "aguardando_aprovacao_treino_novo",
+                    "plano_id": plano.id if plano else None,
+                    "modalidade": modalidade,
+                    "nome_treino": nome_treino_novo,
+                    "proposta": proposta,
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
+                reply = _apresentar_proposta_dia(proposta, nome_plano)
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
+    # E3b1: Handler — usuário está aprovando/rejeitando proposta de treino novo gerada pela IA
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_aprovacao_treino_novo":
+        estado = conversa.estado_pendente
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+        # Timeout 5 min
+        try:
+            _crado = datetime.fromisoformat(estado.get("criado_em", ""))
+            if (datetime.utcnow() - _crado).total_seconds() > 300:
+                conversa.estado_pendente = None
+                reply = "⏱️ Sua proposta de treino expirou (mais de 5 min). Manda *treinar [nome]* pra começar de novo."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+        except Exception:
+            pass
+
+        r = stripped_lower
+        if r in ("sim", "s", "ok", "aprovar", "iniciar", "vamos"):
+            # E3b2 (próxima etapa) — save real + iniciar sessão
+            conversa.estado_pendente = None
+            reply = "🚧 Save da proposta + início da sessão ainda em construção — próxima etapa do E3 (E3b2)."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif r in ("nao", "não", "n"):
+            # E3c (próxima etapa) — edição em texto livre
+            conversa.estado_pendente = None
+            reply = "🚧 Edição da proposta em texto livre ainda em construção — próxima etapa do E3 (E3c). Por enquanto, manda *cancelar* e tenta com outro nome."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif r == "cancelar":
+            conversa.estado_pendente = None
+            reply = "Beleza, cancelei. Quando quiser, manda *treinar* ou /menu."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+        elif _eh_comando_reservado(stripped_lower):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            reply = "Responda *SIM* (aprovar), *NÃO* (vou te falar o que mudar) ou *CANCELAR*."
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
@@ -3958,12 +4175,23 @@ async def process_message(
                     "🚧 Escolha de modalidade + geração pela IA ainda em construção — próxima etapa do E3."
                 )
             elif len(treinos_lista) == 1:
+                # E3b1: 1 plano -> gera proposta direto
                 _plano = treinos_lista[0]
-                conversa.estado_pendente = None
-                reply = (
-                    f"📋 Vou criar o treino *{nome}* no plano *{_nome_display_treino(_plano)}*.\n\n"
-                    "🚧 Geração pela IA ainda em construção — próxima etapa do E3."
-                )
+                _modalidade = (_plano.conteudo or {}).get("modalidade") if isinstance(_plano.conteudo, dict) else None
+                proposta = await _gerar_proposta_dia(user, nome, _modalidade, _plano, db)
+                if proposta is None:
+                    conversa.estado_pendente = None
+                    reply = "❌ Não consegui gerar uma proposta agora. Tenta de novo daqui a pouco."
+                else:
+                    conversa.estado_pendente = {
+                        "tipo": "aguardando_aprovacao_treino_novo",
+                        "plano_id": _plano.id,
+                        "modalidade": _modalidade,
+                        "nome_treino": nome,
+                        "proposta": proposta,
+                        "criado_em": datetime.utcnow().isoformat(),
+                    }
+                    reply = _apresentar_proposta_dia(proposta, _nome_display_treino(_plano))
             else:
                 _plano_lista = treinos_lista[:10]
                 _plano_labels = [_nome_display_treino(p) for p in _plano_lista]
