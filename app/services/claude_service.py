@@ -3953,9 +3953,12 @@ async def process_message(
             db.commit()
             return reply
         elif r in ("nao", "não", "n"):
-            # E3c (próxima etapa) — edição em texto livre
-            conversa.estado_pendente = None
-            reply = "🚧 Edição da proposta em texto livre ainda em construção — próxima etapa do E3 (E3c). Por enquanto, manda *cancelar* e tenta com outro nome."
+            # E3c (próxima etapa) — edição em texto livre. PLACEHOLDER: NÃO limpa o estado;
+            # mantém a proposta pro usuário poder responder SIM ou CANCELAR.
+            reply = (
+                "🚧 Edição da proposta em texto livre ainda em construção — próxima etapa do E3 (E3c).\n\n"
+                "Por enquanto: responda *SIM* (aprovar como está) ou *CANCELAR* (sair)."
+            )
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
