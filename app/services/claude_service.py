@@ -2993,8 +2993,11 @@ async def _gerar_proposta_dia(
     modalidade: str | None,
     plano: "Treino | None",
     db: Session,
+    proposta_anterior: dict | None = None,
+    pedido_edit: str | None = None,
 ) -> dict | None:
-    """E3b1: chama Claude com forced tool use pra gerar uma proposta de 1 dia de treino.
+    """E3b1: gera proposta de dia novo (1 sessão).
+    E3c: se proposta_anterior + pedido_edit forem passados, regenera aplicando o pedido.
     Retorna dict {nome, foco, exercicios: [...]} ou None.
     """
     perfil_ctx = _perfil_context_str(user.id, db) or "Perfil não disponível."
@@ -3012,13 +3015,41 @@ async def _gerar_proposta_dia(
 
     modalidade_legivel = MODALIDADE_MAP.get(modalidade or "", modalidade or "musculação")
 
+    # E3c: bloco de edição (só preenche se houver proposta anterior + pedido de edição)
+    edicao_block = ""
+    if proposta_anterior and pedido_edit:
+        _exs = proposta_anterior.get("exercicios", []) or []
+        _linhas_ant = []
+        for _i, _e in enumerate(_exs, 1):
+            _nome_e = _e.get("nome", "?")
+            _sv = _e.get("series_validas", 0)
+            _aq = _e.get("aquecimento", 0)
+            _reps = _e.get("reps", "?")
+            _desc = _e.get("descanso_seg", 60)
+            _linha = f"  {_i}. {_nome_e} — {_sv}x{_reps}, {_desc}s descanso"
+            if _aq > 0:
+                _linha += f", {_aq} aquec"
+            _linhas_ant.append(_linha)
+        _proposta_str = "\n".join(_linhas_ant)
+        _foco_ant = proposta_anterior.get("foco", "")
+        edicao_block = (
+            f"\n\nVOCÊ JÁ TINHA GERADO esta proposta antes:\n"
+            f"  Foco: {_foco_ant}\n"
+            f"  Exercícios:\n{_proposta_str}\n\n"
+            f"O ALUNO PEDIU A SEGUINTE EDIÇÃO:\n\"{pedido_edit}\"\n\n"
+            f"Gere uma NOVA versão da proposta aplicando o pedido. "
+            f"Mantenha o que funciona, ajuste só o que foi pedido. "
+            f"Se o pedido for vago, faça a interpretação mais razoável."
+        )
+
     prompt = (
         f"Você é um personal trainer experiente. Gere uma proposta de UM dia de treino "
         f"chamado \"{nome_treino}\" pra adicionar ao plano do aluno. Use a tool propor_dia_treino.\n\n"
         f"DADOS DO ALUNO:\n{perfil_ctx}\n\n"
         f"MODALIDADE DO PLANO: {modalidade_legivel}\n"
         f"NOME DO TREINO SOLICITADO: \"{nome_treino}\""
-        f"{dias_existentes_str}\n\n"
+        f"{dias_existentes_str}"
+        f"{edicao_block}\n\n"
         "REGRAS:\n"
         "1. SEMPRE inclua aquecimento (aquecimento >= 1) nos exercícios pesados/principais.\n"
         "2. NUNCA use 'RPE' ou 'RPE alvo' — só séries, reps e descanso.\n"
@@ -4004,11 +4035,22 @@ async def process_message(
             db.commit()
             return reply
         elif r in ("nao", "não", "n"):
-            # E3c (próxima etapa) — edição em texto livre. PLACEHOLDER: NÃO limpa o estado;
-            # mantém a proposta pro usuário poder responder SIM ou CANCELAR.
+            # E3c: NÃO -> entra no estado de edição em texto livre. Mantém plano_id/modalidade/nome/proposta.
+            conversa.estado_pendente = {
+                "tipo": "aguardando_edit_treino_novo",
+                "plano_id": estado.get("plano_id"),
+                "modalidade": estado.get("modalidade"),
+                "nome_treino": estado.get("nome_treino"),
+                "proposta": estado.get("proposta", {}),
+                "criado_em": datetime.utcnow().isoformat(),
+            }
             reply = (
-                "🚧 Edição da proposta em texto livre ainda em construção — próxima etapa do E3 (E3c).\n\n"
-                "Por enquanto: responda *SIM* (aprovar como está) ou *CANCELAR* (sair)."
+                "O que você quer mudar nessa proposta? Manda texto livre, tipo:\n"
+                "• \"troca o supino por crucifixo\"\n"
+                "• \"tira o último exercício\"\n"
+                "• \"adiciona panturrilha\"\n"
+                "• \"mais séries de costas\"\n\n"
+                "Ou *cancelar* pra sair."
             )
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
@@ -4031,6 +4073,79 @@ async def process_message(
             db.flush()
         else:
             reply = "Responda *SIM* (aprovar), *NÃO* (vou te falar o que mudar) ou *CANCELAR*."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
+    # E3c: Handler — usuário está descrevendo o que quer editar na proposta de treino
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_edit_treino_novo":
+        estado = conversa.estado_pendente
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+        # Timeout 5 min
+        try:
+            _crado = datetime.fromisoformat(estado.get("criado_em", ""))
+            if (datetime.utcnow() - _crado).total_seconds() > 300:
+                conversa.estado_pendente = None
+                reply = "⏱️ Sua proposta expirou (mais de 5 min). Manda *treinar [nome]* pra começar de novo."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+        except Exception:
+            pass
+
+        if stripped_lower == "cancelar":
+            conversa.estado_pendente = None
+            reply = "Beleza, cancelei. Quando quiser, manda *treinar* ou /menu."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
+        if not stripped or _eh_comando_reservado(stripped_lower):
+            # Comando reservado ou vazio — sai do estado e deixa os guards seguintes processarem
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            # Pedido de edição em texto livre — regenera proposta
+            plano_id = estado.get("plano_id")
+            nome_treino_novo = estado.get("nome_treino", "Treino novo")
+            modalidade = estado.get("modalidade")
+            proposta_anterior = estado.get("proposta", {}) or {}
+
+            plano = None
+            if plano_id is not None:
+                plano = db.query(Treino).filter(Treino.id == plano_id).first()
+
+            nova_proposta = await _gerar_proposta_dia(
+                user, nome_treino_novo, modalidade, plano, db,
+                proposta_anterior=proposta_anterior,
+                pedido_edit=stripped,
+            )
+
+            if nova_proposta is None:
+                conversa.estado_pendente = None
+                reply = "❌ Não consegui regenerar a proposta. Tenta de novo daqui a pouco."
+            else:
+                conversa.estado_pendente = {
+                    "tipo": "aguardando_aprovacao_treino_novo",
+                    "plano_id": plano_id,
+                    "modalidade": modalidade,
+                    "nome_treino": nome_treino_novo,
+                    "proposta": nova_proposta,
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
+                nome_plano_disp = _nome_display_treino(plano) if plano else None
+                reply = _apresentar_proposta_dia(nova_proposta, nome_plano_disp)
+
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
