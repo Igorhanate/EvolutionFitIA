@@ -1223,3 +1223,64 @@ PRINCIPIOS:
 - IDENTIDADE PERMANENTE: nome/sexo/data_nascimento/altura_cm sao TRAVADOS apos 1o cadastro (anti-compartilhamento de conta).
 - WIPE NAO MEXE EM IDENTIDADE NEM EM ASSINATURA. Cliente "comeca do zero" sem perder o que pagou e sem precisar criar conta nova.
 - PERFIL CONTINUA SENDO BASE UNICA (reafirma o principio do bloco #11): todo servico le de perfil_service.get_or_create_perfil e nao repergunta.
+
+[08/06 #14] EPICO E3 — CRIAR TREINO VIA OPCAO 3 DO treinar_nao_casou. ESSENCIAL NO AR.
+
+CONTEXTO: quando o user manda "treinar [nome]" e o nome nao casa com nenhum TREINO/PLANO,
+o bot oferece 4 opcoes: 1 treinar avulso / 2 importar / 3 CRIAR UM TREINO / 4 cancelar.
+A opcao 3 era "criar plano do zero"; virou "criar um treino" (1 dia) adicionado a um plano
+existente, com proposta gerada pela IA, aprovacao e edicao. Decomposto em E3a/E3b1/E3b2/E3c.
+
+E3a — SELECAO DO PLANO DESTINO (commit 0491d24, ja era do dia 07/06).
+- Opcao 3 detecta quantos planos o user tem:
+  - 0 planos -> placeholder (vira E3b3, ainda nao feito): "vou criar um plano novo com o treino dentro".
+  - 1 plano -> usa direto.
+  - 2+ planos -> estado escolhendo_plano_para_novo_treino: lista numerada, user escolhe.
+- Handler escolhendo_plano_para_novo_treino espelha o escolhendo_plano existente.
+
+E3b1 — IA GERA PROPOSTA + APRESENTA + HANDLER DE APROVACAO (commits 63ec850, e9a1c7c).
+- Tool nova _TOOL_PROPOR_DIA (name "propor_dia_treino") — schema espelha _TOOL_EXTRACAO_TREINO
+  mas pra 1 dia (nome, foco, exercicios[] com series_validas/aquecimento/reps/descanso_seg/obs).
+- Funcao _gerar_proposta_dia(user, nome_treino, modalidade, plano, db, proposta_anterior=None,
+  pedido_edit=None): chama client.messages.create com forced tool_choice, 2 tentativas, valida
+  shape. Prompt monta contexto: perfil (_perfil_context_str) + modalidade do plano + nome do
+  treino + dias ja existentes (pra nao repetir exercicios). Regras: sempre aquecimento, NUNCA RPE,
+  respeitar lesoes, IA decide qtd de exercicios.
+- Funcao _apresentar_proposta_dia(dia, nome_plano): formata pra WhatsApp + "Aprovar? SIM/NAO/CANCELAR".
+- Estado aguardando_aprovacao_treino_novo {plano_id, modalidade, nome_treino, proposta, criado_em}.
+- Handler com timeout 5min. SIM/ok/aprovar/iniciar/vamos=aprova. NAO=edicao. CANCELAR=sai.
+- BUG ACHADO E CORRIGIDO (commit e9a1c7c): branch NAO limpava o estado -> "sim" seguinte caia em
+  IA livre e disparava fluxo errado (criava plano fantasma + perguntava dor). Fix: NAO preserva o
+  estado; so SIM/CANCELAR limpam.
+
+E3b2 — SIM SALVA O DIA + ABRE SESSAO GUIADA (commits 82f34e1, 5571b85).
+- Funcao _salvar_dia_no_plano(plano_id, dia_dict, db): append em conteudo["dias"], numero=len+1,
+  reatribui plano.conteudo = {**conteudo, "dias": dias} (spread pra SQLAlchemy detectar mudanca no
+  JSON), db.flush (commit fica com o handler).
+- SIM forca proposta["nome"] = nome_treino (pro user achar via "treinar [nome]" depois), salva,
+  inicia sessao.
+- FIX IMPORTANTE (commit 5571b85): apos salvar, em vez de mandar texto livre "manda os exercicios",
+  abre a SESSAO GUIADA igual ao fluxo aguardando_inicio_treino: busca _exercicios_do_dia, monta
+  estado sessao_guiada {treino_nome, plano_id, ordem=range(len), buffers={}, criado_em}, e responde
+  com _anunciar_exercicio_guiado(exercicios, 0). Sessao flui exercicio-a-exercicio como nos
+  treinos normais.
+
+E3c — NAO REAL: EDICAO EM TEXTO LIVRE (commit f48397f).
+- _gerar_proposta_dia ganhou params proposta_anterior + pedido_edit; quando presentes, injeta no
+  prompt um bloco "voce ja gerou X, o aluno pediu Y, gere nova versao".
+- Branch NAO transiciona pro estado aguardando_edit_treino_novo e pergunta "o que quer mudar?".
+- Handler aguardando_edit_treino_novo: texto livre -> regenera (chama _gerar_proposta_dia com
+  pedido_edit=texto) -> volta pro estado de aprovacao com a nova proposta. cancelar sai. /menu
+  e comandos reservados saem do estado. Timeout 5min. Loop ate SIM ou CANCELAR.
+
+TESTADO EM PRODUCAO (user_id=1, Plano teste): proposta gerada, NAO edita e regenera, SIM salva
+(confirmado via admin/treinos: dia novo com numero correto e exercicios) e abre sessao guiada.
+
+DECISOES TRAVADAS: SIM/ok/aprovar/iniciar/vamos=aprova; NAO=edicao; CANCELAR=sai; IA decide qtd
+exercicios; aquecimento por exercicio; timeout 5min; novo dia = ultimo (numero=len+1); sem limite
+de custo Anthropic por enquanto.
+
+PENDENTE: E3b3 (caso 0-planos) — quando o user nao tem nenhum plano, perguntar modalidade, criar
+plano vazio ("Plano de [Modalidade]") e adicionar o dia. O branch ja existe com placeholder
+("plano_id is None -> 🚧 em construcao"). Edge case; nao bloqueia o fluxo principal (quem tem
+1+ plano ja funciona ponta a ponta).

@@ -154,32 +154,39 @@ Tom amigável, direto, conhecedor (personal + nutricionista). Mensagens curtas (
 
 ---
 
-## ESTADO ATUAL (06/06/2026)
+## ESTADO ATUAL (08/06/2026)
 
 **Fechado e no ar:**
 - Épico de treino 100% (criar/cadastrar/registrar/1RM/evolução, "treinar [nome]", treino guiado).
 - Gestão de planos P1/P2: 1 plano por modalidade, gate "substituir SIM/NÃO", aviso 90 dias — caminhos gerado e importado.
-- Dieta única por cliente (gate substituir).
-- **Coleta determinística de dieta no menu 5** (pré-preenche perfil, NÃO repergunta idade/sexo/altura/peso, gera + salva pelo gate) — **bug do perfil reperguntado FECHADO**.
+- Dieta: única por cliente (gate substituir); coleta determinística menu 5; cadastro externo determinístico menu 6; excluir dieta em 1 passo.
+- **Identidade/wipe:** "limpar meus dados" (apaga atividade + zera perfil editável, MANTÉM identidade+conta+assinatura); onboarding pula campos já preenchidos. Identidade (nome/sexo/nascimento/altura) imutável após 1º cadastro.
+- **Épico E3 (criar treino via opção 3) — essencial no ar:** opção 3 = "criar um treino"; IA gera proposta de 1 dia; SIM salva no plano + abre sessão guiada; NÃO = edição em texto livre (regenera); CANCELAR sai. (Ver HISTORICO #14.)
 - Regras de segurança no `SYSTEM_PROMPT` (só WhatsApp; sem remédio/hormônio).
 
 **Princípio firmado:** PERFIL = base única de TODOS os serviços (sempre lido de `perfil_service.get_or_create_perfil`); serviços futuros leem dali e NÃO reperguntam.
+
+**Specs no repo:** `E3B_SPEC.md` (épico E3), `B1_SPEC.md` (redesenho /menu).
 
 ---
 
 ## BACKLOG
 
-**Verificação pendente:** testar dieta única no fluxo **IMPORTADO** (menu 6 / texto livre — mesmo gate via `_process_tool_cadastrar_dieta`, ainda não testado ao vivo).
+**Em standby (esperando algo):**
+- **Identidade Etapa 3 Parte A** — confirmação de permanência no 1º cadastro. 3 edits PRONTOS e NÃO commitados (standby local). Requer número NOVO de WhatsApp pra testar (user_id=1 já tem identidade). Sobe junto com o teste.
+- **E3b3** — caso 0-planos do épico E3 (user sem plano: perguntar modalidade → criar plano vazio "Plano de [Modalidade]" → adicionar o dia). Branch já tem placeholder. Edge case.
+- **Lembrete de remédio** — código legado existe mas desativado. Recon primeiro, decidir o que mantém vs muda. NÃO speccar do zero.
 
-**B (fluxo):**
-- "Limpar meus dados" (destrutivo, confirmação dupla).
-- Redesenho do `/menu` (gerar card / treinar / ver refeições / ver plano).
-- Adicionar treino (dia) a plano existente **sem substituir** o plano.
-- Iter dieta: gravar no perfil os dados básicos coletados de **usuário novo** (hoje só pré-preenche pra perfil já completo).
+**B1 — redesenho do /menu** (spec completo em `B1_SPEC.md`, 16 itens). Fases:
+- B1.0 esqueleto (texto + dispatch com placeholders); B1.1 itens parciais (4 histórico treinos, 8 ver refeições, 9 ver plano alimentar); B1.2 submenu 12 Água/Suplementos (+ migration 015 tabela `suplemento_cadastrado`); B1.3 submenu 15 Cards (= backlog C); B1.4 lembrete remédio; B1.5 submenu 16 Configurações (Perfil ver/limpar + Suporte).
+- Escopos já resolvidos no spec: histórico treinos, ver refeições, ver plano alimentar, água/suplementos, perfil (ver/limpar), suporte.
+- TBD: e-mail do suporte (Igor vai criar).
 
-**C (imagem):** card de fim de treino (gasto calórico, tempo, kg total, % evolução; submenu gerar card).
+**C (imagem):** card de fim de treino (gasto calórico, tempo, kg total, % evolução). = submenu 15 do B1. Deferido (complexidade — requer Pillow/Matplotlib).
 
-**D (produto):** fechar lista oficial de modalidades; avaliar skills de geração de treino/dieta.
+**D (produto):** fechar lista oficial de modalidades; avaliar skills de geração de treino/dieta. Deferido (Igor vai pesquisar).
+
+**OBSOLETO (não reabrir):** "gravar perfil em coleta dieta" — o gate `perfil_minimo_completo` garante perfil completo antes da dieta; nada a gravar de volta.
 
 **Em observação (não reproduzível):** histórico de refeições "junta tudo num dia só" — banco está correto; suspeita é `date.today()` em UTC no Render (afeta refeição/medida/sessao_data registradas após ~21h BRT).
 
