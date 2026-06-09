@@ -4019,19 +4019,30 @@ async def process_message(
             proposta["nome"] = nome_treino_novo
 
             if plano_id is None:
-                # E3b3: caso 0-planos -> pergunta a modalidade antes de criar o plano novo
-                lista_mod = "\n".join(f"*{k}.* {v}" for k, v in MODALIDADE_MAP.items())
-                conversa.estado_pendente = {
-                    "tipo": "escolhendo_modalidade_novo_plano",
-                    "nome_treino": nome_treino_novo,
-                    "proposta": proposta,
-                    "criado_em": datetime.utcnow().isoformat(),
-                }
-                reply = (
-                    f"Esse vai ser seu primeiro plano! Qual a *modalidade* do treino *{nome_treino_novo}*?\n\n"
-                    f"{lista_mod}\n\n"
-                    "Responda com o *número* (ou *cancelar*)."
-                )
+                # E3b3: 0-planos -> a modalidade já foi escolhida antes de gerar; cria o plano agora
+                modalidade_canon = estado.get("modalidade") or "musculacao"
+                modalidade_legivel = estado.get("modalidade_legivel_novo_plano") or MODALIDADE_MAP.get("1", "Musculação")
+                plano_novo = _criar_plano_vazio_com_dia(user.id, modalidade_canon, modalidade_legivel, proposta, db)
+                sessao_treino_service.iniciar_sessao(user.id, nome_treino_novo, db)
+                exercicios_novo = _exercicios_do_dia(plano_novo, nome_treino_novo)
+                header = f"✅ Plano *{_nome_display_treino(plano_novo)}* criado com o treino *{nome_treino_novo}*!\n\n"
+                if exercicios_novo:
+                    conversa.estado_pendente = {
+                        "tipo": "sessao_guiada",
+                        "treino_nome": nome_treino_novo,
+                        "plano_id": plano_novo.id,
+                        "ordem": list(range(len(exercicios_novo))),
+                        "buffers": {},
+                        "criado_em": datetime.utcnow().isoformat(),
+                    }
+                    reply = header + "Bora! 💪\n\n" + _anunciar_exercicio_guiado(exercicios_novo, 0)
+                else:
+                    conversa.estado_pendente = None
+                    reply = (
+                        header
+                        + "Sessão iniciada 💪\n"
+                        "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
+                    )
                 mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
                 mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
                 conversa.mensagens = mensagens_tmp
@@ -4236,12 +4247,45 @@ async def process_message(
             db.commit()
             return reply
 
-        # Modalidade válida -> cria plano vazio com o dia + inicia sessão guiada
+        # Modalidade válida
         modalidade_legivel = MODALIDADE_MAP.get(stripped, modalidade_canon)
         nome_treino_novo = estado.get("nome_treino", "Treino novo")
-        proposta = dict(estado.get("proposta", {}) or {})
-        proposta["nome"] = nome_treino_novo
+        proposta_estado = estado.get("proposta")
 
+        if not proposta_estado:
+            # 0-planos: ainda não geramos a proposta — gera agora (sem plano, com a modalidade escolhida)
+            proposta_gerada = await _gerar_proposta_dia(user, nome_treino_novo, modalidade_canon, None, db)
+            if proposta_gerada is None:
+                conversa.estado_pendente = None
+                reply = "❌ Não consegui gerar uma proposta agora. Tenta de novo daqui a pouco."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+            # Vai pra aprovação. plano_id=None sinaliza "criar plano novo no SIM";
+            # guarda a modalidade já escolhida pra não perguntar de novo.
+            conversa.estado_pendente = {
+                "tipo": "aguardando_aprovacao_treino_novo",
+                "plano_id": None,
+                "modalidade": modalidade_canon,
+                "modalidade_legivel_novo_plano": modalidade_legivel,
+                "nome_treino": nome_treino_novo,
+                "proposta": proposta_gerada,
+                "criado_em": datetime.utcnow().isoformat(),
+            }
+            reply = _apresentar_proposta_dia(proposta_gerada, f"Plano de {modalidade_legivel} (novo)")
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
+        # (Caminho alternativo: proposta já existia — cria plano direto)
+        proposta = dict(proposta_estado)
+        proposta["nome"] = nome_treino_novo
         plano_novo = _criar_plano_vazio_com_dia(user.id, modalidade_canon, modalidade_legivel, proposta, db)
         sessao_treino_service.iniciar_sessao(user.id, nome_treino_novo, db)
         exercicios_novo = _exercicios_do_dia(plano_novo, nome_treino_novo)
@@ -4455,10 +4499,18 @@ async def process_message(
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             treinos_lista = treino_service.listar_treinos(user.id, db)
             if not treinos_lista:
-                conversa.estado_pendente = None
+                # E3b3: 0 planos -> pergunta modalidade primeiro (proposta gerada depois)
+                lista_mod = "\n".join(f"*{k}.* {v}" for k, v in MODALIDADE_MAP.items())
+                conversa.estado_pendente = {
+                    "tipo": "escolhendo_modalidade_novo_plano",
+                    "nome_treino": nome,
+                    "proposta": None,
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
                 reply = (
-                    f"📋 Vou criar um plano novo com o treino *{nome}* dentro.\n\n"
-                    "🚧 Escolha de modalidade + geração pela IA ainda em construção — próxima etapa do E3."
+                    f"Esse vai ser seu primeiro plano! Qual a *modalidade* do treino *{nome}*?\n\n"
+                    f"{lista_mod}\n\n"
+                    "Responda com o *número* (ou *cancelar*)."
                 )
             elif len(treinos_lista) == 1:
                 # E3b1: 1 plano -> gera proposta direto
