@@ -4021,13 +4021,27 @@ async def process_message(
                 db.commit()
                 return reply
 
+            # E3b2: inicia sessão e ABRE A SESSÃO GUIADA (igual ao fluxo aguardando_inicio_treino)
             sessao_treino_service.iniciar_sessao(user.id, nome_treino_novo, db)
-            conversa.estado_pendente = None
-            reply = (
-                f"✅ Treino *{nome_treino_novo}* adicionado ao plano *{_nome_display_treino(plano_atualizado)}*!\n\n"
-                f"Sessão iniciada 💪\n"
-                "Manda os exercícios que você for fazendo (ex: 'supino 80kg 3x10') e eu vou registrando."
-            )
+            exercicios_novo = _exercicios_do_dia(plano_atualizado, nome_treino_novo)
+            header = f"✅ Treino *{nome_treino_novo}* adicionado ao plano *{_nome_display_treino(plano_atualizado)}*!\n\n"
+            if exercicios_novo:
+                conversa.estado_pendente = {
+                    "tipo": "sessao_guiada",
+                    "treino_nome": nome_treino_novo,
+                    "plano_id": plano_id,
+                    "ordem": list(range(len(exercicios_novo))),
+                    "buffers": {},
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
+                reply = header + "Bora! 💪\n\n" + _anunciar_exercicio_guiado(exercicios_novo, 0)
+            else:
+                conversa.estado_pendente = None
+                reply = (
+                    header
+                    + "Sessão iniciada 💪\n"
+                    "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
+                )
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
