@@ -3151,6 +3151,25 @@ def _salvar_dia_no_plano(plano_id: int, dia_dict: dict, db: Session) -> "Treino 
     return plano
 
 
+def _criar_plano_vazio_com_dia(user_id: int, modalidade_canon: str, modalidade_legivel: str, dia_dict: dict, db: Session) -> "Treino":
+    """E3b3: cria um plano novo (origem proprio) já com o primeiro dia dentro.
+    Espelha o padrão de _finalizar_importacao. Commit fica com o chamador.
+    """
+    nome_plano = f"Plano de {modalidade_legivel}"
+    novo_dia = dict(dia_dict)
+    novo_dia["numero"] = 1
+    plano = treino_service.cadastrar_treino_proprio(
+        user_id=user_id,
+        nome=nome_plano,
+        texto=f"Plano de {modalidade_legivel} criado pelo Evo.",
+        db=db,
+    )
+    conteudo = plano.conteudo if isinstance(plano.conteudo, dict) else {}
+    plano.conteudo = {**conteudo, "modalidade": modalidade_canon, "nome": nome_plano, "dias": [novo_dia]}
+    db.flush()
+    return plano
+
+
 async def _gerar_treino_de_dados(
     dados: dict,
     user: Usuario,
@@ -4000,9 +4019,19 @@ async def process_message(
             proposta["nome"] = nome_treino_novo
 
             if plano_id is None:
-                # E3b3 (próxima etapa) — caso 0-planos: cria plano novo antes de salvar
-                conversa.estado_pendente = None
-                reply = "🚧 Criação de plano novo (caso 0-planos) ainda em construção — próxima etapa do E3 (E3b3)."
+                # E3b3: caso 0-planos -> pergunta a modalidade antes de criar o plano novo
+                lista_mod = "\n".join(f"*{k}.* {v}" for k, v in MODALIDADE_MAP.items())
+                conversa.estado_pendente = {
+                    "tipo": "escolhendo_modalidade_novo_plano",
+                    "nome_treino": nome_treino_novo,
+                    "proposta": proposta,
+                    "criado_em": datetime.utcnow().isoformat(),
+                }
+                reply = (
+                    f"Esse vai ser seu primeiro plano! Qual a *modalidade* do treino *{nome_treino_novo}*?\n\n"
+                    f"{lista_mod}\n\n"
+                    "Responda com o *número* (ou *cancelar*)."
+                )
                 mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
                 mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
                 conversa.mensagens = mensagens_tmp
@@ -4166,6 +4195,80 @@ async def process_message(
             db.add(conversa)
             db.commit()
             return reply
+
+    # E3b3: Handler — usuário (0 planos) está escolhendo a modalidade pra criar o 1º plano
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "escolhendo_modalidade_novo_plano":
+        estado = conversa.estado_pendente
+        mensagens_tmp: list[dict] = list(conversa.mensagens or [])
+        # Timeout 5 min
+        try:
+            _crado = datetime.fromisoformat(estado.get("criado_em", ""))
+            if (datetime.utcnow() - _crado).total_seconds() > 300:
+                conversa.estado_pendente = None
+                reply = "⏱️ Expirou (mais de 5 min). Manda *treinar [nome]* pra começar de novo."
+                mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+                mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+                conversa.mensagens = mensagens_tmp
+                db.add(conversa)
+                db.commit()
+                return reply
+        except Exception:
+            pass
+
+        if stripped_lower == "cancelar":
+            conversa.estado_pendente = None
+            reply = "Beleza, cancelei. Quando quiser, manda *treinar* ou /menu."
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
+        modalidade_canon = MODALIDADE_CANON.get(stripped)
+        if modalidade_canon is None:
+            lista_mod = "\n".join(f"*{k}.* {v}" for k, v in MODALIDADE_MAP.items())
+            reply = f"Responda com o *número* da modalidade:\n\n{lista_mod}\n\n(ou *cancelar*)"
+            mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+            mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+            conversa.mensagens = mensagens_tmp
+            db.add(conversa)
+            db.commit()
+            return reply
+
+        # Modalidade válida -> cria plano vazio com o dia + inicia sessão guiada
+        modalidade_legivel = MODALIDADE_MAP.get(stripped, modalidade_canon)
+        nome_treino_novo = estado.get("nome_treino", "Treino novo")
+        proposta = dict(estado.get("proposta", {}) or {})
+        proposta["nome"] = nome_treino_novo
+
+        plano_novo = _criar_plano_vazio_com_dia(user.id, modalidade_canon, modalidade_legivel, proposta, db)
+        sessao_treino_service.iniciar_sessao(user.id, nome_treino_novo, db)
+        exercicios_novo = _exercicios_do_dia(plano_novo, nome_treino_novo)
+        header = f"✅ Plano *{_nome_display_treino(plano_novo)}* criado com o treino *{nome_treino_novo}*!\n\n"
+        if exercicios_novo:
+            conversa.estado_pendente = {
+                "tipo": "sessao_guiada",
+                "treino_nome": nome_treino_novo,
+                "plano_id": plano_novo.id,
+                "ordem": list(range(len(exercicios_novo))),
+                "buffers": {},
+                "criado_em": datetime.utcnow().isoformat(),
+            }
+            reply = header + "Bora! 💪\n\n" + _anunciar_exercicio_guiado(exercicios_novo, 0)
+        else:
+            conversa.estado_pendente = None
+            reply = (
+                header
+                + "Sessão iniciada 💪\n"
+                "Manda os exercícios que você fizer (ex: 'supino 80kg 3x10') e eu vou registrando."
+            )
+        mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
+        mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens_tmp
+        db.add(conversa)
+        db.commit()
+        return reply
 
     # Handler: 1 dieta por cliente — confirma substituicao da dieta ativa (backlog B)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "confirmando_dieta_substituicao":
