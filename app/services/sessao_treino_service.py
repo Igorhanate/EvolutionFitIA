@@ -25,3 +25,17 @@ def iniciar_sessao(user_id: int, treino_nome: str, db: Session) -> SessaoTreino:
     db.add(nova)
     db.flush()
     return nova
+
+
+def listar_sessoes_ultimas_24h(user_id: int, db: Session) -> list[SessaoTreino]:
+    """B1 item 4: retorna as sessões iniciadas nas últimas 24h, mais recente primeiro.
+    Sem deduplicação — cada sessão conta.
+    """
+    from datetime import timedelta
+    corte = datetime.utcnow() - timedelta(hours=24)
+    return (
+        db.query(SessaoTreino)
+        .filter(SessaoTreino.user_id == user_id, SessaoTreino.iniciada_em >= corte)
+        .order_by(SessaoTreino.iniciada_em.desc())
+        .all()
+    )

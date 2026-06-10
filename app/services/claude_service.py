@@ -3382,8 +3382,21 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
         "🚧 Essa opção está em construção e chega em breve!\n\n"
         "Por enquanto, manda */menu* pra ver as outras."
     )
+    # B1 item 4: Histórico de treinos (nomes dos treinos das últimas 24h)
+    if item == 4:
+        sessoes = sessao_treino_service.listar_sessoes_ultimas_24h(user.id, db)
+        if not sessoes:
+            return (
+                "Você não tem treinos registrados nas últimas 24h. 💪\n\n"
+                "Manda *treinar* pra começar um agora!"
+            )
+        linhas = [f"• {s.treino_nome}" for s in sessoes]
+        return (
+            f"📋 *Seus treinos nas últimas 24h, {primeiro_nome}:*\n\n"
+            + "\n".join(linhas)
+        )
     # Itens novos sem handler ainda -> placeholder
-    if item in (4, 8, 9, 12, 14, 15, 16):
+    if item in (8, 9, 12, 14, 15, 16):
         return _MENU_EM_CONSTRUCAO
     # Item 3 "Treinar" -> direciona pro fluxo treinar (regex existente)
     if item == 3:
