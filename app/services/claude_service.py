@@ -279,19 +279,25 @@ MENU_TEXT = (
     "💪 *TREINO*\n"
     "*1.* Criar treino personalizado\n"
     "*2.* Cadastrar treino (do seu personal)\n"
-    "*3.* Registrar cargas, séries e histórico\n"
-    "*4.* Acompanhar evolução de força (1RM)\n\n"
+    "*3.* Treinar\n"
+    "*4.* Histórico de treinos\n\n"
     "🥗 *NUTRIÇÃO*\n"
     "*5.* Criar dieta personalizada\n"
     "*6.* Cadastrar dieta (do nutricionista)\n"
-    "*7.* Analisar refeição por foto\n\n"
+    "*7.* Analisar refeição por foto\n"
+    "*8.* Ver minhas refeições feitas\n"
+    "*9.* Ver meu plano alimentar\n\n"
     "📏 *MEDIDAS & CORPO*\n"
-    "*8.* Registrar peso e medidas\n"
-    "*9.* Análise de composição corporal (por foto)\n"
-    "*10.* Ver meu painel geral de evolução 📊\n\n"
+    "*10.* Registrar peso e medidas\n"
+    "*11.* Análise de composição corporal (por foto)\n\n"
     "💧 *HÁBITOS DIÁRIOS*\n"
-    "*11.* Registrar água e suplementos\n"
-    "*12.* Acompanhar hábitos (dias sem álcool / sem fumar)\n\n"
+    "*12.* Água / Suplementos\n"
+    "*13.* Acompanhar hábitos (sem álcool / sem fumar)\n"
+    "*14.* Lembrete de remédio\n\n"
+    "🎴 *CARDS*\n"
+    "*15.* Gerar card\n\n"
+    "⚙️ *CONFIGURAÇÕES*\n"
+    "*16.* Configurações\n\n"
     "Responda com o número da opção desejada:"
 )
 
@@ -3370,6 +3376,27 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
     from app.services import whatsapp_service as ws
 
     primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
+
+    # ===== B1.0: menu novo (16 itens) — tradução p/ handlers existentes + placeholders =====
+    _MENU_EM_CONSTRUCAO = (
+        "🚧 Essa opção está em construção e chega em breve!\n\n"
+        "Por enquanto, manda */menu* pra ver as outras."
+    )
+    # Itens novos sem handler ainda -> placeholder
+    if item in (4, 8, 9, 12, 14, 15, 16):
+        return _MENU_EM_CONSTRUCAO
+    # Item 3 "Treinar" -> direciona pro fluxo treinar (regex existente)
+    if item == 3:
+        conversa.estado_pendente = None
+        db.add(conversa)
+        db.commit()
+        return (
+            "Bora treinar! 💪\n\n"
+            "Manda *treinar* que eu listo seus treinos, ou *treinar [nome]* pra ir direto num específico."
+        )
+    # Remapeia números novos -> antigos pros handlers que já existem
+    _NEW_TO_OLD = {1: 1, 2: 2, 5: 5, 6: 6, 7: 7, 10: 8, 11: 9, 13: 12}
+    item = _NEW_TO_OLD.get(item, item)
 
     # 💪 TREINO
     if item == 1:  # Criar treino personalizado
