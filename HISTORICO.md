@@ -1284,3 +1284,49 @@ PENDENTE: E3b3 (caso 0-planos) — quando o user nao tem nenhum plano, perguntar
 plano vazio ("Plano de [Modalidade]") e adicionar o dia. O branch ja existe com placeholder
 ("plano_id is None -> 🚧 em construcao"). Edge case; nao bloqueia o fluxo principal (quem tem
 1+ plano ja funciona ponta a ponta).
+
+[09/06 #15] E3b3 (FECHA E3 100%) + B1.0 (esqueleto /menu novo) + B1 item 4 (historico treinos).
+
+--- E3b3: CASO 0-PLANOS DO EPICO E3 ---
+Ultimo pedaco do E3 (ver #14). User SEM nenhum plano escolhe opcao 3 ("criar um treino"):
+1. Pergunta MODALIDADE primeiro (lista numerada MODALIDADE_MAP) — estado
+   escolhendo_modalidade_novo_plano {nome_treino, proposta=None, criado_em}.
+2. User escolhe numero -> converte via MODALIDADE_CANON, GERA proposta com
+   _gerar_proposta_dia(user, nome, modalidade_canon, plano=None, db), vai pro estado de aprovacao
+   aguardando_aprovacao_treino_novo com plano_id=None + modalidade + modalidade_legivel_novo_plano.
+3. SIM (branch plano_id is None): cria plano via _criar_plano_vazio_com_dia (espelha
+   _finalizar_importacao: cadastrar_treino_proprio + grava modalidade/nome/dias no conteudo,
+   numero=1), inicia sessao e ABRE SESSAO GUIADA. NAO/edicao funciona (recai no SIM seguinte).
+HELPER NOVO: _criar_plano_vazio_com_dia -> nome do plano = "Plano de [Modalidade legivel]".
+TESTADO (user_id=1, de 0 planos): treinar meuprimeirotreino -> 3 -> modalidade 1 -> proposta ->
+NAO "tira o ultimo" -> nova proposta -> SIM -> plano id=146 "Plano de Musculação (academia)",
+modalidade "musculacao", 1 dia com 6 exercicios+aquecimento, sessao guiada. Confirmado admin/treinos.
+E3 INTEIRO FECHADO (0/1/2+ planos, SIM/NAO/CANCELAR, edicao, sessao guiada).
+
+--- B1.0: ESQUELETO DO /menu NOVO (16 itens) ---
+Redesenho do /menu de 12 -> 16 itens (spec em B1_SPEC.md). Abordagem de BAIXO RISCO: NAO mexeu nos
+handlers existentes. Dois pontos so:
+- MENU_TEXT reescrito com os 16 itens (secoes TREINO/NUTRICAO/MEDIDAS/HABITOS/CARDS/CONFIGURACOES).
+- Camada de traducao no TOPO de _handle_menu_item: itens novos (4,8,9,12,14,15,16) -> placeholder
+  "em construcao"; item 3 "Treinar" -> nudge (limpa estado + manda usar "treinar"); demais
+  remapeados via _NEW_TO_OLD {1:1,2:2,5:5,6:6,7:7,10:8,11:9,13:12} pros handlers que ja existem.
+- Removidos do menu: antigo 4 (1RM standalone) e antigo 10 (painel evolucao) -> viram codigo morto
+  inofensivo (nenhum item novo aponta pra eles); serao incorporados nos Cards (item 15) no futuro.
+NUMERACAO NOVA: 1 criar treino, 2 cadastrar treino, 3 Treinar, 4 historico treinos, 5 criar dieta,
+6 cadastrar dieta, 7 analisar refeicao foto, 8 ver refeicoes feitas, 9 ver plano alimentar,
+10 registrar peso/medidas, 11 composicao corporal foto, 12 agua/suplementos, 13 acompanhar habitos,
+14 lembrete remedio, 15 gerar card, 16 configuracoes.
+TESTADO: /menu mostra 16 itens; itens existentes renumerados funcionam; item 3 nudge OK;
+itens novos dao placeholder.
+
+--- B1 ITEM 4: HISTORICO DE TREINOS ---
+Item 4 do menu novo. Mostra os NOMES dos treinos (sessoes) das ultimas 24h, mais recente primeiro,
+SEM deduplicacao. Funcao nova sessao_treino_service.listar_sessoes_ultimas_24h(user_id, db)
+(filtra SessaoTreino por user_id + iniciada_em >= now-24h, order by iniciada_em desc). Handler
+plugado no _handle_menu_item (item 4 tirado do set de placeholders). Caso vazio -> mensagem
+amigavel. NAO sofre do bug date.today()/UTC (intervalo relativo de 24h, nao "desde 00:00").
+TESTADO em producao: OK.
+
+B1 EM ANDAMENTO. Faltam itens 8 (ver refeicoes), 9 (ver plano alimentar), 12 (agua/suplementos -
+submenu + migration 015 tabela suplemento_cadastrado), 14 (lembrete remedio - recon do legado
+primeiro), 15 (cards = backlog C), 16 (configuracoes - perfil ver/limpar + suporte, email TBD).
