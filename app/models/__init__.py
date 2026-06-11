@@ -13,9 +13,11 @@ from app.models.meta_nutricional import MetaNutricional
 from app.models.habito_dia import HabitoDia
 from app.models.perfil_habitos import PerfilHabitos
 from app.models.alimento_taco import AlimentoTACO
+from app.models.registro_suplemento import RegistroSuplemento
 
 __all__ = [
     "Usuario", "Assinatura", "Treino", "Dieta", "Conversa", "PerfilFitness",
     "MensagemProcessada", "RegistroExercicio", "MedidaCorporal", "FotoComposicao",
     "RegistroRefeicao", "MetaNutricional", "HabitoDia", "PerfilHabitos", "AlimentoTACO",
+    "RegistroSuplemento",
 ]
