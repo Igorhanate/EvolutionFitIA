@@ -14,3 +14,10 @@ Gerando os posts do dia...
 
 Total de hoje: 11
 Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-10.md
+Gerando os posts do dia...
+
+  id=12 | dieta | carrossel | Carboidrato não é vilão — ele é combustível. O problema é quando e quanto você usa.
+  id=13 | curiosidade | carrossel | Respiração durante o treino muda seu desempenho — e quase ninguém leva isso a sério
+
+Total de hoje: 2
+Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-11.md

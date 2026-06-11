@@ -153,6 +153,16 @@ def anexar_troca_ao_plano(user_id: int, descricao_troca: str, db: Session) -> bo
     return True
 
 
+def listar_refeicoes_dia(user_id: int, data: date, db: Session) -> list[RegistroRefeicao]:
+    """B1 item 8: refeições de um dia, da mais antiga pra mais recente (ordem cronológica)."""
+    return (
+        db.query(RegistroRefeicao)
+        .filter(RegistroRefeicao.user_id == user_id, RegistroRefeicao.data_refeicao == data)
+        .order_by(RegistroRefeicao.criado_em.asc())
+        .all()
+    )
+
+
 def listar_dietas(user_id: int, db: Session) -> list[MetaNutricional]:
     """Metas nutricionais do usuário, mais recentes primeiro. Toda meta foi criada conscientemente — sem filtro de lixo."""
     return (

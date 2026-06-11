@@ -3417,8 +3417,39 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
         if macros:
             linhas.append(" · ".join(macros))
         return f"🥗 *Seu plano alimentar atual:*\n\n" + "\n".join(linhas)
+    # B1 item 8: Ver minhas refeições feitas (hoje)
+    if item == 8:
+        hoje = date.today()
+        refeicoes = nutricao_service.listar_refeicoes_dia(user.id, hoje, db)
+        if not refeicoes:
+            return (
+                f"Você ainda não registrou refeições hoje, {primeiro_nome}. 🍽️\n\n"
+                "Manda uma *foto da refeição* ou descreve em texto que eu registro!"
+            )
+        linhas = [f"🍽️ *Suas refeições de hoje, {primeiro_nome}:*\n"]
+        tot_kcal = 0
+        tot_p = tot_c = tot_g = 0.0
+        for r in refeicoes:
+            desc = (r.descricao or "").strip()
+            kcal = r.calorias_kcal or 0
+            tot_kcal += kcal
+            tot_p += r.proteinas_g or 0
+            tot_c += r.carboidratos_g or 0
+            tot_g += r.gorduras_g or 0
+            macros = []
+            if r.proteinas_g is not None:
+                macros.append(f"P {r.proteinas_g:g}g")
+            if r.carboidratos_g is not None:
+                macros.append(f"C {r.carboidratos_g:g}g")
+            if r.gorduras_g is not None:
+                macros.append(f"G {r.gorduras_g:g}g")
+            macros_str = (" · " + " ".join(macros)) if macros else ""
+            kcal_str = f" — {kcal} kcal" if kcal else ""
+            linhas.append(f"• {desc}{kcal_str}{macros_str}")
+        rodape = f"\n*Total do dia:* {tot_kcal} kcal · P {tot_p:g}g · C {tot_c:g}g · G {tot_g:g}g"
+        return "\n".join(linhas) + rodape
     # Itens novos sem handler ainda -> placeholder
-    if item in (8, 12, 14, 15, 16):
+    if item in (12, 14, 15, 16):
         return _MENU_EM_CONSTRUCAO
     # Item 3 "Treinar" -> direciona pro fluxo treinar (regex existente)
     if item == 3:
