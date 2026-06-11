@@ -1,0 +1,16 @@
+Gerando os posts do dia...
+
+  id=6 | divulgacao | carrossel | A maioria dos apps de treino te dá o mesmo plano. A Evolution Fit AI aprende como o seu corpo responde e ajusta tudo em tempo real.
+  id=7 | dieta | carrossel | Comer menos nem sempre é o caminho — entenda por que a restrição exagerada sabota o seu resultado
+  id=8 | curiosidade | foto_unica | Fazer a mesma série toda semana não é consistência — é estagnação disfarçada
+
+Total de hoje: 8
+Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-10.md
+Gerando os posts do dia...
+
+  id=9 | treino | carrossel | Por que o seu aquecimento está destruindo o seu treino (e você nem percebe)
+  id=10 | curiosidade | carrossel | Por que você sente dor muscular 2 dias depois do treino — não no dia seguinte
+  id=11 | antes_depois | foto_unica | O que realmente mudou não foi só o corpo — foi o comportamento
+
+Total de hoje: 11
+Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-10.md

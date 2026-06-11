@@ -3395,8 +3395,30 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
             f"📋 *Seus treinos nas últimas 24h, {primeiro_nome}:*\n\n"
             + "\n".join(linhas)
         )
+    # B1 item 9: Ver meu plano alimentar (dieta ativa como foi cadastrada)
+    if item == 9:
+        meta = nutricao_service.get_meta_ativa(user.id, db)
+        if meta is None:
+            return (
+                "Você ainda não tem um plano alimentar cadastrado. 🥗\n\n"
+                "Use o */menu* opção *5* (criar) ou *6* (cadastrar a do seu nutricionista)."
+            )
+        if meta.texto_original and meta.texto_original.strip():
+            return f"🥗 *Seu plano alimentar atual:*\n\n{meta.texto_original.strip()}"
+        # Fallback: dieta sem texto livre — mostra as metas
+        linhas = [f"🔥 Calorias: *{meta.calorias_alvo} kcal*"]
+        macros = []
+        if meta.proteinas_alvo_g is not None:
+            macros.append(f"P: {meta.proteinas_alvo_g:g}g")
+        if meta.carboidratos_alvo_g is not None:
+            macros.append(f"C: {meta.carboidratos_alvo_g:g}g")
+        if meta.gorduras_alvo_g is not None:
+            macros.append(f"G: {meta.gorduras_alvo_g:g}g")
+        if macros:
+            linhas.append(" · ".join(macros))
+        return f"🥗 *Seu plano alimentar atual:*\n\n" + "\n".join(linhas)
     # Itens novos sem handler ainda -> placeholder
-    if item in (8, 9, 12, 14, 15, 16):
+    if item in (8, 12, 14, 15, 16):
         return _MENU_EM_CONSTRUCAO
     # Item 3 "Treinar" -> direciona pro fluxo treinar (regex existente)
     if item == 3:
