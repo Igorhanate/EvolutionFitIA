@@ -3366,6 +3366,23 @@ async def _gerar_treino_de_dados(
 # Menu principal
 # ---------------------------------------------------------------------------
 
+def _texto_cadastro_suplementos(cadastrados: list[str]) -> str:
+    if cadastrados:
+        linhas = ["💊 *Seus suplementos cadastrados:*\n"]
+        for i, s in enumerate(cadastrados, 1):
+            linhas.append(f"*{i}.* {s}")
+        corpo = "\n".join(linhas)
+    else:
+        corpo = "💊 Você ainda não tem suplementos cadastrados."
+    return (
+        f"{corpo}\n\n"
+        "O que quer fazer?\n"
+        "*A.* Adicionar\n"
+        "*B.* Remover\n"
+        "*C.* Voltar"
+    )
+
+
 def _build_menu_text(user_id: int, db: Session) -> str:
     resumo = habito_service.get_resumo_habitos(user_id, db)
     habito_parts = []
@@ -5166,6 +5183,76 @@ async def process_message(
         db.commit()
         return _build_menu_text(user.id, db)
 
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "cadastro_suplementos":
+        op = stripped_lower
+        if op == "a":
+            conversa.estado_pendente = {"tipo": "cadastro_suplementos_add", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            return "Manda o *nome e a dosagem* do suplemento (ex: *Whey 30g*). Ou *cancelar*."
+        if op == "b":
+            cadastrados = habito_service.listar_suplementos_cadastrados(user.id, db)
+            if not cadastrados:
+                return "Você não tem suplementos pra remover.\n\n" + _texto_cadastro_suplementos(cadastrados)
+            conversa.estado_pendente = {"tipo": "cadastro_suplementos_remove", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            linhas = ["Qual remover? Responda o *número*:\n"]
+            for i, s in enumerate(cadastrados, 1):
+                linhas.append(f"*{i}.* {s}")
+            linhas.append("\nOu *cancelar*.")
+            return "\n".join(linhas)
+        if op == "c":
+            conversa.estado_pendente = {"tipo": "submenu_agua_suplementos", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            return (
+                "💧 *Água / Suplementos*\n\n"
+                "*A.* Quanto tomei de água hoje?\n"
+                "*B.* Meus suplementos\n"
+                "*C.* Suplementos consumidos hoje\n\n"
+                "Responda com *A*, *B* ou *C* (ou *cancelar*)."
+            )
+        if op == "cancelar":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Beleza! Manda */menu* quando quiser. 😊"
+        return "Responda *A* (adicionar), *B* (remover) ou *C* (voltar)."
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "cadastro_suplementos_add":
+        if stripped_lower == "cancelar":
+            cadastrados = habito_service.listar_suplementos_cadastrados(user.id, db)
+            conversa.estado_pendente = {"tipo": "cadastro_suplementos", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            return "Cancelado.\n\n" + _texto_cadastro_suplementos(cadastrados)
+        if not stripped:
+            return "Manda o nome e a dosagem (ex: *Whey 30g*). Ou *cancelar*."
+        cadastrados = habito_service.adicionar_suplemento_cadastrado(user.id, stripped, db)
+        conversa.estado_pendente = {"tipo": "cadastro_suplementos", "criado_em": datetime.utcnow().isoformat()}
+        db.add(conversa)
+        db.commit()
+        return f"✅ *{stripped.strip()}* adicionado!\n\n" + _texto_cadastro_suplementos(cadastrados)
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "cadastro_suplementos_remove":
+        if stripped_lower == "cancelar":
+            cadastrados = habito_service.listar_suplementos_cadastrados(user.id, db)
+            conversa.estado_pendente = {"tipo": "cadastro_suplementos", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            return "Cancelado.\n\n" + _texto_cadastro_suplementos(cadastrados)
+        if stripped.isdigit():
+            removido = habito_service.remover_suplemento_cadastrado(user.id, int(stripped) - 1, db)
+            cadastrados = habito_service.listar_suplementos_cadastrados(user.id, db)
+            conversa.estado_pendente = {"tipo": "cadastro_suplementos", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            if removido:
+                return f"✅ *{removido}* removido!\n\n" + _texto_cadastro_suplementos(cadastrados)
+            return "Número inválido.\n\n" + _texto_cadastro_suplementos(cadastrados)
+        return "Responda o *número* do suplemento a remover (ou *cancelar*)."
+
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_agua_suplementos":
         _pn = (user.nome or "").split()[0] if user.nome else "você"
         op = stripped_lower
@@ -5188,13 +5275,14 @@ async def process_message(
                 "Me diz quanto bebeu (ex: *bebi 500ml*) que eu registro!"
             )
         if op == "b":
-            conversa.estado_pendente = None
+            cadastrados = habito_service.listar_suplementos_cadastrados(user.id, db)
+            conversa.estado_pendente = {
+                "tipo": "cadastro_suplementos",
+                "criado_em": datetime.utcnow().isoformat(),
+            }
             db.add(conversa)
             db.commit()
-            return (
-                "🚧 *Meus suplementos* (cadastro) está em construção e chega em breve!\n\n"
-                "Por enquanto, é só me avisar quando tomar algum (ex: *tomei creatina*) que eu registro."
-            )
+            return _texto_cadastro_suplementos(cadastrados)
         if op == "c":
             conversa.estado_pendente = None
             db.add(conversa)

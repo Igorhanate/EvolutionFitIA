@@ -21,3 +21,10 @@ Gerando os posts do dia...
 
 Total de hoje: 2
 Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-11.md
+Gerando os posts do dia...
+
+  id=14 | curiosidade | foto_unica | Treinar em jejum não queima mais gordura do que treinar alimentado — o que define o resultado é o balanço calórico do dia todo
+  id=15 | divulgacao | foto_unica | A Evolution Fit AI não te dá uma planilha — te dá um plano que muda conforme você muda
+
+Total de hoje: 2
+Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-12.md

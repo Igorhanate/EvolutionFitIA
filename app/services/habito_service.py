@@ -163,6 +163,36 @@ def precisa_lembrete_suplemento(user_id: int, db: Session) -> bool:
     return tomados_hoje == 0
 
 
+def listar_suplementos_cadastrados(user_id: int, db: Session) -> list[str]:
+    """12-D: lista de suplementos cadastrados (strings 'Nome Dosagem')."""
+    perfil = db.query(PerfilHabitos).filter(PerfilHabitos.user_id == user_id).first()
+    if not perfil or not perfil.suplementos:
+        return []
+    return [s for s in perfil.suplementos if isinstance(s, str)]
+
+
+def adicionar_suplemento_cadastrado(user_id: int, item: str, db: Session) -> list[str]:
+    """12-D: adiciona um suplemento (append). Retorna a lista atualizada."""
+    perfil = _get_or_create_perfil(user_id, db)
+    atual = [s for s in (perfil.suplementos or []) if isinstance(s, str)]
+    atual.append(item.strip())
+    perfil.suplementos = atual
+    db.flush()
+    return atual
+
+
+def remover_suplemento_cadastrado(user_id: int, indice: int, db: Session) -> str | None:
+    """12-D: remove por índice (0-based). Retorna o removido ou None."""
+    perfil = _get_or_create_perfil(user_id, db)
+    atual = [s for s in (perfil.suplementos or []) if isinstance(s, str)]
+    if 0 <= indice < len(atual):
+        removido = atual.pop(indice)
+        perfil.suplementos = atual
+        db.flush()
+        return removido
+    return None
+
+
 def get_suplementos_usuario(user_id: int, db: Session) -> list[str] | None:
     perfil = db.query(PerfilHabitos).filter(PerfilHabitos.user_id == user_id).first()
     return perfil.suplementos if perfil else None
