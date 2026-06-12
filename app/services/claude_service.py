@@ -173,7 +173,7 @@ REGISTRO DE HÁBITOS DIÁRIOS:
 - Água: quando o usuário reportar consumo de água (ex: "bebi 500ml", "tomei 2 copos de água ~300ml cada", "bebi 1 litro"), use 'registrar_agua' com a quantidade estimada em ml. Após registrar, informe o total acumulado do dia de forma motivadora.
 - Dias sem fumar: quando o usuário informar que não fumou (ex: "não fumei hoje", "mais um dia sem cigarro", "dia X sem fumar"), use 'registrar_habito_fumar' com fumou=false. Se informar que fumou, use fumou=true. Comemore os marcos (7, 14, 30, 60, 90, 180, 365 dias).
 - Dias sem beber: quando o usuário informar que não bebeu álcool (ex: "não bebi hoje", "mais um dia sem álcool"), use 'registrar_habito_alcool' com bebeu=false. Se informar que bebeu, use bebeu=true. Comemore os marcos de dias sem beber.
-- Suplementos tomados: quando o usuário confirmar que tomou suplementos (ex: "tomei meus suplementos", "já tomei a creatina", "tomei tudo"), use 'registrar_tomei_suplementos'.
+- Suplementos tomados: quando o usuário disser que tomou um suplemento (ex: "tomei a creatina", "tomei whey 30g"), use 'registrar_tomei_suplementos' passando a descrição. Se ele citar VÁRIOS de uma vez (ex: "tomei whey e creatina"), chame a tool UMA VEZ PARA CADA suplemento.
 - Cadastro de suplementos: quando o usuário listar seus suplementos (ex: "tomo creatina, whey e vitamina D", "meus suplementos são..."), use 'registrar_suplementos_usuario' com a lista extraída.
 - Ao exibir os dias sem fumar ou sem beber, use emojis motivadores e compare com marcos anteriores quando disponíveis. Use sempre 'dias sem fumar' / 'dias sem beber', nunca a palavra 'streak'.
 
@@ -545,10 +545,20 @@ TOOLS = [
     {
         "name": "registrar_tomei_suplementos",
         "description": (
-            "Registra que o usuário tomou seus suplementos do dia. "
-            "Use quando o usuário confirmar que tomou creatina, vitaminas, manipulados ou quaisquer suplementos."
+            "Registra um suplemento que o usuário tomou hoje. "
+            "Use quando o usuário disser que tomou creatina, whey, vitaminas, manipulados ou qualquer suplemento. "
+            "Se ele citar VÁRIOS de uma vez, chame esta tool uma vez para cada um."
         ),
-        "input_schema": {"type": "object", "properties": {}},
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "descricao": {
+                    "type": "string",
+                    "description": "O suplemento tomado, com dosagem se mencionada (ex: 'Whey 30g', 'Creatina 5g', 'Vitamina D').",
+                },
+            },
+            "required": ["descricao"],
+        },
     },
     {
         "name": "registrar_suplementos_usuario",
@@ -2346,9 +2356,12 @@ def _process_tool_habito_alcool(tool_input: dict, user: Usuario, db: Session) ->
     )
 
 
-def _process_tool_tomei_suplementos(user: Usuario, db: Session) -> str:
-    habito_service.registrar_tomei_suplementos(user.id, db)
-    return "REGISTRADO: suplementos tomados hoje. ✅ Confirme de forma motivadora."
+def _process_tool_tomei_suplementos(tool_input: dict, user: Usuario, db: Session) -> str:
+    descricao = (tool_input.get("descricao") or "").strip()
+    if not descricao:
+        return "ERRO: não veio a descrição do suplemento. Pergunte ao usuário o que ele tomou."
+    habito_service.registrar_consumo_suplemento(user.id, descricao, db)
+    return f"REGISTRADO: suplemento '{descricao}' consumido hoje. ✅ Confirme de forma motivadora e breve."
 
 
 def _process_tool_suplementos_usuario(tool_input: dict, user: Usuario, db: Session) -> str:
@@ -3363,8 +3376,8 @@ def _build_menu_text(user_id: int, db: Session) -> str:
         habito_parts.append(f"🚬 Sem fumar: {resumo['dias_sem_fumar']} dias 🔥")
     if resumo["dias_sem_alcool"]:
         habito_parts.append(f"🍺 Sem álcool: {resumo['dias_sem_alcool']} dias 🔥")
-    if resumo["suplementos_tomados_hoje"]:
-        habito_parts.append("💊 Suplementos: ✅")
+    if resumo.get("suplementos_hoje_count"):
+        habito_parts.append(f"💊 Suplementos hoje: {resumo['suplementos_hoje_count']}")
 
     text = MENU_TEXT
     if habito_parts:
@@ -5387,7 +5400,7 @@ async def process_message(
                 elif block.name == "registrar_habito_alcool":
                     result = _process_tool_habito_alcool(block.input, user, db)
                 elif block.name == "registrar_tomei_suplementos":
-                    result = _process_tool_tomei_suplementos(user, db)
+                    result = _process_tool_tomei_suplementos(block.input, user, db)
                 elif block.name == "registrar_suplementos_usuario":
                     result = _process_tool_suplementos_usuario(block.input, user, db)
                 elif block.name == "iniciar_exclusao_registro":

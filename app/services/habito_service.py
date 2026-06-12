@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.habito_dia import HabitoDia
 from app.models.perfil_habitos import PerfilHabitos
+from app.models.registro_suplemento import RegistroSuplemento
 
 
 # ---------------------------------------------------------------------------
@@ -88,11 +89,32 @@ def registrar_suplementos_usuario(user_id: int, suplementos: list[str], db: Sess
     return perfil
 
 
-def registrar_tomei_suplementos(user_id: int, db: Session) -> dict:
-    habito = _get_or_create_habito_dia(user_id, date.today(), db)
-    habito.suplementos_tomados = True
+def registrar_consumo_suplemento(user_id: int, descricao: str, db: Session) -> dict:
+    """12-B: registra UM suplemento consumido hoje (texto livre, ex: 'Whey 30g')."""
+    hoje = date.today()
+    reg = RegistroSuplemento(user_id=user_id, data_consumo=hoje, descricao=descricao.strip())
+    db.add(reg)
     db.flush()
-    return {"registrado": True, "data": date.today().isoformat()}
+    return {"registrado": True, "descricao": descricao.strip(), "data": hoje.isoformat()}
+
+
+def listar_suplementos_dia(user_id: int, data, db: Session) -> list[RegistroSuplemento]:
+    """12.3: suplementos consumidos num dia, ordem cronológica."""
+    return (
+        db.query(RegistroSuplemento)
+        .filter(RegistroSuplemento.user_id == user_id, RegistroSuplemento.data_consumo == data)
+        .order_by(RegistroSuplemento.criado_em.asc())
+        .all()
+    )
+
+
+def contar_suplementos_dia(user_id: int, data, db: Session) -> int:
+    """Resumo do /menu: quantos suplementos foram registrados no dia."""
+    return (
+        db.query(RegistroSuplemento)
+        .filter(RegistroSuplemento.user_id == user_id, RegistroSuplemento.data_consumo == data)
+        .count()
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -118,12 +140,17 @@ def get_resumo_habitos(user_id: int, db: Session) -> dict:
             dias_sem_alcool = (today - perfil.streak_inicio_sem_alcool).days + 1
 
     agua_ml = habito.agua_ml if habito else 0
+    suplementos_hoje_count = (
+        db.query(RegistroSuplemento)
+        .filter(RegistroSuplemento.user_id == user_id, RegistroSuplemento.data_consumo == today)
+        .count()
+    )
     return {
         "agua_ml": agua_ml,
         "agua_l": round(agua_ml / 1000, 2),
         "fumou_hoje": habito.fumou if habito else None,
         "bebeu_alcool_hoje": habito.bebeu_alcool if habito else None,
-        "suplementos_tomados_hoje": habito.suplementos_tomados if habito else None,
+        "suplementos_hoje_count": suplementos_hoje_count,
         "dias_sem_fumar": dias_sem_fumar,
         "dias_sem_alcool": dias_sem_alcool,
         "suplementos_cadastrados": perfil.suplementos if perfil else None,
@@ -131,12 +158,9 @@ def get_resumo_habitos(user_id: int, db: Session) -> dict:
 
 
 def precisa_lembrete_suplemento(user_id: int, db: Session) -> bool:
-    habito = (
-        db.query(HabitoDia)
-        .filter(HabitoDia.user_id == user_id, HabitoDia.data == date.today())
-        .first()
-    )
-    return not (habito and habito.suplementos_tomados)
+    # 12-B: precisa lembrar se ainda não registrou nenhum suplemento hoje
+    tomados_hoje = contar_suplementos_dia(user_id, date.today(), db)
+    return tomados_hoje == 0
 
 
 def get_suplementos_usuario(user_id: int, db: Session) -> list[str] | None:
@@ -161,8 +185,8 @@ def build_habito_context(user_id: int, db: Session) -> str | None:
     elif resumo["bebeu_alcool_hoje"] is True:
         parts.append("Bebeu álcool hoje — streak foi zerado")
 
-    if resumo["suplementos_tomados_hoje"] is True:
-        parts.append("Suplementos do dia: ✅ registrados como tomados")
+    if resumo.get("suplementos_hoje_count"):
+        parts.append(f"Suplementos tomados hoje: {resumo['suplementos_hoje_count']}")
     elif resumo["suplementos_cadastrados"]:
         nomes = ", ".join(resumo["suplementos_cadastrados"])
         parts.append(f"Suplementos cadastrados: {nomes} (não registrou hoje)")
