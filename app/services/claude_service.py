@@ -2138,8 +2138,8 @@ async def _handle_coleta_dieta(conversa: Conversa, message_text: str, user: Usua
         )
 
     meta = _salvar_dieta(user, dados, db, substituir=False)
-    _sup_msg = await _integrar_suplementos_dieta(user, texto_exibido, db)
     conversa.estado_pendente = None
+    _sup_msg = await _integrar_suplementos_dieta(user, texto_exibido, db, conversa)
     db.add(conversa)
     db.commit()
     return (
@@ -2247,8 +2247,8 @@ async def _handle_cadastro_dieta_externa(conversa: Conversa, message_text: str, 
         )
 
     meta = _salvar_dieta(user, dados, db, substituir=False)
-    _sup_msg = await _integrar_suplementos_dieta(user, texto_dieta, db)
     conversa.estado_pendente = None
+    _sup_msg = await _integrar_suplementos_dieta(user, texto_dieta, db, conversa)
     db.add(conversa)
     db.commit()
     return (
@@ -2309,17 +2309,25 @@ async def _extrair_suplementos_da_dieta(texto: str) -> list[str]:
     return []
 
 
-async def _integrar_suplementos_dieta(user: "Usuario", texto_dieta: str, db: Session) -> str:
-    """12-E1: extrai suplementos da dieta, adiciona à lista e retorna a notificação (ou '')."""
+async def _integrar_suplementos_dieta(user: "Usuario", texto_dieta: str, db: Session, conversa: "Conversa") -> str:
+    """12-E: extrai suplementos da dieta e adiciona à lista. Se a dieta não tiver nenhum
+    e o usuário ainda não tem lista, deixa o estado pronto pra perguntar se ele consome."""
     try:
         sups = await _extrair_suplementos_da_dieta(texto_dieta)
-        if not sups:
+        if sups:
+            adicionados = habito_service.adicionar_suplementos_lote(user.id, sups, db)
+            if adicionados:
+                nomes = ", ".join(f"*{s}*" for s in adicionados)
+                return f"\n\n💊 Adicionei à sua lista de suplementos: {nomes}"
             return ""
-        adicionados = habito_service.adicionar_suplementos_lote(user.id, sups, db)
-        if not adicionados:
-            return ""
-        nomes = ", ".join(f"*{s}*" for s in adicionados)
-        return f"\n\n💊 Adicionei à sua lista de suplementos: {nomes}"
+        # Nenhum suplemento na dieta -> pergunta se consome (só se a lista estiver vazia)
+        if not habito_service.listar_suplementos_cadastrados(user.id, db):
+            conversa.estado_pendente = {
+                "tipo": "perguntando_consome_suplemento",
+                "criado_em": datetime.utcnow().isoformat(),
+            }
+            return "\n\n💊 Você consome algum *suplemento*? (responda *sim* ou *não*)"
+        return ""
     except Exception as e:
         logger.warning("integrar_suplementos_dieta_erro", extra={"user_id": user.id, "error": str(e)})
         return ""
@@ -4535,8 +4543,8 @@ async def process_message(
             resp = _normalizar_confirmacao(stripped)
             if stripped == "1" or resp == "sim":
                 meta = _salvar_dieta(user, estado.get("dieta", {}), db, substituir=True)
-                _sup_msg = await _integrar_suplementos_dieta(user, (estado.get("dieta") or {}).get("texto", ""), db)
                 conversa.estado_pendente = None
+                _sup_msg = await _integrar_suplementos_dieta(user, (estado.get("dieta") or {}).get("texto", ""), db, conversa)
                 reply = f"Dieta *{meta.nome}* cadastrada! ✅ Meta: {_dieta_resumo(meta)}. A anterior foi removida — o balanço diário já usa essa." + _sup_msg
             elif stripped == "2" or resp == "nao" or stripped_lower == "cancelar":
                 conversa.estado_pendente = None
@@ -5254,6 +5262,48 @@ async def process_message(
         db.add(conversa)
         db.commit()
         return _build_menu_text(user.id, db)
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "perguntando_consome_suplemento":
+        if _eh_comando_reservado(stripped_lower):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        else:
+            resp = _normalizar_confirmacao(stripped)
+            if resp == "sim" or stripped_lower in ("sim", "s", "consumo", "tomo"):
+                conversa.estado_pendente = {"tipo": "aguardando_lista_suplementos", "criado_em": datetime.utcnow().isoformat()}
+                db.add(conversa)
+                db.commit()
+                return "Boa! Me diz *quais* (com a dosagem se souber), separados por vírgula. Ex: *Whey 30g, Creatina 5g*."
+            if resp == "nao" or stripped_lower in ("nao", "não", "n", "cancelar"):
+                conversa.estado_pendente = None
+                db.add(conversa)
+                db.commit()
+                return "Beleza! Se começar a tomar algum, é só me avisar. 💪"
+            return "Você consome algum suplemento? Responda *sim* ou *não*."
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_lista_suplementos":
+        if _eh_comando_reservado(stripped_lower):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.flush()
+        elif stripped_lower in ("cancelar", "nao", "não", "nenhum"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Sem problema! Quando quiser cadastrar, é só usar o */menu* → 12 → B. 💪"
+        else:
+            itens = [p.strip() for p in re.split(r"[,\n;]+", stripped) if p.strip()]
+            if not itens:
+                return "Me manda os suplementos separados por vírgula (ex: *Whey 30g, Creatina 5g*). Ou *cancelar*."
+            adicionados = habito_service.adicionar_suplementos_lote(user.id, itens, db)
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            if adicionados:
+                nomes = ", ".join(f"*{s}*" for s in adicionados)
+                return f"✅ Cadastrei: {nomes}!\n\nVocê pode ver/editar em */menu* → 12 → B."
+            return "Esses já estavam na sua lista. 👍"
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "cadastro_suplementos":
         op = stripped_lower
