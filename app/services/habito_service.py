@@ -193,6 +193,25 @@ def remover_suplemento_cadastrado(user_id: int, indice: int, db: Session) -> str
     return None
 
 
+def adicionar_suplementos_lote(user_id: int, items: list[str], db: Session) -> list[str]:
+    """12-E: adiciona vários suplementos, ignorando duplicados (case-insensitive).
+    Retorna só os que foram realmente adicionados."""
+    perfil = _get_or_create_perfil(user_id, db)
+    atual = [s for s in (perfil.suplementos or []) if isinstance(s, str)]
+    existentes = {s.lower() for s in atual}
+    adicionados: list[str] = []
+    for it in items:
+        it = (it or "").strip()
+        if it and it.lower() not in existentes:
+            atual.append(it)
+            existentes.add(it.lower())
+            adicionados.append(it)
+    if adicionados:
+        perfil.suplementos = atual
+        db.flush()
+    return adicionados
+
+
 def get_suplementos_usuario(user_id: int, db: Session) -> list[str] | None:
     perfil = db.query(PerfilHabitos).filter(PerfilHabitos.user_id == user_id).first()
     return perfil.suplementos if perfil else None

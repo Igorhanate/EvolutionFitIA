@@ -2138,6 +2138,7 @@ async def _handle_coleta_dieta(conversa: Conversa, message_text: str, user: Usua
         )
 
     meta = _salvar_dieta(user, dados, db, substituir=False)
+    _sup_msg = await _integrar_suplementos_dieta(user, texto_exibido, db)
     conversa.estado_pendente = None
     db.add(conversa)
     db.commit()
@@ -2146,6 +2147,7 @@ async def _handle_coleta_dieta(conversa: Conversa, message_text: str, user: Usua
         + "\n\n---\n\n"
         + f"✅ Dieta salva! Meta: {_dieta_resumo(meta)}. O balanço diário já usa essa — "
         "é só mandar foto das refeições. 💪"
+        + _sup_msg
     )
 
 
@@ -2245,13 +2247,82 @@ async def _handle_cadastro_dieta_externa(conversa: Conversa, message_text: str, 
         )
 
     meta = _salvar_dieta(user, dados, db, substituir=False)
+    _sup_msg = await _integrar_suplementos_dieta(user, texto_dieta, db)
     conversa.estado_pendente = None
     db.add(conversa)
     db.commit()
     return (
         f"✅ Dieta cadastrada! Meta: {_dieta_resumo(meta)}. "
         "O balanço diário já usa essa — é só mandar foto das refeições. 💪"
+        + _sup_msg
     )
+
+
+_TOOL_EXTRAIR_SUPLEMENTOS = {
+    "name": "extrair_suplementos_dieta",
+    "description": (
+        "Extrai a lista de suplementos alimentares mencionados no texto de uma dieta. "
+        "Inclui a dosagem quando houver. Retorna lista vazia se não houver suplementos."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "suplementos": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Suplementos com dosagem se mencionada (ex: ['Whey 30g', 'Creatina 5g']). Vazio se não houver.",
+            },
+        },
+        "required": ["suplementos"],
+    },
+}
+
+
+async def _extrair_suplementos_da_dieta(texto: str) -> list[str]:
+    """12-E1: chamada de IA isolada que extrai suplementos do texto da dieta."""
+    if not texto or len(texto.strip()) < 10:
+        return []
+    prompt = (
+        "Extraia APENAS os suplementos alimentares mencionados no texto da dieta abaixo, "
+        "usando a tool extrair_suplementos_dieta. Inclua a dosagem quando houver (ex: 'Whey 30g'). "
+        "São suplementos: whey, creatina, BCAA, glutamina, multivitamínico, vitaminas, ômega-3, "
+        "cafeína, pré-treino, hipercalórico, caseína, colágeno, etc. "
+        "NÃO inclua alimentos comuns (arroz, frango, ovo, batata, frutas). "
+        "Se não houver nenhum suplemento, retorne lista vazia.\n\n"
+        f"DIETA:\n{texto}"
+    )
+    try:
+        response = await client.messages.create(
+            model=settings.CLAUDE_MODEL,
+            max_tokens=500,
+            tools=[_TOOL_EXTRAIR_SUPLEMENTOS],
+            tool_choice={"type": "tool", "name": "extrair_suplementos_dieta"},
+            messages=[{"role": "user", "content": prompt}],
+        )
+        for block in response.content:
+            if getattr(block, "type", None) == "tool_use" and block.name == "extrair_suplementos_dieta":
+                sups = block.input.get("suplementos", [])
+                if isinstance(sups, list):
+                    return [str(s).strip() for s in sups if str(s).strip()]
+    except Exception as e:
+        logger.warning("extrair_suplementos_dieta_erro", extra={"error": str(e)})
+    return []
+
+
+async def _integrar_suplementos_dieta(user: "Usuario", texto_dieta: str, db: Session) -> str:
+    """12-E1: extrai suplementos da dieta, adiciona à lista e retorna a notificação (ou '')."""
+    try:
+        sups = await _extrair_suplementos_da_dieta(texto_dieta)
+        if not sups:
+            return ""
+        adicionados = habito_service.adicionar_suplementos_lote(user.id, sups, db)
+        if not adicionados:
+            return ""
+        nomes = ", ".join(f"*{s}*" for s in adicionados)
+        return f"\n\n💊 Adicionei à sua lista de suplementos: {nomes}"
+    except Exception as e:
+        logger.warning("integrar_suplementos_dieta_erro", extra={"user_id": user.id, "error": str(e)})
+        return ""
 
 
 # Modalidades de treino — fonte unica compartilhada (criar do zero + importar)
@@ -4464,8 +4535,9 @@ async def process_message(
             resp = _normalizar_confirmacao(stripped)
             if stripped == "1" or resp == "sim":
                 meta = _salvar_dieta(user, estado.get("dieta", {}), db, substituir=True)
+                _sup_msg = await _integrar_suplementos_dieta(user, (estado.get("dieta") or {}).get("texto", ""), db)
                 conversa.estado_pendente = None
-                reply = f"Dieta *{meta.nome}* cadastrada! ✅ Meta: {_dieta_resumo(meta)}. A anterior foi removida — o balanço diário já usa essa."
+                reply = f"Dieta *{meta.nome}* cadastrada! ✅ Meta: {_dieta_resumo(meta)}. A anterior foi removida — o balanço diário já usa essa." + _sup_msg
             elif stripped == "2" or resp == "nao" or stripped_lower == "cancelar":
                 conversa.estado_pendente = None
                 reply = "Beleza, mantive sua dieta atual. A nova foi descartada."
