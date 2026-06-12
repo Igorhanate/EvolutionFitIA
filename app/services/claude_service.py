@@ -3462,7 +3462,22 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
         rodape = f"\n*Total do dia:* {tot_kcal} kcal · P {tot_p:g}g · C {tot_c:g}g · G {tot_g:g}g"
         return "\n".join(linhas) + rodape
     # Itens novos sem handler ainda -> placeholder
-    if item in (12, 14, 15, 16):
+    if item == 12:
+        # B1 12-C: submenu Água / Suplementos
+        conversa.estado_pendente = {
+            "tipo": "submenu_agua_suplementos",
+            "criado_em": datetime.utcnow().isoformat(),
+        }
+        db.add(conversa)
+        db.commit()
+        return (
+            "💧 *Água / Suplementos*\n\n"
+            "*A.* Quanto tomei de água hoje?\n"
+            "*B.* Meus suplementos\n"
+            "*C.* Suplementos consumidos hoje\n\n"
+            "Responda com *A*, *B* ou *C* (ou *cancelar*)."
+        )
+    if item in (14, 15, 16):
         return _MENU_EM_CONSTRUCAO
     # Item 3 "Treinar" -> direciona pro fluxo treinar (regex existente)
     if item == 3:
@@ -5151,8 +5166,53 @@ async def process_message(
         db.commit()
         return _build_menu_text(user.id, db)
 
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_agua_suplementos":
+        _pn = (user.nome or "").split()[0] if user.nome else "você"
+        op = stripped_lower
+        if op == "cancelar":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Beleza! Manda */menu* quando quiser. 😊"
+        if op == "a":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            resumo = habito_service.get_resumo_habitos(user.id, db)
+            ml = resumo.get("agua_ml", 0) or 0
+            if ml > 0:
+                litros = resumo.get("agua_l", round(ml / 1000, 2))
+                return f"💧 Você tomou *{ml}ml* ({litros}L) de água hoje, {_pn}!"
+            return (
+                f"💧 Você ainda não registrou água hoje, {_pn}.\n\n"
+                "Me diz quanto bebeu (ex: *bebi 500ml*) que eu registro!"
+            )
+        if op == "b":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return (
+                "🚧 *Meus suplementos* (cadastro) está em construção e chega em breve!\n\n"
+                "Por enquanto, é só me avisar quando tomar algum (ex: *tomei creatina*) que eu registro."
+            )
+        if op == "c":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            regs = habito_service.listar_suplementos_dia(user.id, date.today(), db)
+            if not regs:
+                return (
+                    f"💊 Você ainda não registrou suplementos hoje, {_pn}.\n\n"
+                    "Me avisa quando tomar algum (ex: *tomei whey 30g*)!"
+                )
+            linhas = [f"💊 *Suplementos que você tomou hoje, {_pn}:*\n"]
+            for r in regs:
+                linhas.append(f"• {r.descricao}")
+            return "\n".join(linhas)
+        return "Responda com *A* (água), *B* (meus suplementos) ou *C* (consumidos hoje). Ou *cancelar*."
+
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_menu":
-        if stripped.isdigit() and 1 <= int(stripped) <= 12:
+        if stripped.isdigit() and 1 <= int(stripped) <= 16:
             conversa.estado_pendente = None
             db.add(conversa)
             db.flush()
