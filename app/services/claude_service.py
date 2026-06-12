@@ -2014,6 +2014,8 @@ async def _iniciar_coleta_dieta(user: Usuario, conversa: Conversa, db: Session) 
     pedir.append("• *Nível de atividade*: sedentário / leve (1-3x/sem) / moderado (3-5x/sem) / intenso (6-7x/sem)")
     pedir.append("• *Objetivo*: perder gordura / ganhar massa / manter")
     pedir.append("• *Restrições* ou alergias (ou 'nenhuma')")
+    pedir.append("• *Você toma suplementos?* Se sim, quais (com dosagem, ex: Whey 30g) — ou 'não tomo'")
+    pedir.append("• *Posso incluir suplementos no seu plano alimentar?* (sim / não)")
 
     return (
         f"Bora montar sua dieta, {primeiro_nome}! 🥗\n\n"
@@ -2041,6 +2043,10 @@ async def _handle_coleta_dieta(conversa: Conversa, message_text: str, user: Usua
         "com refeições, alimentos, quantidades e o total diário de calorias e macros. "
         "NÃO pergunte nada: todos os dados já estão acima; se algo não foi informado, assuma um valor "
         "razoável e siga.\n\n"
+        "SUPLEMENTOS: se o usuário AUTORIZOU incluir suplementos no plano, adicione ao final uma seção "
+        "*Suplementos* com sugestões de base científica pertinentes ao perfil (whey, creatina, "
+        "vitamina D, ômega-3, etc.), incluindo a dosagem. Se ele NÃO autorizou, NÃO inclua nenhuma "
+        "seção ou sugestão de suplementos no plano.\n\n"
         "Ao FINAL da resposta, acrescente EXATAMENTE este bloco com os totais diários (só números):\n"
         "###META###\n"
         '{"kcal": 0, "prot": 0, "carb": 0, "gord": 0}\n'
