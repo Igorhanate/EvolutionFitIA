@@ -2124,12 +2124,18 @@ async def _handle_coleta_dieta(conversa: Conversa, message_text: str, user: Usua
         "gorduras": gord,
     }
 
-    # Gate de dieta unica — reusa o handler 'confirmando_dieta_substituicao' (linha ~3300)
+    # 12-F2: captura suplementos informados na coleta (Q1). NÃO pergunta de novo aqui —
+    # a pergunta "consome?" (12-E2) fica só no menu 6.
+    _sup_msg = await _integrar_suplementos_dieta(user, message_text, db, conversa, perguntar_se_vazio=False)
+
+    # Gate de dieta unica — reusa o handler 'confirmando_dieta_substituicao'
     existente = nutricao_service.get_meta_ativa(user.id, db)
     if existente is not None:
         conversa.estado_pendente = {
             "tipo": "confirmando_dieta_substituicao",
             "dieta": dados,
+            "origem": "menu5",
+            "sup_msg": _sup_msg,
             "criado_em": datetime.utcnow().isoformat(),
         }
         db.add(conversa)
@@ -2145,7 +2151,6 @@ async def _handle_coleta_dieta(conversa: Conversa, message_text: str, user: Usua
 
     meta = _salvar_dieta(user, dados, db, substituir=False)
     conversa.estado_pendente = None
-    _sup_msg = await _integrar_suplementos_dieta(user, texto_exibido, db, conversa)
     db.add(conversa)
     db.commit()
     return (
@@ -2240,6 +2245,7 @@ async def _handle_cadastro_dieta_externa(conversa: Conversa, message_text: str, 
         conversa.estado_pendente = {
             "tipo": "confirmando_dieta_substituicao",
             "dieta": dados,
+            "origem": "menu6",
             "criado_em": datetime.utcnow().isoformat(),
         }
         db.add(conversa)
@@ -2315,9 +2321,9 @@ async def _extrair_suplementos_da_dieta(texto: str) -> list[str]:
     return []
 
 
-async def _integrar_suplementos_dieta(user: "Usuario", texto_dieta: str, db: Session, conversa: "Conversa") -> str:
-    """12-E: extrai suplementos da dieta e adiciona à lista. Se a dieta não tiver nenhum
-    e o usuário ainda não tem lista, deixa o estado pronto pra perguntar se ele consome."""
+async def _integrar_suplementos_dieta(user: "Usuario", texto_dieta: str, db: Session, conversa: "Conversa", perguntar_se_vazio: bool = True) -> str:
+    """12-E/F: extrai suplementos do texto e adiciona à lista. Se não houver nenhum e
+    perguntar_se_vazio=True e a lista estiver vazia, prepara o estado pra perguntar."""
     try:
         sups = await _extrair_suplementos_da_dieta(texto_dieta)
         if sups:
@@ -2326,8 +2332,7 @@ async def _integrar_suplementos_dieta(user: "Usuario", texto_dieta: str, db: Ses
                 nomes = ", ".join(f"*{s}*" for s in adicionados)
                 return f"\n\n💊 Adicionei à sua lista de suplementos: {nomes}"
             return ""
-        # Nenhum suplemento na dieta -> pergunta se consome (só se a lista estiver vazia)
-        if not habito_service.listar_suplementos_cadastrados(user.id, db):
+        if perguntar_se_vazio and not habito_service.listar_suplementos_cadastrados(user.id, db):
             conversa.estado_pendente = {
                 "tipo": "perguntando_consome_suplemento",
                 "criado_em": datetime.utcnow().isoformat(),
@@ -4550,7 +4555,10 @@ async def process_message(
             if stripped == "1" or resp == "sim":
                 meta = _salvar_dieta(user, estado.get("dieta", {}), db, substituir=True)
                 conversa.estado_pendente = None
-                _sup_msg = await _integrar_suplementos_dieta(user, (estado.get("dieta") or {}).get("texto", ""), db, conversa)
+                if estado.get("origem") == "menu5":
+                    _sup_msg = estado.get("sup_msg", "")  # já extraído na coleta; não pergunta de novo
+                else:
+                    _sup_msg = await _integrar_suplementos_dieta(user, (estado.get("dieta") or {}).get("texto", ""), db, conversa)
                 reply = f"Dieta *{meta.nome}* cadastrada! ✅ Meta: {_dieta_resumo(meta)}. A anterior foi removida — o balanço diário já usa essa." + _sup_msg
             elif stripped == "2" or resp == "nao" or stripped_lower == "cancelar":
                 conversa.estado_pendente = None
