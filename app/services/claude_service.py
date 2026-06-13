@@ -1912,6 +1912,43 @@ def _perfil_context_str(user_id: int, db: Session) -> str | None:
     )
 
 
+def _perfil_usuario_str(user: Usuario, db: Session) -> str:
+    """Resumo do perfil em formato amigável pro usuário (WhatsApp)."""
+    perfil = perfil_service.get_or_create_perfil(user.id, db)
+    linhas: list[str] = []
+    nome = (user.nome or "").strip()
+    if nome:
+        linhas.append(f"• Nome: {nome}")
+    if perfil.sexo:
+        s = perfil.sexo.upper()
+        linhas.append(f"• Sexo: {'Masculino' if s == 'M' else 'Feminino' if s == 'F' else perfil.sexo}")
+    if perfil.data_nascimento:
+        idade = perfil_service.calcular_idade(perfil.data_nascimento)
+        if idade:
+            linhas.append(f"• Idade: {idade} anos")
+    if perfil.altura_cm:
+        linhas.append(f"• Altura: {perfil.altura_cm} cm")
+    if perfil.peso_kg:
+        linhas.append(f"• Peso: {float(perfil.peso_kg):g} kg")
+    if perfil.nivel_experiencia:
+        linhas.append(f"• Nível de treino: {perfil.nivel_experiencia}")
+    if perfil.objetivo_padrao:
+        linhas.append(f"• Objetivo: {perfil.objetivo_padrao}")
+    if perfil.local_treino_padrao:
+        linhas.append(f"• Local de treino: {perfil.local_treino_padrao}")
+    if perfil.dias_semana_padrao:
+        linhas.append(f"• Dias por semana: {perfil.dias_semana_padrao}")
+    if perfil.tempo_sessao_padrao:
+        linhas.append(f"• Tempo de sessão: {perfil.tempo_sessao_padrao}")
+    if perfil.horario_treino_padrao:
+        linhas.append(f"• Horário de treino: {perfil.horario_treino_padrao}")
+    if perfil.lesoes:
+        linhas.append(f"• Lesões/limitações: {perfil.lesoes}")
+    if not linhas:
+        return "Você ainda não tem um perfil cadastrado."
+    return "\n".join(linhas)
+
+
 def _dieta_resumo(meta) -> str:
     macros = []
     if meta.proteinas_alvo_g:
@@ -3584,7 +3621,19 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
             "*C.* Suplementos consumidos hoje\n\n"
             "Responda com *A*, *B* ou *C* (ou *cancelar*)."
         )
-    if item in (14, 15, 16):
+    if item == 16:
+        conversa.estado_pendente = {"tipo": "submenu_config", "criado_em": datetime.utcnow().isoformat()}
+        db.add(conversa)
+        db.commit()
+        return (
+            "⚙️ *Configurações*\n\n"
+            "*A.* Ver meu perfil\n"
+            "*B.* Editar perfil\n"
+            "*C.* Limpar / apagar dados\n"
+            "*D.* Suporte\n\n"
+            "Responda *A*, *B*, *C* ou *D* (ou *cancelar*)."
+        )
+    if item in (14, 15):
         return _MENU_EM_CONSTRUCAO
     # Item 3 "Treinar" -> direciona pro fluxo treinar (regex existente)
     if item == 3:
@@ -5276,6 +5325,43 @@ async def process_message(
         db.add(conversa)
         db.commit()
         return _build_menu_text(user.id, db)
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_config":
+        op = stripped_lower
+        if op == "cancelar":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Beleza! Manda */menu* quando quiser. 😊"
+        if op == "a":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return f"👤 *Seu perfil:*\n\n{_perfil_usuario_str(user, db)}"
+        if op == "b":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "🚧 *Editar perfil* está em construção e chega em breve!"
+        if op == "c":
+            conversa.estado_pendente = {"tipo": "confirmando_limpar_dados", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            return (
+                "⚠️ Isso apaga *TODOS* os seus treinos, dietas, refeições, medidas, fotos, registros "
+                "e hábitos — *sem volta*. Seu perfil (nome, nascimento, sexo, altura) e assinatura ficam.\n\n"
+                "Tem certeza? Digite *APAGAR TUDO* ou *CANCELAR*."
+            )
+        if op == "d":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return (
+                "💬 *Suporte Evolution Fit*\n\n"
+                "Precisa de ajuda ou tem alguma dúvida? Fala com a gente:\n"
+                "📧 evolutionfit.ai+suporte@gmail.com"
+            )
+        return "Responda *A* (ver perfil), *B* (editar), *C* (limpar dados) ou *D* (suporte)."
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "perguntando_consome_suplemento":
         if _eh_comando_reservado(stripped_lower):

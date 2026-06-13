@@ -28,3 +28,10 @@ Gerando os posts do dia...
 
 Total de hoje: 2
 Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-12.md
+Gerando os posts do dia...
+
+  id=16 | informativo | carrossel | Frequência de treino: quantos dias por semana você realmente precisa para ter resultado?
+  id=17 | divulgacao | carrossel | A Evolution Fit AI entende o que os apps genéricos ignoram: o seu histórico, o seu ritmo e o seu objetivo real — e usa tudo isso pra montar um plano que funciona de verdade.
+
+Total de hoje: 2
+Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-13.md
