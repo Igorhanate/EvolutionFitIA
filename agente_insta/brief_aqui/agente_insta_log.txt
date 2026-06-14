@@ -35,3 +35,11 @@ Gerando os posts do dia...
 
 Total de hoje: 2
 Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-13.md
+Gerando os posts do dia...
+
+  id=18 | antes_depois | carrossel | O que muda no seu corpo quando você para de treinar por instinto e começa a treinar com um plano real
+  id=19 | dieta | foto_unica | Você não está com fome — está com sede. A confusão entre os dois sinais sabota a dieta sem você perceber.
+  id=20 | divulgacao | foto_unica | A Evolution Fit AI não precisa de 1 hora de consulta pra te conhecer — ela aprende enquanto você treina
+
+Total de hoje: 3
+Doc salvo em: C:\Users\Igor Hanate\Desktop\EvolutionFitIA\agente_insta\brief_aqui\briefs_2026-06-14.md

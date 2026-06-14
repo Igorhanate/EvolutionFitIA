@@ -3505,10 +3505,17 @@ _CAMPOS_EDIT_PERFIL = [
 ]
 
 
-def _texto_editar_perfil() -> str:
+def _texto_editar_perfil(perfil=None) -> str:
     linhas = ["✏️ *Editar perfil* — qual campo quer mudar?\n"]
-    for i, (_k, label, _t, _m) in enumerate(_CAMPOS_EDIT_PERFIL, 1):
-        linhas.append(f"*{i}.* {label}")
+    for i, (k, label, _t, _m) in enumerate(_CAMPOS_EDIT_PERFIL, 1):
+        atual = getattr(perfil, k, None) if perfil is not None else None
+        if atual is None or str(atual).strip() == "":
+            valor = "_não definido_"
+        elif k == "peso_kg":
+            valor = f"{float(atual):g} kg"
+        else:
+            valor = str(atual)
+        linhas.append(f"*{i}.* {label}: {valor}")
     linhas.append("\n*V.* Voltar")
     linhas.append("\nResponda com o *número* (ou *V*).")
     return "\n".join(linhas)
@@ -5379,7 +5386,7 @@ async def process_message(
             db.add(conversa)
             db.commit()
             return f"Qual o novo valor para *{label}*? (ou *cancelar*)"
-        return _texto_editar_perfil()
+        return _texto_editar_perfil(perfil_service.get_or_create_perfil(user.id, db))
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "editar_perfil_valor":
         estado = conversa.estado_pendente
@@ -5387,7 +5394,7 @@ async def process_message(
             conversa.estado_pendente = {"tipo": "editar_perfil", "criado_em": datetime.utcnow().isoformat()}
             db.add(conversa)
             db.commit()
-            return "Cancelado.\n\n" + _texto_editar_perfil()
+            return "Cancelado.\n\n" + _texto_editar_perfil(perfil_service.get_or_create_perfil(user.id, db))
         campo = estado.get("campo")
         label = estado.get("label", campo)
         vtipo = estado.get("vtipo", "texto")
@@ -5422,7 +5429,7 @@ async def process_message(
         conversa.estado_pendente = {"tipo": "editar_perfil", "criado_em": datetime.utcnow().isoformat()}
         db.add(conversa)
         db.commit()
-        return f"✅ *{label}* atualizado!\n\n" + _texto_editar_perfil()
+        return f"✅ *{label}* atualizado!\n\n" + _texto_editar_perfil(perfil_service.get_or_create_perfil(user.id, db))
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_config":
         op = stripped_lower
@@ -5440,7 +5447,7 @@ async def process_message(
             conversa.estado_pendente = {"tipo": "editar_perfil", "criado_em": datetime.utcnow().isoformat()}
             db.add(conversa)
             db.commit()
-            return _texto_editar_perfil()
+            return _texto_editar_perfil(perfil_service.get_or_create_perfil(user.id, db))
         if op == "c":
             conversa.estado_pendente = {"tipo": "confirmando_limpar_dados", "criado_em": datetime.utcnow().isoformat()}
             db.add(conversa)
