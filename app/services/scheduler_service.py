@@ -60,6 +60,21 @@ async def _enviar_lembretes_suplemento() -> None:
         db.close()
 
 
+async def _disparar_lembretes_remedio() -> None:
+    from app.database import SessionLocal
+    from app.services import lembrete_service
+
+    db = SessionLocal()
+    try:
+        enviados = await lembrete_service.disparar_lembretes_vencidos(db)
+        if enviados:
+            logger.info("lembretes_remedio_enviados", extra={"total": enviados})
+    except Exception as e:
+        logger.error("cron_lembrete_remedio_erro", extra={"error": str(e)})
+    finally:
+        db.close()
+
+
 def start_scheduler() -> None:
     scheduler = get_scheduler()
     # Lembrete das 20h desativado a pedido do usuário (25/05). Sistema de lembretes opt-in (continuo/pontual/horario) entrará quando a confiabilidade do disparo for resolvida (Render pago ou cron externo).
@@ -70,6 +85,13 @@ def start_scheduler() -> None:
     #     replace_existing=True,
     #     misfire_grace_time=600,
     # )
+    scheduler.add_job(
+        _disparar_lembretes_remedio,
+        CronTrigger(minute="*/15", timezone="America/Sao_Paulo"),
+        id="lembretes_remedio",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
     scheduler.start()
     logger.info("scheduler_started")
 

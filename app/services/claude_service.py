@@ -3863,6 +3863,14 @@ async def process_message(
     conversa = _get_or_create_conversa(user.id, db)
     sessao_data = date.today()
 
+    # 0.1. Disparo LAZY de lembretes de remédio vencidos (item 14).
+    # Roda a cada mensagem recebida, varrendo TODOS os usuários (funciona no Render free).
+    # Isolado: nunca quebra a resposta principal.
+    try:
+        await lembrete_service.disparar_lembretes_vencidos(db)
+    except Exception as _e_lemb:
+        logger.error("lazy_lembrete_erro", extra={"error": str(_e_lemb)})
+
     # 0.5. Guard: perfil obrigatório — intercepts before everything including /menu
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "cadastro_perfil":
         return await _handle_cadastro_perfil(conversa, message_text, user, db)

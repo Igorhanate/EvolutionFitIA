@@ -132,3 +132,72 @@ def criar_lembrete(
         f"(tome a primeira dose agora se for o caso). 💪"
     )
     return True, msg
+
+
+async def disparar_lembretes_vencidos(db: Session) -> int:
+    """Varre TODOS os lembretes ativos vencidos (proximo_em <= agora), envia e avança.
+
+    Usada pelo disparo lazy (a cada mensagem recebida) e pelo cron (Render pago).
+    Retorna quantos avisos foram enviados. Cada lembrete é isolado por try/except,
+    então um erro em um nao derruba os outros nem a resposta principal do usuario.
+    """
+    from app.models.usuario import Usuario
+    from app.services import whatsapp_service
+
+    agora = datetime.utcnow()
+    vencidos = (
+        db.query(LembreteRemedio)
+        .filter(LembreteRemedio.ativo.is_(True), LembreteRemedio.proximo_em <= agora)
+        .all()
+    )
+    enviados
+
+
+async def disparar_lembretes_vencidos(db: Session) -> int:
+    """Varre TODOS os lembretes ativos vencidos (proximo_em <= agora), envia e avança.
+
+    Usada pelo disparo lazy (a cada mensagem recebida) e pelo cron (Render pago).
+    Retorna quantos avisos foram enviados. Cada lembrete é isolado por try/except,
+    então um erro em um nao derruba os outros nem a resposta principal do usuario.
+    """
+    from app.models.usuario import Usuario
+    from app.services import whatsapp_service
+
+    agora = datetime.utcnow()
+    vencidos = (
+        db.query(LembreteRemedio)
+        .filter(LembreteRemedio.ativo.is_(True), LembreteRemedio.proximo_em <= agora)
+        .all()
+    )
+    enviados = 0
+    for lemb in vencidos:
+        try:
+            # Ja passou do fim agendado -> encerra sem enviar (termino natural, inicia bloqueio 7 dias)
+            if lemb.proximo_em > lemb.fim_em:
+                lemb.ativo = False
+                lemb.terminado_em = lemb.fim_em
+                db.add(lemb)
+                continue
+
+            user = db.query(Usuario).filter(Usuario.id == lemb.user_id).first()
+            if user and user.telefone:
+                qtd = f" ({lemb.quantidade})" if lemb.quantidade else ""
+                texto = (
+                    f"💊 *Hora do remédio!*\n\n"
+                    f"Está na hora de tomar *{lemb.nome}*{qtd}. 💪\n\n"
+                    f"_Lembrete a cada {lemb.intervalo_horas}h._"
+                )
+                await whatsapp_service.send_message(user.telefone, texto)
+                enviados += 1
+
+            # Avanca pro proximo horario
+            lemb.proximo_em = lemb.proximo_em + timedelta(hours=lemb.intervalo_horas)
+            # Se o proximo ja passou do fim, encerra agora (inicia bloqueio 7 dias)
+            if lemb.proximo_em > lemb.fim_em:
+                lemb.ativo = False
+                lemb.terminado_em = lemb.fim_em
+            db.add(lemb)
+        except Exception as e:
+            logger.error("disparo_lembrete_erro", extra={"lembrete_id": lemb.id, "error": str(e)})
+    db.commit()
+    return enviados
