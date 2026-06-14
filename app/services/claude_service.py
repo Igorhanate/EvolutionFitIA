@@ -3696,8 +3696,13 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
             "*V.* Voltar ao menu\n\n"
             "Responda *A*, *B*, *C*, *D* ou *V*."
         )
-    if item in (14, 15):
+    if item == 15:
         return _MENU_EM_CONSTRUCAO
+    if item == 14:
+        conversa.estado_pendente = {"tipo": "submenu_lembrete_remedio", "criado_em": datetime.utcnow().isoformat()}
+        db.add(conversa)
+        db.commit()
+        return lembrete_service.formatar_lista_ativos(user.id, db)
     # Item 3 "Treinar" -> direciona pro fluxo treinar (regex existente)
     if item == 3:
         conversa.estado_pendente = None
@@ -5471,6 +5476,27 @@ async def process_message(
         db.add(conversa)
         db.commit()
         return f"✅ *{label}* atualizado!\n\n" + _texto_editar_perfil(perfil_service.get_or_create_perfil(user.id, db))
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_lembrete_remedio":
+        op = stripped_lower
+        if op == "cancelar":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Beleza! Manda */menu* quando quiser. 😊"
+        if op == "v":
+            conversa.estado_pendente = {"tipo": "aguardando_menu"}
+            db.add(conversa)
+            db.commit()
+            return _build_menu_text(user.id, db)
+        if op.isdigit():
+            ok_canc, msg_canc = lembrete_service.cancelar_lembrete_por_indice(user.id, int(op), db)
+            # Continua no submenu mostrando a lista atualizada
+            return f"{msg_canc}\n\n{lembrete_service.formatar_lista_ativos(user.id, db)}"
+        return (
+            "Digite o *número* do lembrete pra cancelar, ou *V* pra voltar.\n\n"
+            "Pra criar um novo, é só me pedir por mensagem (ex: _me lembra de tomar X a cada 8h por 3 dias_)."
+        )
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_config":
         op = stripped_lower

@@ -201,3 +201,44 @@ async def disparar_lembretes_vencidos(db: Session) -> int:
             logger.error("disparo_lembrete_erro", extra={"lembrete_id": lemb.id, "error": str(e)})
     db.commit()
     return enviados
+
+
+def formatar_lista_ativos(user_id: int, db: Session) -> str:
+    """Texto dos lembretes ativos pro menu 14 (numerados). Vazio = mensagem amigavel."""
+    ativos = listar_ativos(user_id, db)
+    if not ativos:
+        return (
+            "💊 *Lembretes de remédio*\n\n"
+            "Você não tem nenhum lembrete ativo.\n\n"
+            "Pra criar, é só me dizer, ex:\n"
+            "_me lembra de tomar Amoxicilina a cada 8h por 3 dias_\n\n"
+            "*V.* Voltar ao menu"
+        )
+    linhas = ["💊 *Seus lembretes de remédio ativos:*\n"]
+    for i, lemb in enumerate(ativos, 1):
+        qtd = f" ({lemb.quantidade})" if lemb.quantidade else ""
+        linhas.append(f"*{i}.* {lemb.nome}{qtd} — a cada {lemb.intervalo_horas}h")
+    linhas.append("\nPra *cancelar* um, digite o *número*.")
+    linhas.append("Pra *criar* outro, é só me pedir por mensagem.")
+    linhas.append("\n*V.* Voltar ao menu")
+    return "\n".join(linhas)
+
+
+def cancelar_lembrete_por_indice(user_id: int, indice: int, db: Session) -> tuple[bool, str]:
+    """Cancela o lembrete ativo na posicao `indice` (1-based) da lista ordenada.
+
+    Cancelar marca ativo=False + terminado_em=agora -> inicia o bloqueio de 7 dias.
+    Retorna (ok, mensagem).
+    """
+    ativos = listar_ativos(user_id, db)
+    if indice < 1 or indice > len(ativos):
+        return False, f"Número inválido. Escolha entre 1 e {len(ativos)}, ou *V* pra voltar."
+    lemb = ativos[indice - 1]
+    lemb.ativo = False
+    lemb.terminado_em = datetime.utcnow()
+    db.add(lemb)
+    db.commit()
+    return True, (
+        f"✅ Lembrete de *{lemb.nome}* cancelado.\n\n"
+        f"_Obs: pra recadastrar esse mesmo remédio, vai ter que esperar {BLOQUEIO_DIAS} dias._"
+    )
