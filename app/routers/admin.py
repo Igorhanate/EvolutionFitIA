@@ -18,6 +18,7 @@ from app.models.registro_exercicio import RegistroExercicio
 from app.models.meta_nutricional import MetaNutricional
 from app.models.sessao_treino import SessaoTreino
 from app.models.registro_refeicao import RegistroRefeicao
+from app.models.lembrete_remedio import LembreteRemedio
 from app.models.treino import Treino
 from app.models.usuario import Usuario
 from app.models.perfil_fitness import PerfilFitness
@@ -297,6 +298,33 @@ def get_fotos(user_id: int, db: Session = Depends(get_db)):
             "criado_em": f.criado_em.isoformat(),
         }
         for f in fotos
+    ]
+
+
+@router.get("/users/{user_id}/lembretes-remedio")
+def get_lembretes_remedio(user_id: int, db: Session = Depends(get_db)):
+    """Lista os lembretes de remédio do usuário (ativos e terminados). Debug item 14."""
+    _get_user_or_404(user_id, db)
+    lembretes = (
+        db.query(LembreteRemedio)
+        .filter(LembreteRemedio.user_id == user_id)
+        .order_by(LembreteRemedio.criado_em.desc())
+        .all()
+    )
+    return [
+        {
+            "id": l.id,
+            "nome": l.nome,
+            "nome_norm": l.nome_norm,
+            "quantidade": l.quantidade,
+            "intervalo_horas": l.intervalo_horas,
+            "proximo_em": l.proximo_em.isoformat() if l.proximo_em else None,
+            "fim_em": l.fim_em.isoformat() if l.fim_em else None,
+            "ativo": l.ativo,
+            "terminado_em": l.terminado_em.isoformat() if l.terminado_em else None,
+            "criado_em": l.criado_em.isoformat() if l.criado_em else None,
+        }
+        for l in lembretes
     ]
 
 
