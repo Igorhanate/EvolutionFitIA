@@ -12,7 +12,7 @@ from app.models.dieta import Dieta
 from app.models.meta_nutricional import MetaNutricional
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service, habito_service, nutricao_service, perfil_service, sessao_treino_service, treino_service, usda_service
+from app.services import exercicio_service, habito_service, lembrete_service, nutricao_service, perfil_service, sessao_treino_service, treino_service, usda_service
 
 logger = logging.getLogger(__name__)
 
@@ -576,6 +576,39 @@ TOOLS = [
                 },
             },
             "required": ["suplementos"],
+        },
+    },
+    {
+        "name": "criar_lembrete_remedio",
+        "description": (
+            "Cria um lembrete de REMÉDIO/MEDICAMENTO sob demanda. "
+            "Use SOMENTE quando o usuário pedir para ser lembrado de tomar um remédio em intervalos "
+            "(ex: 'me lembra de tomar Amoxicilina a cada 8 horas por 3 dias', 'preciso tomar dipirona de 6 em 6h por 2 dias'). "
+            "NÃO use para suplementos (creatina, whey, vitaminas) — isso é outra coisa. "
+            "Extraia o nome, a quantidade (se houver), o intervalo em HORAS e a duração em DIAS. "
+            "Se o usuário der o intervalo em outra forma (ex: '3x ao dia'), converta para horas (3x ao dia = a cada 8h)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nome": {
+                    "type": "string",
+                    "description": "Nome do remédio (ex: 'Amoxicilina', 'Dipirona').",
+                },
+                "quantidade": {
+                    "type": "string",
+                    "description": "Quantidade/dose por vez, se mencionada (ex: '1 comprimido', '20 gotas', '5ml'). Opcional.",
+                },
+                "intervalo_horas": {
+                    "type": "integer",
+                    "description": "De quantas em quantas horas tomar (ex: 8 para 'a cada 8h').",
+                },
+                "duracao_dias": {
+                    "type": "integer",
+                    "description": "Por quantos dias (máximo 5).",
+                },
+            },
+            "required": ["nome", "intervalo_horas", "duracao_dias"],
         },
     },
     {
@@ -5889,6 +5922,17 @@ async def process_message(
                     result = _process_tool_tomei_suplementos(block.input, user, db)
                 elif block.name == "registrar_suplementos_usuario":
                     result = _process_tool_suplementos_usuario(block.input, user, db)
+                elif block.name == "criar_lembrete_remedio":
+                    args = block.input or {}
+                    ok_lemb, msg_lemb = lembrete_service.criar_lembrete(
+                        user_id=user.id,
+                        nome=args.get("nome", ""),
+                        quantidade=args.get("quantidade"),
+                        intervalo_horas=args.get("intervalo_horas", 0),
+                        duracao_dias=args.get("duracao_dias", 0),
+                        db=db,
+                    )
+                    result = msg_lemb
                 elif block.name == "iniciar_exclusao_registro":
                     alvo = block.input.get("alvo")
                     if alvo == "treino":
