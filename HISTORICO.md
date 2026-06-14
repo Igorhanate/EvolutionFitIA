@@ -1330,3 +1330,103 @@ TESTADO em producao: OK.
 B1 EM ANDAMENTO. Faltam itens 8 (ver refeicoes), 9 (ver plano alimentar), 12 (agua/suplementos -
 submenu + migration 015 tabela suplemento_cadastrado), 14 (lembrete remedio - recon do legado
 primeiro), 15 (cards = backlog C), 16 (configuracoes - perfil ver/limpar + suporte, email TBD).
+
+[14/06 #16] B1: PACOTE SUPLEMENTOS (item 12 completo) + ITEM 16 CONFIG completo + navegacao Voltar.
+
+=== ITEM 12 — AGUA/SUPLEMENTOS (100% FECHADO) ===
+12-A: migration 015 cria tabela registros_suplemento (id, user_id, data_consumo Date,
+  descricao String(200), criado_em). Model RegistroSuplemento + back_populates em Usuario.
+  Testada local upgrade->downgrade->upgrade OK antes do push (banco local localhost, NAO producao).
+12-B: bot registra consumo via tool registrar_tomei_suplementos (agora com param descricao) ->
+  habito_service.registrar_consumo_suplemento (grava texto livre na tabela nova, data=hoje).
+  Aposentou o booleano HabitoDia.suplementos_tomados (coluna fica, parou de usar). get_resumo_habitos
+  passou a devolver suplementos_hoje_count. Ajustados precisa_lembrete_suplemento, build_habito_context,
+  _build_menu_text ("Suplementos hoje: N").
+12-C: submenu item 12 (estado submenu_agua_suplementos): A=agua hoje, B=meus suplementos, C=consumidos
+  hoje. FIX BUG B1.0: teto do dispatch aguardando_menu era 1..12 -> mudado pra 1..16 (itens 13-16
+  estavam caindo na IA).
+12-D: cadastro manual de suplementos nome+dosagem como STRING "Nome Dosagem" (reusa PerfilHabitos.
+  suplementos list[str], ZERO migration). Submenu cadastro_suplementos A=adicionar/B=remover/V=voltar.
+  Helpers habito_service: listar/adicionar/remover_suplemento_cadastrado.
+12-E1: integracao dieta->suplementos. Funcao de extracao ISOLADA (_extrair_suplementos_da_dieta, tool
+  extrair_suplementos_dieta, +1 chamada IA) NAO mexe nos parsers de ###META###. _integrar_suplementos_dieta
+  extrai+adiciona via adicionar_suplementos_lote (dedup case-insensitive)+notifica. Engatado em menu 5,
+  menu 6 e handler de substituicao.
+12-E2: quando a dieta nao tem suplementos e a lista esta vazia, bot pergunta "consome suplementos?"
+  (estados perguntando_consome_suplemento -> aguardando_lista_suplementos). Param perguntar_se_vazio.
+12-F1: coleta de dieta (menu 5) ganhou 2 perguntas: "toma suplementos? quais?" e "posso incluir
+  suplementos no plano?". Instrucao no prompt de geracao pra IA respeitar a 2a.
+12-F2: Q1 popula a lista extraindo da resposta da coleta (perguntar_se_vazio=False no menu 5) e o
+  12-E2 foi DESLIGADO no menu 5 (fica so no menu 6) pra nao perguntar 2x. Estado de substituicao
+  guarda origem (menu5/menu6) + sup_msg.
+Todos testados em producao.
+
+=== ITEM 16 — CONFIGURACOES (100% FECHADO) ===
+16-A: submenu submenu_config: A=ver perfil (helper _perfil_usuario_str, texto LIMPO pro usuario, NAO o
+  _perfil_context_str que e instrucao interna de IA), B=editar (placeholder na 16-A), C=limpar/apagar
+  dados (reusa estado confirmando_limpar_dados existente -> _handle_limpar_dados, exige "APAGAR TUDO"),
+  D=suporte (email evolutionfit.ai+suporte@gmail.com).
+16-B: editar perfil. Campos editaveis (8, identidade FICA imutavel): peso, nivel, objetivo, local,
+  dias/semana, tempo sessao, horario, lesoes. Fluxo: lista numerada (estado editar_perfil) -> escolhe
+  numero -> pede valor (estado editar_perfil_valor) -> valida por tipo (peso 20-400, nivel
+  iniciante/intermediario/avancado ou 1/2/3, dias 1-7, resto texto) -> salva -> volta pra lista (loop).
+  Setter generico whitelisted perfil_service.atualizar_campo_perfil; reusa atualizar_peso_perfil e
+  atualizar_nivel_perfil. _texto_editar_perfil(perfil) mostra o VALOR ATUAL de cada campo ao lado.
+
+=== NAVEGACAO VOLTAR ===
+Opcao "V. Voltar" em todos os submenus: submenu_config e submenu_agua_suplementos (raiz) -> volta pro
+/menu (reabre estado aguardando_menu + _build_menu_text). cadastro_suplementos (filho) -> volta pro
+submenu agua/suplementos. cancelar continua saindo de tudo.
+
+B1 RESTANTE: item 14 (lembrete remedio - recon do legado primeiro), item 15 (cards - Opcao C endpoint
+Vercel, deixado por ultimo pois envolve 2o repo).
+
+[14/06 #17] B1 ITEM 14 — LEMBRETE DE REMEDIO (100% FECHADO E NO AR).
+
+ARQUEOLOGIA DO LEGADO: nao existia "lembrete de remedio". O que existia era um lembrete de
+SUPLEMENTO das 20h (cron APScheduler _enviar_lembretes_suplemento em scheduler_service.py),
+DESATIVADO em 25/05 porque o Render free dorme e o disparo agendado nao era confiavel. Nenhum
+model/tabela de remedio existia. Item 14 foi construido do ZERO.
+
+DECISOES TRAVADAS:
+- Lembrete de REMEDIO sob demanda (NAO suplemento). Cliente cria por texto livre; IA extrai.
+- Limites: max 5 dias de duracao, max 3 remedios ativos. Sem confirmacao "tomei" (so aviso).
+- 1o lembrete sai em agora + 1 intervalo (assume 1a dose tomada agora). >5 dias = recusa.
+- BLOQUEIO 7 DIAS: quando um remedio termina (natural OU cancelado) nao pode recadastrar o
+  MESMO nome por 7 dias contados do fim. Nome comparado de forma flexivel (lowercase/sem
+  acento/sem espaco = nome_norm). Tabela nao deleta: ativo=False + terminado_em.
+- Disparo: LAZY (a cada msg, varre TODOS) + CRON */15min (pro Render pago). Os dois coexistem.
+- Riscos aceitos por Igor: atraso no disparo (Render free) + janela 24h do WhatsApp.
+
+14-A (migration 016 + model):
+  Tabela lembretes_remedio: id, user_id(FK,index), nome String(100), nome_norm String(100,index),
+  quantidade String(50,null), intervalo_horas Int, proximo_em DateTime(index), fim_em DateTime,
+  ativo Bool(default true), terminado_em DateTime(null), criado_em DateTime. Tudo UTC (intervalos
+  relativos, evita bug de fuso). Model app/models/lembrete_remedio.py (LembreteRemedio) +
+  __init__.py + back_populates em Usuario. Testada local upgrade->downgrade->upgrade.
+
+14-B (criar/extrair):
+  Novo service app/services/lembrete_service.py: _normalizar_nome_remedio (NFKD sem acento +
+  lowercase + collapse espacos); criar_lembrete(...) faz TODAS as validacoes (intervalo 1-72h,
+  duracao 1-5d, max 3 ativos, nao duplicar nome ativo, bloqueio 7d via _bloqueado_por_7_dias) e
+  retorna (ok, msg). proximo_em=now+intervalo, fim_em=now+duracao. Tool IA criar_lembrete_remedio
+  (params nome/quantidade/intervalo_horas/duracao_dias; IA converte "3x ao dia"->8h) + handler no
+  dispatch. Rota admin GET /admin/users/{id}/lembretes-remedio (lista ativos+terminados, debug).
+
+14-C (disparo):
+  lembrete_service.disparar_lembretes_vencidos(db) async: varre TODOS lembretes ativo=True com
+  proximo_em<=now; se ja passou do fim encerra sem enviar (terminado_em=fim_em); senao envia
+  "Hora do remedio!" via whatsapp_service.send_message + avanca proximo_em += intervalo; se o novo
+  proximo passar do fim, encerra. Cada lembrete isolado em try/except. Engates: (1) hook LAZY no
+  topo de process_message (apos sessao_data, antes dos guards, em try/except que nunca quebra a
+  resposta) varrendo todos; (2) cron _disparar_lembretes_remedio em scheduler_service.py via
+  CronTrigger(minute="*/15"). Cron ja registrado (roda quando Render acordar; no free o lazy cobre).
+
+14-D (listar/cancelar):
+  Helpers no service: formatar_lista_ativos (texto numerado pro menu; vazio = instrucao de como
+  criar) e cancelar_lembrete_por_indice (marca ativo=False + terminado_em=now -> dispara bloqueio
+  7d). Menu 14 (antes placeholder junto do 15) agora abre estado submenu_lembrete_remedio e mostra
+  a lista. Handler do submenu (espelha submenu_config): numero=cancela e remostra lista atualizada,
+  V=volta pro /menu, cancelar=sai. Item 15 (cards) segue como _MENU_EM_CONSTRUCAO.
+
+B1 RESTANTE: so o item 15 (cards - Opcao C, endpoint no site Vercel, envolve 2o repo).
