@@ -3506,7 +3506,7 @@ def _texto_cadastro_suplementos(cadastrados: list[str]) -> str:
         "O que quer fazer?\n"
         "*A.* Adicionar\n"
         "*B.* Remover\n"
-        "*C.* Voltar"
+        "*V.* Voltar"
     )
 
 
@@ -3618,8 +3618,9 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
             "💧 *Água / Suplementos*\n\n"
             "*A.* Quanto tomei de água hoje?\n"
             "*B.* Meus suplementos\n"
-            "*C.* Suplementos consumidos hoje\n\n"
-            "Responda com *A*, *B* ou *C* (ou *cancelar*)."
+            "*C.* Suplementos consumidos hoje\n"
+            "*V.* Voltar ao menu\n\n"
+            "Responda *A*, *B*, *C* ou *V*."
         )
     if item == 16:
         conversa.estado_pendente = {"tipo": "submenu_config", "criado_em": datetime.utcnow().isoformat()}
@@ -3630,8 +3631,9 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
             "*A.* Ver meu perfil\n"
             "*B.* Editar perfil\n"
             "*C.* Limpar / apagar dados\n"
-            "*D.* Suporte\n\n"
-            "Responda *A*, *B*, *C* ou *D* (ou *cancelar*)."
+            "*D.* Suporte\n"
+            "*V.* Voltar ao menu\n\n"
+            "Responda *A*, *B*, *C*, *D* ou *V*."
         )
     if item in (14, 15):
         return _MENU_EM_CONSTRUCAO
@@ -5361,7 +5363,12 @@ async def process_message(
                 "Precisa de ajuda ou tem alguma dúvida? Fala com a gente:\n"
                 "📧 evolutionfit.ai+suporte@gmail.com"
             )
-        return "Responda *A* (ver perfil), *B* (editar), *C* (limpar dados) ou *D* (suporte)."
+        if op == "v":
+            conversa.estado_pendente = {"tipo": "aguardando_menu"}
+            db.add(conversa)
+            db.commit()
+            return _build_menu_text(user.id, db)
+        return "Responda *A* (ver perfil), *B* (editar), *C* (limpar dados), *D* (suporte) ou *V* (voltar)."
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "perguntando_consome_suplemento":
         if _eh_comando_reservado(stripped_lower):
@@ -5424,7 +5431,7 @@ async def process_message(
                 linhas.append(f"*{i}.* {s}")
             linhas.append("\nOu *cancelar*.")
             return "\n".join(linhas)
-        if op == "c":
+        if op == "v":
             conversa.estado_pendente = {"tipo": "submenu_agua_suplementos", "criado_em": datetime.utcnow().isoformat()}
             db.add(conversa)
             db.commit()
@@ -5432,15 +5439,16 @@ async def process_message(
                 "💧 *Água / Suplementos*\n\n"
                 "*A.* Quanto tomei de água hoje?\n"
                 "*B.* Meus suplementos\n"
-                "*C.* Suplementos consumidos hoje\n\n"
-                "Responda com *A*, *B* ou *C* (ou *cancelar*)."
+                "*C.* Suplementos consumidos hoje\n"
+                "*V.* Voltar ao menu\n\n"
+                "Responda *A*, *B*, *C* ou *V*."
             )
         if op == "cancelar":
             conversa.estado_pendente = None
             db.add(conversa)
             db.commit()
             return "Beleza! Manda */menu* quando quiser. 😊"
-        return "Responda *A* (adicionar), *B* (remover) ou *C* (voltar)."
+        return "Responda *A* (adicionar), *B* (remover) ou *V* (voltar)."
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "cadastro_suplementos_add":
         if stripped_lower == "cancelar":
@@ -5519,7 +5527,12 @@ async def process_message(
             for r in regs:
                 linhas.append(f"• {r.descricao}")
             return "\n".join(linhas)
-        return "Responda com *A* (água), *B* (meus suplementos) ou *C* (consumidos hoje). Ou *cancelar*."
+        if op == "v":
+            conversa.estado_pendente = {"tipo": "aguardando_menu"}
+            db.add(conversa)
+            db.commit()
+            return _build_menu_text(user.id, db)
+        return "Responda *A* (água), *B* (meus suplementos), *C* (consumidos hoje) ou *V* (voltar)."
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "aguardando_menu":
         if stripped.isdigit() and 1 <= int(stripped) <= 16:
