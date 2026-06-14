@@ -2328,15 +2328,27 @@ async def _handle_cadastro_dieta_externa(conversa: Conversa, message_text: str, 
             "2️⃣ NÃO, manter a atual"
         )
 
-    meta = _salvar_dieta(user, dados, db, substituir=False)
-    conversa.estado_pendente = None
-    _sup_msg = await _integrar_suplementos_dieta(user, texto_dieta, db, conversa)
+    # Parte 1 (Dieta UX): em vez de salvar direto, mostra o que entendeu e pede confirmacao.
+    conversa.estado_pendente = {
+        "tipo": "confirmando_dieta_externa_nova",
+        "dieta": dados,
+        "criado_em": datetime.utcnow().isoformat(),
+    }
     db.add(conversa)
     db.commit()
+    macros_txt = []
+    if prot: macros_txt.append(f"{int(prot)}g proteína")
+    if carb: macros_txt.append(f"{int(carb)}g carbo")
+    if gord: macros_txt.append(f"{int(gord)}g gordura")
+    macros_str = (" · ".join(macros_txt)) if macros_txt else "macros estimados a partir das refeições"
     return (
-        f"✅ Dieta cadastrada! Meta: {_dieta_resumo(meta)}. "
-        "O balanço diário já usa essa — é só mandar foto das refeições. 💪"
-        + _sup_msg
+        f"📋 Entendi sua dieta assim:\n\n"
+        f"🔥 *{kcal} kcal/dia*\n"
+        f"💪 {macros_str}\n\n"
+        "Posso cadastrar?\n\n"
+        "*1.* ✅ Confirmar\n"
+        "*2.* ✏️ Editar (reenviar a dieta)\n"
+        "*3.* ❌ Cancelar"
     )
 
 
@@ -5776,6 +5788,43 @@ async def process_message(
             db.add(conversa)
             db.commit()
             return reply
+
+    # 3.45 Parte 1 (Dieta UX): confirmacao antes de salvar dieta externa nova (menu 6)
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "confirmando_dieta_externa_nova":
+        op = (message_text or "").strip().lower()
+        dados = conversa.estado_pendente.get("dieta", {})
+        if op in ("1", "confirmar", "sim", "s", "ok", "pode"):
+            meta = _salvar_dieta(user, dados, db, substituir=False)
+            conversa.estado_pendente = None
+            _sup_msg = await _integrar_suplementos_dieta(user, dados.get("texto", ""), db, conversa)
+            db.add(conversa)
+            db.commit()
+            reply = (
+                f"✅ Dieta cadastrada! Meta: {_dieta_resumo(meta)}. "
+                "O balanço diário já usa essa — é só mandar foto das refeições. 💪"
+                + _sup_msg
+            )
+        elif op in ("2", "editar", "edit"):
+            conversa.estado_pendente = {
+                "tipo": "cadastrando_dieta_externa",
+                "criado_em": datetime.utcnow().isoformat(),
+            }
+            db.add(conversa)
+            db.commit()
+            reply = "Sem problema! Me reenvia a *dieta* com os ajustes que eu cadastro. 🥗"
+        elif op in ("3", "cancelar", "nao", "não", "n"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            reply = "Beleza, não cadastrei nada. Quando quiser, é só mandar */menu* → 6. 😊"
+        else:
+            reply = "Responda *1* (confirmar), *2* (editar) ou *3* (cancelar)."
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
 
     # 3.5 Fluxo de exclusão de registro — intercepta antes do fluxo geral (não chama a IA)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "apagando_registro":
