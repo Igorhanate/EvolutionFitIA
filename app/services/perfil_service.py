@@ -56,6 +56,19 @@ def atualizar_nivel_perfil(user_id: int, nivel: str, db: Session) -> dict:
     return {"anterior": anterior, "novo": nivel}
 
 
+def atualizar_campo_perfil(user_id: int, campo: str, valor, db: Session) -> None:
+    """16-B: setter genérico (whitelisted) para campos editáveis do perfil."""
+    permitidos = {
+        "objetivo_padrao", "local_treino_padrao", "dias_semana_padrao",
+        "tempo_sessao_padrao", "horario_treino_padrao", "lesoes",
+    }
+    if campo not in permitidos:
+        raise ValueError(f"Campo nao editavel: {campo}")
+    perfil = get_or_create_perfil(user_id, db)
+    setattr(perfil, campo, valor)
+    db.flush()
+
+
 def limpar_dados_usuario(user_id: int, db: Session) -> dict:
     """Apaga TODA a atividade do usuario e zera os campos editaveis do perfil.
     MANTEM identidade (sexo, data_nascimento, altura_cm) + conta + assinatura.

@@ -3493,6 +3493,27 @@ async def _gerar_treino_de_dados(
 # Menu principal
 # ---------------------------------------------------------------------------
 
+_CAMPOS_EDIT_PERFIL = [
+    ("peso_kg", "Peso", "peso", 0),
+    ("nivel_experiencia", "Nível de experiência", "nivel", 0),
+    ("objetivo_padrao", "Objetivo", "texto", 30),
+    ("local_treino_padrao", "Local de treino", "texto", 30),
+    ("dias_semana_padrao", "Dias por semana", "dias", 0),
+    ("tempo_sessao_padrao", "Tempo de sessão", "texto", 20),
+    ("horario_treino_padrao", "Horário de treino", "texto", 20),
+    ("lesoes", "Lesões / limitações", "texto", 500),
+]
+
+
+def _texto_editar_perfil() -> str:
+    linhas = ["✏️ *Editar perfil* — qual campo quer mudar?\n"]
+    for i, (_k, label, _t, _m) in enumerate(_CAMPOS_EDIT_PERFIL, 1):
+        linhas.append(f"*{i}.* {label}")
+    linhas.append("\n*V.* Voltar")
+    linhas.append("\nResponda com o *número* (ou *V*).")
+    return "\n".join(linhas)
+
+
 def _texto_cadastro_suplementos(cadastrados: list[str]) -> str:
     if cadastrados:
         linhas = ["💊 *Seus suplementos cadastrados:*\n"]
@@ -5328,6 +5349,81 @@ async def process_message(
         db.commit()
         return _build_menu_text(user.id, db)
 
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "editar_perfil":
+        op = stripped_lower
+        if op in ("v", "voltar"):
+            conversa.estado_pendente = {"tipo": "submenu_config", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            return (
+                "⚙️ *Configurações*\n\n"
+                "*A.* Ver meu perfil\n"
+                "*B.* Editar perfil\n"
+                "*C.* Limpar / apagar dados\n"
+                "*D.* Suporte\n"
+                "*V.* Voltar ao menu\n\n"
+                "Responda *A*, *B*, *C*, *D* ou *V*."
+            )
+        if op == "cancelar":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Beleza! Manda */menu* quando quiser. 😊"
+        if stripped.isdigit() and 1 <= int(stripped) <= len(_CAMPOS_EDIT_PERFIL):
+            campo_key, label, tipo, maxlen = _CAMPOS_EDIT_PERFIL[int(stripped) - 1]
+            conversa.estado_pendente = {
+                "tipo": "editar_perfil_valor",
+                "campo": campo_key, "label": label, "vtipo": tipo, "vmax": maxlen,
+                "criado_em": datetime.utcnow().isoformat(),
+            }
+            db.add(conversa)
+            db.commit()
+            return f"Qual o novo valor para *{label}*? (ou *cancelar*)"
+        return _texto_editar_perfil()
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "editar_perfil_valor":
+        estado = conversa.estado_pendente
+        if stripped_lower == "cancelar":
+            conversa.estado_pendente = {"tipo": "editar_perfil", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            return "Cancelado.\n\n" + _texto_editar_perfil()
+        campo = estado.get("campo")
+        label = estado.get("label", campo)
+        vtipo = estado.get("vtipo", "texto")
+        vmax = estado.get("vmax", 30) or 30
+        valor_raw = stripped
+        if vtipo == "peso":
+            try:
+                p = float(valor_raw.replace(",", ".").replace("kg", "").strip())
+            except ValueError:
+                return "Valor inválido. Manda o peso em kg (ex: *82.5*). Ou *cancelar*."
+            if not (20 <= p <= 400):
+                return "Peso fora do esperado (20–400 kg). Tenta de novo. Ou *cancelar*."
+            perfil_service.atualizar_peso_perfil(user.id, p, db)
+        elif vtipo == "nivel":
+            mapa = {"1": "iniciante", "2": "intermediario", "3": "avancado",
+                    "iniciante": "iniciante", "intermediario": "intermediario", "intermediário": "intermediario",
+                    "avancado": "avancado", "avançado": "avancado"}
+            nivel = mapa.get(valor_raw.strip().lower())
+            if not nivel:
+                return "Nível inválido. Responda *iniciante*, *intermediário* ou *avançado* (ou 1/2/3). Ou *cancelar*."
+            perfil_service.atualizar_nivel_perfil(user.id, nivel, db)
+        elif vtipo == "dias":
+            digs = re.sub(r"\D", "", valor_raw)
+            if not digs or not (1 <= int(digs) <= 7):
+                return "Informe os dias por semana (1 a 7). Ou *cancelar*."
+            perfil_service.atualizar_campo_perfil(user.id, campo, str(int(digs)), db)
+        else:
+            val = valor_raw.strip()
+            if not val:
+                return f"Manda o novo valor para *{label}*. Ou *cancelar*."
+            perfil_service.atualizar_campo_perfil(user.id, campo, val[:vmax], db)
+        conversa.estado_pendente = {"tipo": "editar_perfil", "criado_em": datetime.utcnow().isoformat()}
+        db.add(conversa)
+        db.commit()
+        return f"✅ *{label}* atualizado!\n\n" + _texto_editar_perfil()
+
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_config":
         op = stripped_lower
         if op == "cancelar":
@@ -5341,10 +5437,10 @@ async def process_message(
             db.commit()
             return f"👤 *Seu perfil:*\n\n{_perfil_usuario_str(user, db)}"
         if op == "b":
-            conversa.estado_pendente = None
+            conversa.estado_pendente = {"tipo": "editar_perfil", "criado_em": datetime.utcnow().isoformat()}
             db.add(conversa)
             db.commit()
-            return "🚧 *Editar perfil* está em construção e chega em breve!"
+            return _texto_editar_perfil()
         if op == "c":
             conversa.estado_pendente = {"tipo": "confirmando_limpar_dados", "criado_em": datetime.utcnow().isoformat()}
             db.add(conversa)
