@@ -3633,8 +3633,17 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
                 "Você ainda não tem um plano alimentar cadastrado. 🥗\n\n"
                 "Use o */menu* opção *5* (criar) ou *6* (cadastrar a do seu nutricionista)."
             )
+        _opcoes_dieta = (
+            "\n\n━━━━━━━━━━━━━\n"
+            "*A.* 🗑️ Apagar dieta\n"
+            "*E.* ✏️ Editar (trocar alimentos)\n"
+            "*V.* Voltar ao menu"
+        )
+        conversa.estado_pendente = {"tipo": "submenu_ver_dieta", "criado_em": datetime.utcnow().isoformat()}
+        db.add(conversa)
+        db.commit()
         if meta.texto_original and meta.texto_original.strip():
-            return f"🥗 *Seu plano alimentar atual:*\n\n{meta.texto_original.strip()}"
+            return f"🥗 *Seu plano alimentar atual:*\n\n{meta.texto_original.strip()}" + _opcoes_dieta
         # Fallback: dieta sem texto livre — mostra as metas
         linhas = [f"🔥 Calorias: *{meta.calorias_alvo} kcal*"]
         macros = []
@@ -3646,7 +3655,7 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
             macros.append(f"G: {meta.gorduras_alvo_g:g}g")
         if macros:
             linhas.append(" · ".join(macros))
-        return f"🥗 *Seu plano alimentar atual:*\n\n" + "\n".join(linhas)
+        return f"🥗 *Seu plano alimentar atual:*\n\n" + "\n".join(linhas) + _opcoes_dieta
     # B1 item 8: Ver minhas refeições feitas (hoje)
     if item == 8:
         hoje = date.today()
@@ -5819,6 +5828,70 @@ async def process_message(
             reply = "Beleza, não cadastrei nada. Quando quiser, é só mandar */menu* → 6. 😊"
         else:
             reply = "Responda *1* (confirmar), *2* (editar) ou *3* (cancelar)."
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
+
+    # 3.46 Parte 2 (Dieta UX): submenu da visualizacao de dieta (menu 9) — Apagar / Editar / Voltar
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_ver_dieta":
+        op = (message_text or "").strip().lower()
+        if op in ("a", "apagar"):
+            conversa.estado_pendente = {"tipo": "confirmando_apagar_dieta", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            db.commit()
+            reply = (
+                "⚠️ Tem certeza que quer *apagar* sua dieta atual? Isso remove o plano alimentar ativo.\n\n"
+                "Digite *APAGAR* pra confirmar, ou *V* pra voltar."
+            )
+        elif op in ("e", "editar"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            reply = (
+                "✏️ Pra trocar um alimento, é só me dizer aqui na conversa, ex:\n"
+                "_troca o arroz por batata doce_\n\n"
+                "Eu recalculo as calorias e macros automaticamente. 🥗"
+            )
+        elif op in ("v", "voltar"):
+            conversa.estado_pendente = {"tipo": "aguardando_menu"}
+            db.add(conversa)
+            db.commit()
+            reply = _build_menu_text(user.id, db)
+        elif op == "cancelar":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            reply = "Beleza! Manda */menu* quando quiser. 😊"
+        else:
+            reply = "Responda *A* (apagar), *E* (editar) ou *V* (voltar)."
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
+
+    # 3.47 Parte 2 (Dieta UX): confirmacao de apagar dieta
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "confirmando_apagar_dieta":
+        op = (message_text or "").strip().lower()
+        if op in ("apagar", "apagar tudo", "sim", "s"):
+            meta = nutricao_service.get_meta_ativa(user.id, db)
+            if meta is not None:
+                nutricao_service.apagar_dietas(user.id, [meta.id], db)
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            reply = "🗑️ Dieta apagada. Quando quiser criar outra, é só usar */menu* → 5 ou 6. 🥗"
+        elif op in ("v", "voltar", "cancelar", "nao", "não", "n"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            reply = "Ok, *não* apaguei nada. Sua dieta continua ativa. 👍"
+        else:
+            reply = "Digite *APAGAR* pra confirmar a exclusão, ou *V* pra voltar."
         mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
         mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
         conversa.mensagens = mensagens
