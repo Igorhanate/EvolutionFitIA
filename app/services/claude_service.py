@@ -5866,13 +5866,13 @@ async def process_message(
                 "Digite *APAGAR* pra confirmar, ou *V* pra voltar."
             )
         elif op in ("e", "editar"):
-            conversa.estado_pendente = None
+            conversa.estado_pendente = {"tipo": "modo_edicao_dieta", "criado_em": datetime.utcnow().isoformat()}
             db.add(conversa)
             db.commit()
             reply = (
-                "✏️ Pra trocar um alimento, é só me dizer aqui na conversa, ex:\n"
+                "✏️ Qual alimento quer trocar? Me diz aqui, ex:\n"
                 "_troca o arroz por batata doce_\n\n"
-                "Eu recalculo as calorias e macros automaticamente. 🥗"
+                "_(a troca vale só pra alimentos que estão no seu plano)_ 🥗"
             )
         elif op in ("v", "voltar"):
             conversa.estado_pendente = {"tipo": "aguardando_menu"}
@@ -6178,47 +6178,68 @@ async def process_message(
                     destino_pt = block.input.get("destino_pt", "")
                     destino_en = block.input.get("destino_en", "")
                     gramas_origem = float(block.input.get("gramas_origem", 100))
-                    origem_obj, _ = await _resolver_alimento(origem_pt, origem_en, db)
-                    if origem_obj is None:
-                        result = (
-                            f"ERRO_ALIMENTO_NAO_ENCONTRADO: origem '{origem_pt}' / '{origem_en}' "
-                            "nao encontrada em nenhuma base"
-                        )
-                    else:
-                        destino_obj, _ = await _resolver_alimento(destino_pt, destino_en, db)
-                        if destino_obj is None:
-                            result = (
-                                f"ERRO_ALIMENTO_NAO_ENCONTRADO: destino '{destino_pt}' / '{destino_en}' "
-                                "nao encontrado em nenhuma base"
+                    # Modo edição (via menu 9 -> Editar): só troca alimento que ESTÁ no plano.
+                    _bloqueio_edicao = None
+                    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "modo_edicao_dieta":
+                        conversa.estado_pendente = None
+                        _meta_edit = nutricao_service.get_meta_ativa(user.id, db)
+                        if not _meta_edit:
+                            _bloqueio_edicao = (
+                                "SEM_PLANO_PARA_EDITAR: usuário não tem plano alimentar. "
+                                "Sugira criar pelo /menu opção 5 ou 6. NÃO calcule nada."
                             )
                         else:
-                            res = _calcular_substituicao_normed(
-                                _normar_alimento(origem_obj), gramas_origem, _normar_alimento(destino_obj)
+                            _texto_plano = (_meta_edit.texto_original or "").lower()
+                            _alvo = (origem_pt or "").strip().split()[0].lower() if (origem_pt or "").strip() else ""
+                            if _alvo and _alvo not in _texto_plano:
+                                _bloqueio_edicao = (
+                                    f"ALIMENTO_NAO_ESTA_NO_PLANO: '{origem_pt}' não está no plano do usuário. "
+                                    "Avise gentilmente que esse alimento não está no plano dele e por isso não dá pra trocar. NÃO calcule."
+                                )
+                    if _bloqueio_edicao is not None:
+                        result = _bloqueio_edicao
+                    else:
+                        origem_obj, _ = await _resolver_alimento(origem_pt, origem_en, db)
+                        if origem_obj is None:
+                            result = (
+                                f"ERRO_ALIMENTO_NAO_ENCONTRADO: origem '{origem_pt}' / '{origem_en}' "
+                                "nao encontrada em nenhuma base"
                             )
-                            if res["erro"]:
-                                result = f"ERRO: {res['erro']}"
-                            else:
-                                resumo = _fmt_substituicao(res)
-                                _nome_origem = (origem_pt or res['origem']['nome']).strip().capitalize()
-                                _nome_destino = (destino_pt or res['destino']['nome']).strip().capitalize()
-                                descricao = (
-                                    f"{_nome_origem} {res['origem']['gramas']}g"
-                                    f" → {_nome_destino} {res['destino']['gramas']}g"
-                                )
-                                conversa.estado_pendente = {
-                                    "tipo": "substituicao_dieta",
-                                    "etapa": "aguardando_escopo",
-                                    "descricao": descricao,
-                                    "resumo_macros": resumo,
-                                    "origem_nome": _nome_origem,
-                                    "destino_nome": _nome_destino,
-                                    "destino_gramas": res['destino']['gramas'],
-                                }
+                        else:
+                            destino_obj, _ = await _resolver_alimento(destino_pt, destino_en, db)
+                            if destino_obj is None:
                                 result = (
-                                    f"SUBSTITUICAO_CALCULADA: apresente os números abaixo ao usuário "
-                                    f"e PERGUNTE se a troca é só para hoje ou para salvar no plano alimentar. "
-                                    f"Números: {resumo}"
+                                    f"ERRO_ALIMENTO_NAO_ENCONTRADO: destino '{destino_pt}' / '{destino_en}' "
+                                    "nao encontrado em nenhuma base"
                                 )
+                            else:
+                                res = _calcular_substituicao_normed(
+                                    _normar_alimento(origem_obj), gramas_origem, _normar_alimento(destino_obj)
+                                )
+                                if res["erro"]:
+                                    result = f"ERRO: {res['erro']}"
+                                else:
+                                    resumo = _fmt_substituicao(res)
+                                    _nome_origem = (origem_pt or res['origem']['nome']).strip().capitalize()
+                                    _nome_destino = (destino_pt or res['destino']['nome']).strip().capitalize()
+                                    descricao = (
+                                        f"{_nome_origem} {res['origem']['gramas']}g"
+                                        f" → {_nome_destino} {res['destino']['gramas']}g"
+                                    )
+                                    conversa.estado_pendente = {
+                                        "tipo": "substituicao_dieta",
+                                        "etapa": "aguardando_escopo",
+                                        "descricao": descricao,
+                                        "resumo_macros": resumo,
+                                        "origem_nome": _nome_origem,
+                                        "destino_nome": _nome_destino,
+                                        "destino_gramas": res['destino']['gramas'],
+                                    }
+                                    result = (
+                                        f"SUBSTITUICAO_CALCULADA: apresente os números abaixo ao usuário "
+                                        f"e PERGUNTE se a troca é só para hoje ou para salvar no plano alimentar. "
+                                        f"Números: {resumo}"
+                                    )
                 elif block.name == "consultar_historico_treino":
                     hist = exercicio_service.get_historico_recente(user.id, db, semanas=4)
                     result = _fmt_historico_treino(hist)
