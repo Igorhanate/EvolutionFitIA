@@ -1433,18 +1433,28 @@ def _handle_substituicao_dieta(
     descricao = estado.get("descricao", "")
 
     if etapa == "aguardando_escopo":
-        if any(kw in low for kw in _ESCOPO_PLANO_KEYWORDS):
-            conversa.estado_pendente = None
-            ok = nutricao_service.anexar_troca_ao_plano(user.id, descricao, db)
-            if ok:
-                return f"Pronto, ajustei no seu plano: {descricao} 👍"
-            return "Você ainda não tem um plano salvo pra ajustar, mas anotei a troca pra hoje. 👍"
+        eh_plano = low in ("2", "salvar", "plano") or any(kw in low for kw in _ESCOPO_PLANO_KEYWORDS)
+        eh_hoje = low in ("1", "hoje") or any(kw in low for kw in _ESCOPO_HOJE_KEYWORDS)
 
-        if any(kw in low for kw in _ESCOPO_HOJE_KEYWORDS):
+        if eh_plano:
+            conversa.estado_pendente = None
+            origem_nome = estado.get("origem_nome", "")
+            destino_nome = estado.get("destino_nome", "")
+            destino_gramas = estado.get("destino_gramas")
+            ok, substituido = nutricao_service.aplicar_troca_no_plano(
+                user.id, origem_nome, destino_nome, destino_gramas, descricao, db
+            )
+            if not ok:
+                return "Você ainda não tem um plano salvo pra ajustar, mas anotei a troca pra hoje. 👍"
+            if substituido:
+                return f"Pronto, troquei no seu plano: {descricao} 👍"
+            return f"Pronto, anotei o ajuste no seu plano: {descricao} 👍"
+
+        if eh_hoje:
             conversa.estado_pendente = None
             return "Belê, só por hoje então. Não mexi no seu plano. 👍"
 
-        return "É só pra hoje ou pra salvar no seu plano alimentar?"
+        return "É só pra hoje ou pra salvar no seu plano alimentar? (responda *1* pra hoje ou *2* pra salvar)"
 
     conversa.estado_pendente = None
     return "Belê, cancelei a pergunta."
@@ -6153,15 +6163,20 @@ async def process_message(
                                 result = f"ERRO: {res['erro']}"
                             else:
                                 resumo = _fmt_substituicao(res)
+                                _nome_origem = (origem_pt or res['origem']['nome']).strip().capitalize()
+                                _nome_destino = (destino_pt or res['destino']['nome']).strip().capitalize()
                                 descricao = (
-                                    f"{res['origem']['nome']} {res['origem']['gramas']}g"
-                                    f" -> {res['destino']['nome']} {res['destino']['gramas']}g"
+                                    f"{_nome_origem} {res['origem']['gramas']}g"
+                                    f" → {_nome_destino} {res['destino']['gramas']}g"
                                 )
                                 conversa.estado_pendente = {
                                     "tipo": "substituicao_dieta",
                                     "etapa": "aguardando_escopo",
                                     "descricao": descricao,
                                     "resumo_macros": resumo,
+                                    "origem_nome": _nome_origem,
+                                    "destino_nome": _nome_destino,
+                                    "destino_gramas": res['destino']['gramas'],
                                 }
                                 result = (
                                     f"SUBSTITUICAO_CALCULADA: apresente os números abaixo ao usuário "

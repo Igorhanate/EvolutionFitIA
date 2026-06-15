@@ -142,15 +142,60 @@ def get_meta_ativa(user_id: int, db: Session) -> MetaNutricional | None:
 
 
 def anexar_troca_ao_plano(user_id: int, descricao_troca: str, db: Session) -> bool:
+    """Mantida por compatibilidade: anexa a troca numa secao 'Ajustes' legivel."""
     meta = get_meta_ativa(user_id, db)
     if not meta:
         return False
-    if meta.texto_original:
-        meta.texto_original = meta.texto_original + "\n[ajuste] " + descricao_troca
+    marcador = "\n\n📝 *Ajustes:*"
+    linha = f"\n• {descricao_troca}"
+    if meta.texto_original and meta.texto_original.strip():
+        if marcador.strip() in meta.texto_original:
+            meta.texto_original = meta.texto_original + linha
+        else:
+            meta.texto_original = meta.texto_original + marcador + linha
     else:
-        meta.texto_original = "[ajuste] " + descricao_troca
+        meta.texto_original = marcador.strip() + linha
     db.flush()
     return True
+
+
+def aplicar_troca_no_plano(
+    user_id: int,
+    origem_nome: str,
+    destino_nome: str,
+    destino_gramas,
+    descricao_troca: str,
+    db: Session,
+) -> tuple[bool, bool]:
+    """Tenta SUBSTITUIR o alimento no texto do plano. Se nao achar o termo, cai no fallback
+    de anexar na secao 'Ajustes'. Retorna (tem_plano, substituiu_no_texto).
+    """
+    import re as _re
+
+    meta = get_meta_ativa(user_id, db)
+    if not meta:
+        return False, False
+
+    texto = meta.texto_original or ""
+    origem = (origem_nome or "").strip()
+
+    alvo = origem.split()[0] if origem else ""
+    substituiu = False
+    if alvo and texto:
+        padrao = _re.compile(_re.escape(alvo), _re.IGNORECASE)
+        if padrao.search(texto):
+            novo_termo = destino_nome.strip()
+            if destino_gramas:
+                novo_termo = f"{novo_termo} ({int(round(float(destino_gramas)))}g)"
+            texto = padrao.sub(novo_termo, texto, count=1)
+            meta.texto_original = texto
+            db.flush()
+            substituiu = True
+
+    if not substituiu:
+        anexar_troca_ao_plano(user_id, descricao_troca, db)
+
+    return True, substituiu
 
 
 def listar_refeicoes_dia(user_id: int, data: date, db: Session) -> list[RegistroRefeicao]:
