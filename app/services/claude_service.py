@@ -1436,8 +1436,18 @@ def _handle_substituicao_dieta(
         eh_plano = low in ("2", "salvar", "plano") or any(kw in low for kw in _ESCOPO_PLANO_KEYWORDS)
         eh_hoje = low in ("1", "hoje") or any(kw in low for kw in _ESCOPO_HOJE_KEYWORDS)
 
+        def _com_opcoes(msg: str) -> str:
+            conversa.estado_pendente = {"tipo": "submenu_pos_troca", "criado_em": datetime.utcnow().isoformat()}
+            db.add(conversa)
+            return (
+                f"{msg}\n\n"
+                "━━━━━━━━━━━━━\n"
+                "*1.* 🥗 Ver plano alimentar\n"
+                "*2.* 📋 Voltar ao menu\n"
+                "*3.* ✖️ Fechar"
+            )
+
         if eh_plano:
-            conversa.estado_pendente = None
             origem_nome = estado.get("origem_nome", "")
             destino_nome = estado.get("destino_nome", "")
             destino_gramas = estado.get("destino_gramas")
@@ -1445,14 +1455,13 @@ def _handle_substituicao_dieta(
                 user.id, origem_nome, destino_nome, destino_gramas, descricao, db
             )
             if not ok:
-                return "Você ainda não tem um plano salvo pra ajustar, mas anotei a troca pra hoje. 👍"
+                return _com_opcoes("Você ainda não tem um plano salvo pra ajustar, mas anotei a troca pra hoje. 👍")
             if substituido:
-                return f"Pronto, troquei no seu plano: {descricao} 👍"
-            return f"Pronto, anotei o ajuste no seu plano: {descricao} 👍"
+                return _com_opcoes(f"Pronto, troquei no seu plano: {descricao} 👍")
+            return _com_opcoes(f"Pronto, anotei o ajuste no seu plano: {descricao} 👍")
 
         if eh_hoje:
-            conversa.estado_pendente = None
-            return "Belê, só por hoje então. Não mexi no seu plano. 👍"
+            return _com_opcoes("Belê, só por hoje então. Não mexi no seu plano. 👍")
 
         return "É só pra hoje ou pra salvar no seu plano alimentar? (responda *1* pra hoje ou *2* pra salvar)"
 
@@ -5932,6 +5941,33 @@ async def process_message(
     # 3.7 Fluxo de substituição de dieta — intercepta pergunta hoje-vs-plano (não chama a IA)
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "substituicao_dieta":
         reply = _handle_substituicao_dieta(conversa, message_text, user, db)
+        mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
+        mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
+        conversa.mensagens = mensagens
+        db.add(conversa)
+        db.commit()
+        return reply
+
+    # 3.75 Submenu pós-troca de alimento: ver plano / voltar ao menu / fechar
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_pos_troca":
+        op = (message_text or "").strip().lower()
+        if op in ("1", "ver", "plano", "ver plano"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            reply = await _handle_menu_item(9, user, phone, db, conversa)
+        elif op in ("2", "menu", "voltar"):
+            conversa.estado_pendente = {"tipo": "aguardando_menu"}
+            db.add(conversa)
+            db.commit()
+            reply = _build_menu_text(user.id, db)
+        elif op in ("3", "fechar", "cancelar", "sair"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            reply = "Beleza! Manda */menu* quando precisar. 😊"
+        else:
+            reply = "Responda *1* (ver plano), *2* (voltar ao menu) ou *3* (fechar)."
         mensagens.append({"role": "user", "content": stored_text, "timestamp": datetime.utcnow().isoformat()})
         mensagens.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
         conversa.mensagens = mensagens
