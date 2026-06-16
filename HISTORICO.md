@@ -1430,3 +1430,65 @@ DECISOES TRAVADAS:
   V=volta pro /menu, cancelar=sai. Item 15 (cards) segue como _MENU_EM_CONSTRUCAO.
 
 B1 RESTANTE: so o item 15 (cards - Opcao C, endpoint no site Vercel, envolve 2o repo).
+
+[15/06 #18] DIETA UX completa + nudge /menu (testado em producao 15/06).
+
+DIETA UX (2 partes + 5 fixes de substituicao):
+Parte 1 — confirmar antes de salvar (menu 6): ao cadastrar dieta externa SEM dieta ativa, em vez de
+salvar direto, mostra os macros entendidos e pede 1 Confirmar / 2 Editar / 3 Cancelar (estado
+confirmando_dieta_externa_nova guarda os dados extraidos; 1=salva+integra suplementos, 2=reenviar,
+3=descarta). Caso "ja tem dieta ativa" continua usando o confirmando_dieta_substituicao que ja existia.
+Parte 2 — botoes na visualizacao (menu 9): ver dieta ganhou rodape A=Apagar / E=Editar / V=Voltar
+(estado submenu_ver_dieta). Apagar pede confirmacao "APAGAR" (estado confirmando_apagar_dieta) e reusa
+nutricao_service.apagar_dietas. Editar entra em modo de troca de alimento.
+
+5 FIXES na substituicao de alimento (bugs achados nos testes):
+(1) O handler aceita "1"/"2" alem das palavras-chave (antes o numero era ignorado).
+(2) Nomes em PORTUGUES: usa origem_pt/destino_pt (a IA traduz), nao o nome ingles da base USDA.
+(3) Ao "salvar no plano": nova funcao nutricao_service.aplicar_troca_no_plano TENTA substituir o
+    alimento no texto do plano (regex 1a palavra, case-insensitive, count=1); se nao achar, cai no
+    fallback de anexar numa secao "Ajustes" legivel (anexar_troca_ao_plano reescrita; nao mais o
+    "[ajuste] X -> Y" cru em ingles).
+(4) Submenu pos-troca: depois de resolver (hoje ou plano), oferece 1 Ver plano / 2 Voltar ao menu /
+    3 Fechar (estado submenu_pos_troca; "ver plano" chama _handle_menu_item(9) reabrindo o menu 9 com
+    os botoes A/E/V).
+(5) Modo edicao: menu 9 -> E seta estado modo_edicao_dieta. A proxima troca so vale pra alimento que
+    ESTA no plano — guard no dispatch de substituir_alimento limpa o estado e bloqueia se a 1a palavra
+    do origem_pt nao aparece em meta.texto_original (sem plano -> avisa criar no menu 5/6). Pergunta
+    solta na conversa (SEM o estado) calcula sempre como consulta (equivalencia + oferece salvar).
+
+NUDGE /menu: constante _NUDGE_MENU ("Quer mais? Posso montar treinos, analisar refeicoes e muito mais
+— manda /menu") anexada nas mensagens de sucesso de: cadastrar dieta nova (via tool IA e via menu 6),
+substituir dieta, e cadastrar plano de treino. Mostrado sempre (decisao: simples, sem estado de "1x
+por dia"). Testado em producao.
+
+[15/06 #18] DIETA UX completa + nudge /menu (testado em producao 15/06).
+
+DIETA UX (2 partes + 5 fixes de substituicao):
+Parte 1 — confirmar antes de salvar (menu 6): ao cadastrar dieta externa SEM dieta ativa, em vez de
+salvar direto, mostra os macros entendidos e pede 1 Confirmar / 2 Editar / 3 Cancelar (estado
+confirmando_dieta_externa_nova guarda os dados extraidos; 1=salva+integra suplementos, 2=reenviar,
+3=descarta). Caso "ja tem dieta ativa" continua usando o confirmando_dieta_substituicao que ja existia.
+Parte 2 — botoes na visualizacao (menu 9): ver dieta ganhou rodape A=Apagar / E=Editar / V=Voltar
+(estado submenu_ver_dieta). Apagar pede confirmacao "APAGAR" (estado confirmando_apagar_dieta) e reusa
+nutricao_service.apagar_dietas. Editar entra em modo de troca de alimento.
+
+5 FIXES na substituicao de alimento (bugs achados nos testes):
+(1) O handler aceita "1"/"2" alem das palavras-chave (antes o numero era ignorado).
+(2) Nomes em PORTUGUES: usa origem_pt/destino_pt (a IA traduz), nao o nome ingles da base USDA.
+(3) Ao "salvar no plano": nova funcao nutricao_service.aplicar_troca_no_plano TENTA substituir o
+    alimento no texto do plano (regex 1a palavra, case-insensitive, count=1); se nao achar, cai no
+    fallback de anexar numa secao "Ajustes" legivel (anexar_troca_ao_plano reescrita; nao mais o
+    "[ajuste] X -> Y" cru em ingles).
+(4) Submenu pos-troca: depois de resolver (hoje ou plano), oferece 1 Ver plano / 2 Voltar ao menu /
+    3 Fechar (estado submenu_pos_troca; "ver plano" chama _handle_menu_item(9) reabrindo o menu 9 com
+    os botoes A/E/V).
+(5) Modo edicao: menu 9 -> E seta estado modo_edicao_dieta. A proxima troca so vale pra alimento que
+    ESTA no plano — guard no dispatch de substituir_alimento limpa o estado e bloqueia se a 1a palavra
+    do origem_pt nao aparece em meta.texto_original (sem plano -> avisa criar no menu 5/6). Pergunta
+    solta na conversa (SEM o estado) calcula sempre como consulta (equivalencia + oferece salvar).
+
+NUDGE /menu: constante _NUDGE_MENU ("Quer mais? Posso montar treinos, analisar refeicoes e muito mais
+— manda /menu") anexada nas mensagens de sucesso de: cadastrar dieta nova (via tool IA e via menu 6),
+substituir dieta, e cadastrar plano de treino. Mostrado sempre (decisao: simples, sem estado de "1x
+por dia"). Testado em producao.

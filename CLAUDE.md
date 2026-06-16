@@ -200,3 +200,37 @@ Tom amigável, direto, conhecedor (personal + nutricionista). Mensagens curtas (
 - Upgrade Render (free dorme).
 - Teste de compra ponta-a-ponta.
 - Alerta/auto-recarga de saldo na Anthropic (bot já parou 2x por créditos zerados).
+
+## PENDÊNCIAS / ROADMAP
+
+> Itens de MELHORIA futura (não são bugs). Mapeados em 26/05, reinseridos em 15/06.
+
+### Treino — refinos
+- [ ] Ao criar treino, perguntar o sexo da pessoa.
+- [ ] Variação grande de peso/séries vs histórico: questionar o usuário ("registrei X, seu último foi Y, está certo?") e seguir só se confirmado.
+- [ ] Registro de carga POR EXERCÍCIO (não só por treino): considerar o mesmo exercício entre treinos diferentes APENAS quando ele for o 1º exercício da sessão em ambos.
+
+### Mídia / biblioteca (exigem hospedar arquivos)
+- [ ] Banco de GIFs de execução de cada exercício; cliente pergunta "como é esse exercício?" e recebe o GIF.
+- [ ] Banco de fotos realistas de aparelhos; cliente pergunta qual é o aparelho e recebe a foto.
+- [ ] Fotos de corpos estilo manequim para o cliente escolher o objetivo de corpo.
+
+### Grande (viabilidade a discutir)
+- [ ] Análise de vídeo de execução: cliente grava o exercício e a IA aponta o que melhorar (definir formato do feedback). Projeto complexo, avaliar viabilidade antes.
+
+### Skills de domínio (qualidade do conteúdo gerado)
+- [ ] Skill de NUTRIÇÃO especialista (ref: mcpmarket nutritional-specialist + ISSN Position Stand) para melhorar dietas geradas.
+- [ ] Skill de TREINOS especialista (ref: Schoenfeld, Israetel, Krieger; volume/descanso/progressão do protocolo Igor Hanate) para melhorar treinos gerados.
+
+### B1 — pendente
+- [ ] Item 15 (cards): Opção C — endpoint no site Vercel gera PNG, bot reenvia. Envolve 2º repo.
+
+### Identidade
+- [ ] Etapa 3 Parte A (confirmação de permanência no 1º cadastro): edits PERDIDOS, reconstruir do zero. Testável só com número novo de WhatsApp.
+
+### Lançamento (meta final)
+- [ ] Kiwify (webhook de pagamento).
+- [ ] OPENAI_API_KEY (reativar Whisper / áudio).
+- [ ] Upgrade Render (sai do free; ativa cron dos lembretes de remédio com precisão).
+- [ ] Teste de compra ponta-a-ponta.
+- [ ] Alerta/auto-recarga de saldo na Anthropic.
