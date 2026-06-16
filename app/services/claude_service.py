@@ -191,6 +191,8 @@ CONFIRMACAO_NAO = {"não", "nao", "n", "no", "cancela", "cancelar", "errei", "er
 _ESCOPO_PLANO_KEYWORDS = {"plano", "salva", "salvar", "sempre", "fixo", "permanente", "todo dia"}
 _ESCOPO_HOJE_KEYWORDS = {"hoje", "agora", "só essa", "uma vez", "dessa vez", "só hoje"}
 
+_NUDGE_MENU = "\n\n💪 Quer mais? Posso montar treinos, analisar refeições e muito mais — manda */menu*."
+
 ETAPAS_TREINO: list[tuple[str, str]] = [
     (
         "tipo_treino",
@@ -2248,6 +2250,7 @@ async def _handle_coleta_dieta(conversa: Conversa, message_text: str, user: Usua
         + f"✅ Dieta salva! Meta: {_dieta_resumo(meta)}. O balanço diário já usa essa — "
         "é só mandar foto das refeições. 💪"
         + _sup_msg
+        + _NUDGE_MENU
     )
 
 
@@ -4724,7 +4727,7 @@ async def process_message(
                     _sup_msg = estado.get("sup_msg", "")  # já extraído na coleta; não pergunta de novo
                 else:
                     _sup_msg = await _integrar_suplementos_dieta(user, (estado.get("dieta") or {}).get("texto", ""), db, conversa)
-                reply = f"Dieta *{meta.nome}* cadastrada! ✅ Meta: {_dieta_resumo(meta)}. A anterior foi removida — o balanço diário já usa essa." + _sup_msg
+                reply = f"Dieta *{meta.nome}* cadastrada! ✅ Meta: {_dieta_resumo(meta)}. A anterior foi removida — o balanço diário já usa essa." + _sup_msg + _NUDGE_MENU
             elif stripped == "2" or resp == "nao" or stripped_lower == "cancelar":
                 conversa.estado_pendente = None
                 reply = "Beleza, mantive sua dieta atual. A nova foi descartada."
@@ -4772,7 +4775,7 @@ async def process_message(
                 else:
                     _finalizar_importacao(user, estado, modalidade, db, substituir=False)
                     conversa.estado_pendente = None
-                    reply = f"Plano de *{nome_mod}* cadastrado! ✅ Agora é só registrar suas cargas normalmente que eu acompanho sua evolução e o 1RM. 💪"
+                    reply = f"Plano de *{nome_mod}* cadastrado! ✅ Agora é só registrar suas cargas normalmente que eu acompanho sua evolução e o 1RM. 💪" + _NUDGE_MENU
             mensagens_tmp.append({"role": "user", "content": stripped, "timestamp": datetime.utcnow().isoformat()})
             mensagens_tmp.append({"role": "assistant", "content": reply, "timestamp": datetime.utcnow().isoformat()})
             conversa.mensagens = mensagens_tmp
@@ -5831,6 +5834,7 @@ async def process_message(
                 f"✅ Dieta cadastrada! Meta: {_dieta_resumo(meta)}. "
                 "O balanço diário já usa essa — é só mandar foto das refeições. 💪"
                 + _sup_msg
+                + _NUDGE_MENU
             )
         elif op in ("2", "editar", "edit"):
             conversa.estado_pendente = {
