@@ -261,8 +261,8 @@ ETAPAS_TREINO: list[tuple[str, str]] = [
     ),
     (
         "dor_desconforto",
-        "Última pergunta! Você sente *dor ou desconforto* ao fazer algum exercício específico?\n\n"
-        "_(ex: agachamento livre, supino — ou responda *nenhum*)_"
+        "Última pergunta! Você sente *dor ou desconforto* em alguma articulação ou movimento?\n\n"
+        "_(ex: joelho, ombro, lombar — ou responda *nenhum*)_"
     ),
 ]
 
@@ -2915,28 +2915,24 @@ def _iniciar_coleta_treino(user: Usuario, conversa: Conversa, db: Session) -> st
             "horario":      perfil.horario_treino_padrao,
         }
 
+        # Modalidade PRIMEIRO: pergunta o tipo de treino antes de confirmar o perfil.
+        # O perfil_resumo fica guardado e a confirmação acontece após a modalidade.
         conversa.estado_pendente = {
             "tipo": "criando_treino",
-            "fase": "confirmando_perfil",
+            "fase": "coletando",
+            "etapa_idx": 0,
             "dados": dados,
             "perfil_resumo": perfil_resumo,
+            "confirmar_perfil_apos_modalidade": True,
             "criado_em": datetime.utcnow().isoformat(),
         }
         db.add(conversa)
         db.commit()
-
         return (
             "Bora pro seu treino"
             + (f", {primeiro_nome}" if primeiro_nome else "")
-            + "! 💪 Tenho seu perfil salvo:\n\n"
-            + f"📍 *Local:* {_d(perfil.local_treino_padrao, _local_d)}\n"
-            + f"🎯 *Objetivo:* {_d(perfil.objetivo_padrao, _obj_d)}\n"
-            + f"📅 *Dias:* {perfil.dias_semana_padrao or '—'}\n"
-            + f"⏱️ *Tempo:* {perfil.tempo_sessao_padrao or '—'}\n"
-            + f"📊 *Nível:* {_d(perfil.nivel_experiencia, _nivel_d)}\n"
-            + f"🩹 *Lesões:* {perfil.lesoes or 'nenhuma'}\n"
-            + f"🕐 *Horário:* {_d(perfil.horario_treino_padrao, _horario_d)}\n\n"
-            + "Quer manter tudo isso? Responda *sim* pra manter, ou me diga o que quer mudar."
+            + "! 💪\n\n"
+            + ETAPAS_TREINO[0][1]
         )
 
     # 1º treino — coleta completa, sem etapa de confirmação
@@ -3056,6 +3052,46 @@ async def _handle_coleta_treino(
     etapa_idx = int(estado.get("etapa_idx", 0))
     chave, _ = ETAPAS_TREINO[etapa_idx]
     dados[chave] = message_text.strip() or "não informado"
+
+    # Modalidade primeiro: se acabou de responder o tipo_treino (etapa 0) e há perfil salvo
+    # pra confirmar, mostra o perfil agora (fase confirmando_perfil) antes das demais etapas.
+    if chave == "tipo_treino" and estado.get("confirmar_perfil_apos_modalidade"):
+        perfil_resumo = estado.get("perfil_resumo", {})
+        _local_d   = {"academia": "Academia", "casa": "Em casa", "ar_livre": "Ao ar livre"}
+        _obj_d     = {
+            "ganhar_massa": "Ganhar massa", "perder_gordura": "Perder gordura",
+            "manter": "Manter peso", "condicionamento": "Condicionamento",
+        }
+        _nivel_d   = {"iniciante": "Iniciante", "intermediario": "Intermediário", "avancado": "Avançado"}
+        _horario_d = {
+            "manha": "Manhã", "manha_pico": "Manhã pico (6h–9h)", "tarde": "Tarde",
+            "noite_pico": "Noite pico (17h–20h)", "noite": "Noite",
+        }
+
+        def _d(val, mapa):
+            return mapa.get(val or "", val or "—") if val else "—"
+
+        conversa.estado_pendente = {
+            "tipo": "criando_treino",
+            "fase": "confirmando_perfil",
+            "dados": dados,
+            "perfil_resumo": perfil_resumo,
+            "criado_em": estado.get("criado_em"),
+        }
+        db.add(conversa)
+        db.commit()
+        return (
+            "Boa escolha! 💪 Agora confirma seu perfil de treino:\n\n"
+            + f"📍 *Local:* {_d(perfil_resumo.get('local'), _local_d)}\n"
+            + f"🎯 *Objetivo:* {_d(perfil_resumo.get('objetivo'), _obj_d)}\n"
+            + f"📅 *Dias:* {perfil_resumo.get('dias_semana') or '—'}\n"
+            + f"⏱️ *Tempo:* {perfil_resumo.get('tempo_sessao') or '—'}\n"
+            + f"📊 *Nível:* {_d(perfil_resumo.get('nivel'), _nivel_d)}\n"
+            + f"🩹 *Lesões:* {perfil_resumo.get('lesoes') or 'nenhuma'}\n"
+            + f"🕐 *Horário:* {_d(perfil_resumo.get('horario'), _horario_d)}\n\n"
+            + "Quer manter tudo isso? Responda *sim* pra manter, ou me diga o que quer mudar."
+        )
+
     etapa_idx += 1
 
     # Pula etapas cujo valor já veio do perfil (não-None)
@@ -3494,7 +3530,14 @@ async def _gerar_treino_de_dados(
         f"• Lesões ou limitações: {lesoes}\n"
         f"• Horário habitual: {horario}\n"
         f"• Dor ou desconforto em exercícios específicos: {dor}\n\n"
-        "Gere o treino completo seguindo seu protocolo de criação de treino."
+        "Gere o treino completo seguindo seu protocolo de criação de treino.\n\n"
+        "REGRAS OBRIGATÓRIAS DE IDIOMA E COERÊNCIA:\n"
+        "- TODOS os nomes de exercícios, posturas e movimentos devem estar em PORTUGUÊS. "
+        "Se o nome original for em inglês ou sânscrito, traduza e, só se ajudar, "
+        "coloque o original entre parênteses (ex: 'Guerreiro I (Virabhadrasana I)').\n"
+        "- Adapte exercícios, exemplos e observações ESTRITAMENTE ao tipo de treino informado. "
+        "NÃO mencione exercícios de musculação (supino, agachamento) se o tipo não for musculação.\n"
+        "- Nas observações finais, só cite limitações coerentes com a modalidade escolhida."
     )
 
     system_with_cache = [
