@@ -30,3 +30,4 @@ class Usuario(Base):
     perfil_fitness: Mapped["PerfilFitness | None"] = relationship(back_populates="usuario", uselist=False)
     registros_suplemento: Mapped[list["RegistroSuplemento"]] = relationship(back_populates="usuario")
     lembretes_remedio: Mapped[list["LembreteRemedio"]] = relationship(back_populates="usuario")
+    perfis_treino_modalidade: Mapped[list["PerfilTreinoModalidade"]] = relationship(back_populates="usuario")
