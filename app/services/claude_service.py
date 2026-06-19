@@ -12,7 +12,7 @@ from app.models.dieta import Dieta
 from app.models.meta_nutricional import MetaNutricional
 from app.models.treino import Treino
 from app.models.usuario import Usuario
-from app.services import exercicio_service, habito_service, lembrete_service, nutricao_service, perfil_service, sessao_treino_service, treino_service, usda_service
+from app.services import exercicio_service, habito_service, lembrete_service, nutricao_service, perfil_modalidade_service, perfil_service, sessao_treino_service, treino_service, usda_service
 
 logger = logging.getLogger(__name__)
 
@@ -3021,6 +3021,15 @@ async def _handle_coleta_treino(
             dados["nivel"]        = perfil_resumo.get("nivel")
             dados["lesoes"]       = perfil_resumo.get("lesoes") or "nenhuma"
             dados["horario"]      = perfil_resumo.get("horario")
+            # Fase C: persiste o perfil DAQUELA modalidade (cria na 1a vez, atualiza nas seguintes)
+            _modalidade_canon = estado.get("modalidade_canon")
+            if _modalidade_canon:
+                try:
+                    perfil_modalidade_service.criar_ou_atualizar(
+                        user.id, _modalidade_canon, perfil_resumo, db
+                    )
+                except Exception as _e_pm:
+                    logger.error("salvar_perfil_modalidade_erro", extra={"error": str(_e_pm)})
             # tipo_treino e dor_desconforto ficam None → perguntados a seguir
             etapa_idx = next(
                 (i for i, (chave, _) in enumerate(ETAPAS_TREINO) if dados[chave] is None),
@@ -3056,7 +3065,21 @@ async def _handle_coleta_treino(
     # Modalidade primeiro: se acabou de responder o tipo_treino (etapa 0) e há perfil salvo
     # pra confirmar, mostra o perfil agora (fase confirmando_perfil) antes das demais etapas.
     if chave == "tipo_treino" and estado.get("confirmar_perfil_apos_modalidade"):
-        perfil_resumo = estado.get("perfil_resumo", {})
+        # Fase C: busca o perfil DAQUELA modalidade. Existe -> usa os campos dele.
+        # Nao existe (1a vez nessa modalidade) -> pre-preenche com o PerfilFitness.
+        modalidade_canon = MODALIDADE_CANON.get(dados.get("tipo_treino") or "", dados.get("tipo_treino") or "")
+        perfil_mod = perfil_modalidade_service.get_perfil_modalidade(user.id, modalidade_canon, db)
+        if perfil_mod is not None:
+            perfil_resumo = {
+                "local": perfil_mod.local, "objetivo": perfil_mod.objetivo,
+                "dias_semana": perfil_mod.dias_semana, "tempo_sessao": perfil_mod.tempo_sessao,
+                "nivel": perfil_mod.nivel, "lesoes": perfil_mod.lesoes, "horario": perfil_mod.horario,
+            }
+            perfil_existia = True
+        else:
+            perfil_resumo = perfil_modalidade_service.montar_pre_preenchido(user.id, db)
+            perfil_existia = False
+
         _local_d   = {"academia": "Academia", "casa": "Em casa", "ar_livre": "Ao ar livre"}
         _obj_d     = {
             "ganhar_massa": "Ganhar massa", "perder_gordura": "Perder gordura",
@@ -3076,12 +3099,19 @@ async def _handle_coleta_treino(
             "fase": "confirmando_perfil",
             "dados": dados,
             "perfil_resumo": perfil_resumo,
+            "modalidade_canon": modalidade_canon,
+            "perfil_modalidade_existia": perfil_existia,
             "criado_em": estado.get("criado_em"),
         }
         db.add(conversa)
         db.commit()
+        _intro = (
+            "Boa escolha! 💪 Você já tem um perfil pra essa modalidade. Confirma:\n\n"
+            if perfil_existia else
+            "Boa escolha! 💪 Como é seu primeiro treino dessa modalidade, comecei com seus dados gerais. Confirma:\n\n"
+        )
         return (
-            "Boa escolha! 💪 Agora confirma seu perfil de treino:\n\n"
+            _intro
             + f"📍 *Local:* {_d(perfil_resumo.get('local'), _local_d)}\n"
             + f"🎯 *Objetivo:* {_d(perfil_resumo.get('objetivo'), _obj_d)}\n"
             + f"📅 *Dias:* {perfil_resumo.get('dias_semana') or '—'}\n"
