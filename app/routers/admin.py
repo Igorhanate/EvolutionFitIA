@@ -22,6 +22,7 @@ from app.models.lembrete_remedio import LembreteRemedio
 from app.models.treino import Treino
 from app.models.usuario import Usuario
 from app.models.perfil_fitness import PerfilFitness
+from app.models.perfil_treino_modalidade import PerfilTreinoModalidade
 from app.services import exercicio_service, nutricao_service, perfil_service, treino_service
 from app.services.subscription_service import check_active_subscription
 
@@ -74,6 +75,22 @@ def get_perfil(user_id: int, db: Session = Depends(get_db)):
             "atualizado_em": perfil.atualizado_em.isoformat() if getattr(perfil, "atualizado_em", None) else None,
         },
     }
+
+
+@router.get("/users/{user_id}/perfis-modalidade")
+def get_perfis_modalidade(user_id: int, db: Session = Depends(get_db)):
+    """Lista os perfis de treino por modalidade do usuário. Debug Fase B."""
+    _get_user_or_404(user_id, db)
+    perfis = db.query(PerfilTreinoModalidade).filter(PerfilTreinoModalidade.user_id == user_id).all()
+    return [
+        {
+            "id": p.id, "modalidade": p.modalidade, "local": p.local, "objetivo": p.objetivo,
+            "dias_semana": p.dias_semana, "tempo_sessao": p.tempo_sessao, "nivel": p.nivel,
+            "lesoes": p.lesoes, "horario": p.horario,
+            "criado_em": p.criado_em.isoformat() if p.criado_em else None,
+        }
+        for p in perfis
+    ]
 
 
 @router.get("/users/{user_id}/treinos")
