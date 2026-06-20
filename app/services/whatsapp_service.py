@@ -11,7 +11,40 @@ logger = logging.getLogger(__name__)
 _RETRY_DELAYS = [1, 2, 4]
 
 
-async def send_message(phone: str, text: str) -> None:
+# Limite do WhatsApp e ~4096 chars no corpo do texto. Usamos margem de seguranca.
+_MAX_CHARS_MSG = 3900
+
+
+def _dividir_texto(texto: str, limite: int = _MAX_CHARS_MSG) -> list[str]:
+    """Quebra um texto longo em pedacos <= limite, cortando em quebras de linha
+    (nunca no meio de uma palavra). Mensagens curtas voltam como lista de 1 item."""
+    if len(texto) <= limite:
+        return [texto]
+
+    partes: list[str] = []
+    atual = ""
+    for linha in texto.split("\n"):
+        # Linha sozinha maior que o limite: quebra forcada por tamanho.
+        if len(linha) > limite:
+            if atual:
+                partes.append(atual)
+                atual = ""
+            for i in range(0, len(linha), limite):
+                partes.append(linha[i:i + limite])
+            continue
+        # Cabe na parte atual?
+        if len(atual) + len(linha) + 1 <= limite:
+            atual = f"{atual}\n{linha}" if atual else linha
+        else:
+            partes.append(atual)
+            atual = linha
+    if atual:
+        partes.append(atual)
+    return partes
+
+
+async def _enviar_uma(phone: str, text: str) -> None:
+    """Envia UMA mensagem (com retry). Usado internamente por send_message."""
     url = f"{_BASE}/{settings.META_PHONE_NUMBER_ID}/messages"
     payload = {
         "messaging_product": "whatsapp",
@@ -45,6 +78,14 @@ async def send_message(phone: str, text: str) -> None:
         "error": str(last_error),
     })
     raise last_error
+
+
+async def send_message(phone: str, text: str) -> None:
+    """Envia uma mensagem de texto. Se for longa demais pro WhatsApp (>~3900 chars),
+    quebra automaticamente em varias mensagens sequenciais. Transparente pra quem chama."""
+    partes = _dividir_texto(text or "")
+    for parte in partes:
+        await _enviar_uma(phone, parte)
 
 
 async def send_image(phone: str, image_bytes: bytes, caption: str = "") -> None:
