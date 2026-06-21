@@ -317,7 +317,7 @@ def _conf_pergunta_campo(idx: int, perfil_resumo: dict) -> str:
     if c["campo"] == "lesoes" and not valor_atual:
         atual_legivel = "nenhuma"
     cabecalho = f"{c['emoji']} *{c['rotulo']}:* {atual_legivel}\n\n{c['texto_opcoes']}\n\n"
-    rodape = "Responda *manter* pra continuar com esse valor, ou escolha o novo."
+    rodape = "Responda *manter* pra continuar, escolha o novo, ou *voltar* pra corrigir o item anterior."
     return cabecalho + rodape
 
 ETAPAS_CADASTRO_PERFIL: list[tuple[str, str]] = [
@@ -3077,6 +3077,24 @@ async def _handle_coleta_treino(
             return "Cancelei a criação do treino. Os dados não foram salvos."
 
         campo_idx = estado.get("conf_campo_idx")
+
+        # Protecao 1: "voltar" reabre o campo anterior pra corrigir (so quando ja esta num campo)
+        if campo_idx is not None and txt.lower() in {"voltar", "v", "volta"}:
+            if campo_idx == 0:
+                return "Você já está no primeiro item. 😊\n\n" + _conf_pergunta_campo(0, perfil_resumo)
+            anterior = campo_idx - 1
+            conversa.estado_pendente = {
+                "tipo": "criando_treino",
+                "fase": "confirmando_perfil",
+                "dados": dados,
+                "perfil_resumo": perfil_resumo,
+                "modalidade_canon": estado.get("modalidade_canon"),
+                "conf_campo_idx": anterior,
+                "criado_em": estado.get("criado_em"),
+            }
+            db.add(conversa)
+            db.commit()
+            return "Voltando um item. 👇\n\n" + _conf_pergunta_campo(anterior, perfil_resumo)
 
         # Primeira entrada nesta fase: ainda nao perguntou nenhum campo -> mostra o campo 0
         if campo_idx is None:
