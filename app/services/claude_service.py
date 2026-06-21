@@ -317,7 +317,10 @@ def _conf_pergunta_campo(idx: int, perfil_resumo: dict) -> str:
     if c["campo"] == "lesoes" and not valor_atual:
         atual_legivel = "nenhuma"
     cabecalho = f"{c['emoji']} *{c['rotulo']}:* {atual_legivel}\n\n{c['texto_opcoes']}\n\n"
-    rodape = "Responda *manter* pra continuar, escolha o novo, ou *voltar* pra corrigir o item anterior."
+    rodape = (
+        "_Responda *manter* pra continuar com esse valor, ou escolha o novo._\n"
+        "*V.* Voltar ao item anterior"
+    )
     return cabecalho + rodape
 
 ETAPAS_CADASTRO_PERFIL: list[tuple[str, str]] = [
