@@ -82,6 +82,7 @@ def limpar_dados_usuario(user_id: int, db: Session) -> dict:
     from app.models.registro_refeicao import RegistroRefeicao
     from app.models.habito_dia import HabitoDia
     from app.models.perfil_habitos import PerfilHabitos
+    from app.models.perfil_treino_modalidade import PerfilTreinoModalidade
 
     contagem: dict = {}
     for nome, modelo in (
@@ -94,6 +95,7 @@ def limpar_dados_usuario(user_id: int, db: Session) -> dict:
         ("refeicoes", RegistroRefeicao),
         ("habitos", HabitoDia),
         ("perfil_habitos", PerfilHabitos),
+        ("perfis_modalidade", PerfilTreinoModalidade),
     ):
         contagem[nome] = db.query(modelo).filter(modelo.user_id == user_id).delete(synchronize_session=False)
 
