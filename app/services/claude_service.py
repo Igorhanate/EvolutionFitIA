@@ -31,7 +31,7 @@ Sempre termine pedindo: 'Responda com o número da opção.' Quando o usuário r
 
 REGRAS GERAIS:
 - Sempre chame o usuário pelo primeiro nome quando souber
-- Antes de gerar um treino, pergunte NESTA ORDEM, uma de cada vez: (1) qual TIPO de treino (musculação/academia, calistenia, yoga, pilates, corrida/endurance, híbrido, funcional, CrossFit, mobilidade ou outro); (2) ONDE vai treinar (academia, casa, ao ar livre); (3) objetivo principal; (4) quantos dias por semana; (5) quanto tempo por sessão; (6) há quanto tempo treina (nível); (7) lesões ou limitações; (8) em qual horário costuma treinar — se for academia em horário de pico (6h–9h ou 17h–20h), evite exercícios que dependem de polias duplas, cross e aparelhos muito disputados, priorizando halteres, barras e máquinas menos concorridas; (9) "Você sente dor ou desconforto ao fazer algum exercício específico?" — se o cliente citar algum, NÃO inclua esse exercício no treino; se o cliente pedir para incluir um exercício que ele mesmo citou como problemático, confirme: "Você mencionou desconforto nesse exercício — tem certeza que quer incluí-lo?". Essa pergunta é feita a cada nova criação de treino, independente de conversas anteriores. IMPORTANTE: a pergunta (9) pertence EXCLUSIVAMENTE ao fluxo de CRIAÇÃO de treino — NÃO deve ser feita ao iniciar sessões de registro de cargas (opção 3 do menu). Nem todo treino é em academia — adapte exercícios e equipamentos ao tipo e local informados.
+- Antes de gerar um treino, pergunte NESTA ORDEM, uma de cada vez: (1) qual TIPO de treino (musculação/academia, calistenia, yoga, pilates, corrida/endurance, híbrido, funcional, CrossFit, mobilidade ou outro); (2) ONDE vai treinar (academia, casa, ao ar livre); (3) objetivo principal; (4) quantos dias por semana; (5) quanto tempo por sessão; (6) há quanto tempo treina (nível); (7) lesões ou limitações; (8) em qual horário costuma treinar — se for academia em horário de pico (6h–8h ou 18h–20h), evite exercícios que dependem de polias duplas, cross e aparelhos muito disputados, priorizando halteres, barras e máquinas menos concorridas; (9) "Você sente dor ou desconforto ao fazer algum exercício específico?" — se o cliente citar algum, NÃO inclua esse exercício no treino; se o cliente pedir para incluir um exercício que ele mesmo citou como problemático, confirme: "Você mencionou desconforto nesse exercício — tem certeza que quer incluí-lo?". Essa pergunta é feita a cada nova criação de treino, independente de conversas anteriores. IMPORTANTE: a pergunta (9) pertence EXCLUSIVAMENTE ao fluxo de CRIAÇÃO de treino — NÃO deve ser feita ao iniciar sessões de registro de cargas (opção 3 do menu). Nem todo treino é em academia — adapte exercícios e equipamentos ao tipo e local informados.
 - Antes de gerar uma dieta, faça as perguntas essenciais do PROTOCOLO DE CRIAÇÃO DE DIETA mais abaixo.
 - Treinos: estruture por Dia 1 / Dia 2 etc., inclua séries/repetições e tempos de descanso. NÃO inclua RPE, "RPE alvo" ou qualquer referência numérica a RPE nos treinos gerados — use apenas séries, repetições e tempo de descanso.
 - Mensagens curtas para WhatsApp: parágrafos curtos, bullet points, sem paredes de texto
@@ -252,10 +252,10 @@ ETAPAS_TREINO: list[tuple[str, str]] = [
     (
         "horario",
         "*Em qual horário* você costuma treinar?\n\n"
-        "1️⃣ 🌅 Manhã (antes das 9h)\n"
-        "2️⃣ 🌄 Manhã em horário de pico (6h–9h)\n"
+        "1️⃣ 🌄 Manhã em horário de pico (6h–8h)\n"
+        "2️⃣ 🌅 Manhã (antes das 12h)\n"
         "3️⃣ ☀️ Tarde\n"
-        "4️⃣ 🌆 Noite em horário de pico (17h–20h)\n"
+        "4️⃣ 🌆 Noite em horário de pico (18h–20h)\n"
         "5️⃣ 🌙 Noite (após 20h)\n\n"
         "Responda com o número da opção."
     ),
@@ -265,6 +265,60 @@ ETAPAS_TREINO: list[tuple[str, str]] = [
         "_(ex: joelho, ombro, lombar — ou responda *nenhum*)_"
     ),
 ]
+
+# --- Fase D: confirmacao campo a campo do perfil por modalidade ---
+_CONF_CAMPOS = [
+    {
+        "campo": "local", "rotulo": "Local", "emoji": "📍",
+        "display": {"academia": "Academia", "casa": "Em casa", "ar_livre": "Ao ar livre"},
+        "opcoes": {"1": "academia", "2": "casa", "3": "ar_livre"},
+        "texto_opcoes": "1️⃣ 🏢 Academia\n2️⃣ 🏠 Em casa\n3️⃣ 🌳 Ao ar livre",
+    },
+    {
+        "campo": "objetivo", "rotulo": "Objetivo", "emoji": "🎯",
+        "display": {"ganhar_massa": "Ganhar massa", "perder_gordura": "Perder gordura",
+                    "manter": "Manter peso", "condicionamento": "Condicionamento"},
+        "opcoes": {"1": "ganhar_massa", "2": "perder_gordura", "3": "manter", "4": "condicionamento"},
+        "texto_opcoes": "1️⃣ 💪 Ganhar massa\n2️⃣ 🔥 Perder gordura\n3️⃣ ⚖️ Manter o peso\n4️⃣ 🏃 Melhorar condicionamento",
+    },
+    {
+        "campo": "dias_semana", "rotulo": "Dias por semana", "emoji": "📅",
+        "display": {}, "opcoes": None, "texto_opcoes": "_(ex: 3, 4, 5)_",
+    },
+    {
+        "campo": "tempo_sessao", "rotulo": "Tempo por sessão", "emoji": "⏱️",
+        "display": {}, "opcoes": None, "texto_opcoes": "_(ex: 45 minutos, 1 hora)_",
+    },
+    {
+        "campo": "nivel", "rotulo": "Nível", "emoji": "📊",
+        "display": {"iniciante": "Iniciante", "intermediario": "Intermediário", "avancado": "Avançado"},
+        "opcoes": {"1": "iniciante", "2": "intermediario", "3": "avancado"},
+        "texto_opcoes": "1️⃣ 🌱 Iniciante\n2️⃣ 📈 Intermediário\n3️⃣ 💪 Avançado",
+    },
+    {
+        "campo": "lesoes", "rotulo": "Lesões", "emoji": "🩹",
+        "display": {}, "opcoes": None, "texto_opcoes": "_(ex: joelho, ombro — ou *nenhuma*)_",
+    },
+    {
+        "campo": "horario", "rotulo": "Horário", "emoji": "🕐",
+        "display": {"manha": "Manhã", "manha_pico": "Manhã pico (6h–8h)", "tarde": "Tarde",
+                    "noite_pico": "Noite pico (18h–20h)", "noite": "Noite"},
+        "opcoes": {"1": "manha_pico", "2": "manha", "3": "tarde", "4": "noite_pico", "5": "noite"},
+        "texto_opcoes": "1️⃣ 🌄 Manhã pico (6h–8h)\n2️⃣ 🌅 Manhã (antes das 12h)\n3️⃣ ☀️ Tarde\n4️⃣ 🌆 Noite pico (18h–20h)\n5️⃣ 🌙 Noite",
+    },
+]
+
+
+def _conf_pergunta_campo(idx: int, perfil_resumo: dict) -> str:
+    """Monta a pergunta de UM campo: valor atual + opcoes + como manter/trocar."""
+    c = _CONF_CAMPOS[idx]
+    valor_atual = perfil_resumo.get(c["campo"])
+    atual_legivel = c["display"].get(valor_atual or "", valor_atual or "—") if valor_atual else "—"
+    if c["campo"] == "lesoes" and not valor_atual:
+        atual_legivel = "nenhuma"
+    cabecalho = f"{c['emoji']} *{c['rotulo']}:* {atual_legivel}\n\n{c['texto_opcoes']}\n\n"
+    rodape = "Responda *manter* pra continuar com esse valor, ou escolha o novo."
+    return cabecalho + rodape
 
 ETAPAS_CADASTRO_PERFIL: list[tuple[str, str]] = [
     ("confirmar_nome",    "Bora pro seu cadastro! 💪\n\nSeu nome é *{nome_kiwify}*, correto? (responda *sim* ou me diga seu nome correto)"),
@@ -2898,8 +2952,8 @@ def _iniciar_coleta_treino(user: Usuario, conversa: Conversa, db: Session) -> st
         }
         _nivel_d   = {"iniciante": "Iniciante", "intermediario": "Intermediário", "avancado": "Avançado"}
         _horario_d = {
-            "manha": "Manhã", "manha_pico": "Manhã pico (6h–9h)", "tarde": "Tarde",
-            "noite_pico": "Noite pico (17h–20h)", "noite": "Noite",
+            "manha": "Manhã", "manha_pico": "Manhã pico (6h–8h)", "tarde": "Tarde",
+            "noite_pico": "Noite pico (18h–20h)", "noite": "Noite",
         }
 
         def _d(val: str | None, mapa: dict) -> str:
@@ -3010,43 +3064,92 @@ async def _handle_coleta_treino(
 
     # --- Fase de confirmação do perfil (2º treino em diante) ---
     if fase == "confirmando_perfil":
-        perfil_resumo: dict = estado.get("perfil_resumo", {})
-        resposta = _normalizar_confirmacao(message_text)
+        # Fase D: confirmacao CAMPO A CAMPO. Estado guarda campo_idx (0..6) e o
+        # perfil_resumo que vai sendo atualizado conforme o usuario mantem/troca.
+        perfil_resumo: dict = dict(estado.get("perfil_resumo", {}))
+        txt = message_text.strip()
 
-        if resposta == "sim":
-            dados["local"]        = perfil_resumo.get("local")
-            dados["objetivo"]     = perfil_resumo.get("objetivo")
-            dados["dias_semana"]  = perfil_resumo.get("dias_semana")
-            dados["tempo_sessao"] = perfil_resumo.get("tempo_sessao")
-            dados["nivel"]        = perfil_resumo.get("nivel")
-            dados["lesoes"]       = perfil_resumo.get("lesoes") or "nenhuma"
-            dados["horario"]      = perfil_resumo.get("horario")
-            # Fase C: persiste o perfil DAQUELA modalidade (cria na 1a vez, atualiza nas seguintes)
-            _modalidade_canon = estado.get("modalidade_canon")
-            if _modalidade_canon:
-                try:
-                    perfil_modalidade_service.criar_ou_atualizar(
-                        user.id, _modalidade_canon, perfil_resumo, db
-                    )
-                except Exception as _e_pm:
-                    logger.error("salvar_perfil_modalidade_erro", extra={"error": str(_e_pm)})
-            # tipo_treino e dor_desconforto ficam None → perguntados a seguir
-            etapa_idx = next(
-                (i for i, (chave, _) in enumerate(ETAPAS_TREINO) if dados[chave] is None),
-                len(ETAPAS_TREINO),
-            )
-        else:
-            # Quer mudar algo — coleta completa do zero
-            etapa_idx = 0
+        # Comando de saida vale em qualquer ponto (nunca vira valor de campo)
+        if txt.lower() in {"cancelar", "/menu", "menu", "#menu"}:
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Cancelei a criação do treino. Os dados não foram salvos."
+
+        campo_idx = estado.get("conf_campo_idx")
+
+        # Primeira entrada nesta fase: ainda nao perguntou nenhum campo -> mostra o campo 0
+        if campo_idx is None:
             conversa.estado_pendente = {
                 "tipo": "criando_treino",
-                "fase": "coletando",
-                "etapa_idx": etapa_idx,
+                "fase": "confirmando_perfil",
                 "dados": dados,
+                "perfil_resumo": perfil_resumo,
+                "modalidade_canon": estado.get("modalidade_canon"),
+                "conf_campo_idx": 0,
                 "criado_em": estado.get("criado_em"),
             }
-            return "Beleza, vamos refazer do zero então.\n\n" + ETAPAS_TREINO[0][1]
+            db.add(conversa)
+            db.commit()
+            return "Vamos confirmar seu perfil, um item de cada vez. 👇\n\n" + _conf_pergunta_campo(0, perfil_resumo)
 
+        # Processa a resposta do campo atual
+        c = _CONF_CAMPOS[campo_idx]
+        manter = _normalizar_confirmacao(message_text) == "sim" or txt.lower() in {"manter", "mantem", "manté", "="}
+
+        if not manter:
+            if c["opcoes"] is not None:
+                # Campo com opcoes numeradas: so aceita numero valido
+                novo = c["opcoes"].get(txt)
+                if novo is None:
+                    return "Opção inválida. " + _conf_pergunta_campo(campo_idx, perfil_resumo)
+                perfil_resumo[c["campo"]] = novo
+            else:
+                # Campo livre (dias_semana, tempo_sessao, lesoes)
+                if c["campo"] == "lesoes" and txt.lower() in {"nenhuma", "nenhum", "nao", "não"}:
+                    perfil_resumo[c["campo"]] = "nenhuma"
+                elif txt:
+                    perfil_resumo[c["campo"]] = txt
+        # se manter: nao altera perfil_resumo[campo]
+
+        # Avanca pro proximo campo
+        prox = campo_idx + 1
+        if prox < len(_CONF_CAMPOS):
+            conversa.estado_pendente = {
+                "tipo": "criando_treino",
+                "fase": "confirmando_perfil",
+                "dados": dados,
+                "perfil_resumo": perfil_resumo,
+                "modalidade_canon": estado.get("modalidade_canon"),
+                "conf_campo_idx": prox,
+                "criado_em": estado.get("criado_em"),
+            }
+            db.add(conversa)
+            db.commit()
+            return _conf_pergunta_campo(prox, perfil_resumo)
+
+        # Todos os 7 campos confirmados: aplica nos dados, salva o perfil da modalidade, segue
+        dados["local"]        = perfil_resumo.get("local")
+        dados["objetivo"]     = perfil_resumo.get("objetivo")
+        dados["dias_semana"]  = perfil_resumo.get("dias_semana")
+        dados["tempo_sessao"] = perfil_resumo.get("tempo_sessao")
+        dados["nivel"]        = perfil_resumo.get("nivel")
+        dados["lesoes"]       = perfil_resumo.get("lesoes") or "nenhuma"
+        dados["horario"]      = perfil_resumo.get("horario")
+
+        _modalidade_canon = estado.get("modalidade_canon")
+        if _modalidade_canon:
+            try:
+                perfil_modalidade_service.criar_ou_atualizar(
+                    user.id, _modalidade_canon, perfil_resumo, db
+                )
+            except Exception as _e_pm:
+                logger.error("salvar_perfil_modalidade_erro", extra={"error": str(_e_pm)})
+
+        etapa_idx = next(
+            (i for i, (chave, _) in enumerate(ETAPAS_TREINO) if dados[chave] is None),
+            len(ETAPAS_TREINO),
+        )
         conversa.estado_pendente = {
             "tipo": "criando_treino",
             "fase": "coletando",
@@ -3054,8 +3157,10 @@ async def _handle_coleta_treino(
             "dados": dados,
             "criado_em": estado.get("criado_em"),
         }
+        db.add(conversa)
+        db.commit()
         _, pergunta = ETAPAS_TREINO[etapa_idx]
-        return pergunta
+        return "Perfil confirmado! 💪\n\n" + pergunta
 
     # --- Fase normal de coleta ---
     etapa_idx = int(estado.get("etapa_idx", 0))
@@ -3087,8 +3192,8 @@ async def _handle_coleta_treino(
         }
         _nivel_d   = {"iniciante": "Iniciante", "intermediario": "Intermediário", "avancado": "Avançado"}
         _horario_d = {
-            "manha": "Manhã", "manha_pico": "Manhã pico (6h–9h)", "tarde": "Tarde",
-            "noite_pico": "Noite pico (17h–20h)", "noite": "Noite",
+            "manha": "Manhã", "manha_pico": "Manhã pico (6h–8h)", "tarde": "Tarde",
+            "noite_pico": "Noite pico (18h–20h)", "noite": "Noite",
         }
 
         def _d(val, mapa):
@@ -3101,26 +3206,17 @@ async def _handle_coleta_treino(
             "perfil_resumo": perfil_resumo,
             "modalidade_canon": modalidade_canon,
             "perfil_modalidade_existia": perfil_existia,
+            "conf_campo_idx": 0,
             "criado_em": estado.get("criado_em"),
         }
         db.add(conversa)
         db.commit()
         _intro = (
-            "Boa escolha! 💪 Você já tem um perfil pra essa modalidade. Confirma:\n\n"
+            "Boa escolha! 💪 Você já tem um perfil dessa modalidade. Vamos confirmar item por item:\n\n"
             if perfil_existia else
-            "Boa escolha! 💪 Como é seu primeiro treino dessa modalidade, comecei com seus dados gerais. Confirma:\n\n"
+            "Boa escolha! 💪 Como é seu primeiro treino dessa modalidade, parti dos seus dados gerais. Vamos confirmar item por item:\n\n"
         )
-        return (
-            _intro
-            + f"📍 *Local:* {_d(perfil_resumo.get('local'), _local_d)}\n"
-            + f"🎯 *Objetivo:* {_d(perfil_resumo.get('objetivo'), _obj_d)}\n"
-            + f"📅 *Dias:* {perfil_resumo.get('dias_semana') or '—'}\n"
-            + f"⏱️ *Tempo:* {perfil_resumo.get('tempo_sessao') or '—'}\n"
-            + f"📊 *Nível:* {_d(perfil_resumo.get('nivel'), _nivel_d)}\n"
-            + f"🩹 *Lesões:* {perfil_resumo.get('lesoes') or 'nenhuma'}\n"
-            + f"🕐 *Horário:* {_d(perfil_resumo.get('horario'), _horario_d)}\n\n"
-            + "Quer manter tudo isso? Responda *sim* pra manter, ou me diga o que quer mudar."
-        )
+        return _intro + _conf_pergunta_campo(0, perfil_resumo)
 
     etapa_idx += 1
 
@@ -3472,9 +3568,9 @@ async def _gerar_treino_de_dados(
     }
     horario_map = {
         "1": "Manhã (antes das 9h, fora do pico)",
-        "2": "Manhã em horário de pico (6h–9h)",
+        "2": "Manhã em horário de pico (6h–8h)",
         "3": "Tarde",
-        "4": "Noite em horário de pico (17h–20h)",
+        "4": "Noite em horário de pico (18h–20h)",
         "5": "Noite (após 20h)",
     }
 
@@ -3487,7 +3583,7 @@ async def _gerar_treino_de_dados(
     }
     nivel_canon   = {"1": "iniciante", "2": "intermediario", "3": "avancado"}
     horario_canon = {
-        "1": "manha", "2": "manha_pico", "3": "tarde",
+        "1": "manha_pico", "2": "manha", "3": "tarde",
         "4": "noite_pico", "5": "noite",
     }
 
