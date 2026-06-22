@@ -5790,10 +5790,27 @@ async def process_message(
                 logger.error("card_generation_error", extra={"user_id": user.id, "error": str(e)})
                 return "Ops, tive um problema ao gerar seu card. Tente novamente em instantes."
         if op == "1":
+            from app.services import card_service
+            from app.services import whatsapp_service as ws
+            primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
+            stats = card_service.get_last_session_stats(user.id, db)
+            volume = card_service.get_volume_ultima_sessao(user.id, db)
             conversa.estado_pendente = None
             db.add(conversa)
             db.commit()
-            return "🏁 O card de fim de treino está chegando em breve! Por ora, experimenta a *opção 2* (gráfico de evolução)."
+            if stats.get("exercicios", 0) == 0:
+                return (
+                    "Você ainda não registrou treinos pra gerar o card. 💪\n\n"
+                    "Manda *treinar* e registra seus exercícios primeiro!"
+                )
+            try:
+                png_bytes = card_service.gerar_card_treino(user.nome, stats, volume)
+                if phone:
+                    await ws.send_image(phone, png_bytes)
+                return f"Aqui está o resumo do seu treino, {primeiro_nome}! 🏁"
+            except Exception as e:
+                logger.error("card_generation_error", extra={"user_id": user.id, "error": str(e)})
+                return "Ops, tive um problema ao gerar seu card. Tente novamente em instantes."
         return "Escolha *1* (card de fim de treino), *2* (gráfico de evolução) ou *V* pra voltar."
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_lembrete_remedio":

@@ -189,3 +189,76 @@ def gerar_card_evolucao(
     plt.close(fig)
     buf.seek(0)
     return buf.read()
+
+
+def get_volume_ultima_sessao(user_id: int, db: Session) -> float:
+    """Volume total da ultima sessao = soma de (carga_kg * series * repeticoes)."""
+    ultima_sessao = (
+        db.query(func.max(RegistroExercicio.sessao_data))
+        .filter(RegistroExercicio.user_id == user_id)
+        .scalar()
+    )
+    if not ultima_sessao:
+        return 0.0
+    registros = (
+        db.query(RegistroExercicio)
+        .filter(
+            RegistroExercicio.user_id == user_id,
+            RegistroExercicio.sessao_data == ultima_sessao,
+        )
+        .all()
+    )
+    total = 0.0
+    for r in registros:
+        total += float(r.carga_kg or 0) * int(r.series or 0) * int(r.repeticoes or 0)
+    return total
+
+
+def gerar_card_treino(user_nome: str | None, stats: dict, volume_kg: float) -> bytes:
+    """Card simples de fim de treino: duracao, exercicios, volume total, sessoes.
+
+    stats: {'duracao': str, 'exercicios': int, 'sessoes': int}
+    volume_kg: volume total levantado na sessao (kg)
+    """
+    fig = plt.figure(figsize=(10, 5.5), facecolor=_BG, dpi=100)
+    ax = fig.add_subplot(111)
+    ax.set_facecolor(_BG)
+    ax.axis("off")
+
+    primeiro = (user_nome or "").split()[0] if user_nome else "Atleta"
+
+    # Header
+    ax.text(0.06, 0.88, "EVOLUTION FIT AI", fontsize=17, fontweight="bold",
+            color=_ACCENT, va="center", ha="left", transform=ax.transAxes)
+    ax.text(0.06, 0.78, f"Resumo do Treino — {primeiro}", fontsize=11, color=_GRAY,
+            va="center", ha="left", transform=ax.transAxes)
+    ax.text(0.94, 0.88, date.today().strftime("%d/%m/%Y"), fontsize=10, color=_GRAY,
+            va="center", ha="right", transform=ax.transAxes)
+
+    # Volume em destaque (centro)
+    if volume_kg >= 1000:
+        vol_txt = f"{volume_kg/1000:.1f}t"
+    else:
+        vol_txt = f"{volume_kg:.0f} kg"
+    ax.text(0.5, 0.55, vol_txt, fontsize=52, fontweight="bold", color=_ACCENT,
+            va="center", ha="center", transform=ax.transAxes)
+    ax.text(0.5, 0.42, "VOLUME TOTAL LEVANTADO", fontsize=10, color=_GRAY,
+            va="center", ha="center", transform=ax.transAxes, fontweight="bold")
+
+    # Stats na base (3 colunas)
+    base = [
+        (str(stats.get("duracao", "—")), "DURAÇÃO"),
+        (str(stats.get("exercicios", 0)), "EXERCÍCIOS"),
+        (str(stats.get("sessoes", 0)), "SESSÕES TOTAIS"),
+    ]
+    for (val, label), x in zip(base, [0.22, 0.50, 0.78]):
+        ax.text(x, 0.20, val, fontsize=22, fontweight="bold", color=_WHITE,
+                va="center", ha="center", transform=ax.transAxes)
+        ax.text(x, 0.10, label, fontsize=8, color=_GRAY, fontweight="bold",
+                va="center", ha="center", transform=ax.transAxes)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100, facecolor=_BG, edgecolor="none", bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
