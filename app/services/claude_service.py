@@ -3968,7 +3968,15 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
             "Responda *A*, *B*, *C*, *D* ou *V*."
         )
     if item == 15:
-        return _MENU_EM_CONSTRUCAO
+        conversa.estado_pendente = {"tipo": "submenu_cards", "criado_em": datetime.utcnow().isoformat()}
+        db.add(conversa)
+        db.commit()
+        return (
+            "🎴 *Qual card você quer gerar?*\n\n"
+            "*1.* 🏁 Card de fim de treino\n"
+            "*2.* 📈 Gráfico de evolução\n\n"
+            "*V.* Voltar ao menu"
+        )
     if item == 14:
         conversa.estado_pendente = {"tipo": "submenu_lembrete_remedio", "criado_em": datetime.utcnow().isoformat()}
         db.add(conversa)
@@ -5747,6 +5755,46 @@ async def process_message(
         db.add(conversa)
         db.commit()
         return f"✅ *{label}* atualizado!\n\n" + _texto_editar_perfil(perfil_service.get_or_create_perfil(user.id, db))
+
+    if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_cards":
+        op = stripped_lower
+        if op == "cancelar":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "Beleza! Manda */menu* quando quiser. 😊"
+        if op == "v":
+            conversa.estado_pendente = {"tipo": "aguardando_menu"}
+            db.add(conversa)
+            db.commit()
+            return _build_menu_text(user.id, db)
+        if op == "2":
+            # Card de evolução (reusa o que o item 10 já faz)
+            from app.services import card_service
+            from app.services import whatsapp_service as ws
+            primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
+            evolucao = exercicio_service.get_evolucao_sessao(user.id, db)
+            stats = card_service.get_last_session_stats(user.id, db)
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            try:
+                png_bytes = card_service.gerar_card_evolucao(user.nome, evolucao, stats)
+                if phone:
+                    await ws.send_image(phone, png_bytes)
+                return (
+                    f"Aqui está seu *gráfico de evolução*, {primeiro_nome}! 📈\n\n"
+                    f"Sessões registradas: *{stats['sessoes']}*"
+                )
+            except Exception as e:
+                logger.error("card_generation_error", extra={"user_id": user.id, "error": str(e)})
+                return "Ops, tive um problema ao gerar seu card. Tente novamente em instantes."
+        if op == "1":
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return "🏁 O card de fim de treino está chegando em breve! Por ora, experimenta a *opção 2* (gráfico de evolução)."
+        return "Escolha *1* (card de fim de treino), *2* (gráfico de evolução) ou *V* pra voltar."
 
     if conversa.estado_pendente and conversa.estado_pendente.get("tipo") == "submenu_lembrete_remedio":
         op = stripped_lower
