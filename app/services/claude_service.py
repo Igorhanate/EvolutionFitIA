@@ -229,7 +229,13 @@ ETAPAS_TREINO: list[tuple[str, str]] = [
     (
         "dias_semana",
         "*Quantos dias por semana* você vai treinar?\n\n"
-        "_(ex: 3, 4, 5)_"
+        "1️⃣ 1 dia\n"
+        "2️⃣ 2 dias\n"
+        "3️⃣ 3 dias\n"
+        "4️⃣ 4 dias\n"
+        "5️⃣ 5 dias\n"
+        "6️⃣ 6 dias\n\n"
+        "Responda com o número da opção."
     ),
     (
         "tempo_sessao",
@@ -283,7 +289,9 @@ _CONF_CAMPOS = [
     },
     {
         "campo": "dias_semana", "rotulo": "Dias por semana", "emoji": "📅",
-        "display": {}, "opcoes": None, "texto_opcoes": "_(ex: 3, 4, 5)_",
+        "display": {"1": "1 dia", "2": "2 dias", "3": "3 dias", "4": "4 dias", "5": "5 dias", "6": "6 dias"},
+        "opcoes": {"1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6"},
+        "texto_opcoes": "1️⃣ 1 dia\n2️⃣ 2 dias\n3️⃣ 3 dias\n4️⃣ 4 dias\n5️⃣ 5 dias\n6️⃣ 6 dias",
     },
     {
         "campo": "tempo_sessao", "rotulo": "Tempo por sessão", "emoji": "⏱️",
