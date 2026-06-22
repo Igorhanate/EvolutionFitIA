@@ -3031,7 +3031,27 @@ async def _handle_coleta_treino(
             db.add(conversa)
             db.commit()
             return "Beleza, mantive seu plano atual. 💪"
-        return "Responda *1* (SIM, substituir) ou *2* (NÃO, manter o atual)."
+        if txt == "3":
+            # Protecao 2: reabre o campo a campo pra editar o perfil; ao terminar, REGENERA o treino
+            perfil_resumo = {
+                "local": dados.get("local"), "objetivo": dados.get("objetivo"),
+                "dias_semana": dados.get("dias_semana"), "tempo_sessao": dados.get("tempo_sessao"),
+                "nivel": dados.get("nivel"), "lesoes": dados.get("lesoes"), "horario": dados.get("horario"),
+            }
+            conversa.estado_pendente = {
+                "tipo": "criando_treino",
+                "fase": "confirmando_perfil",
+                "dados": dados,
+                "perfil_resumo": perfil_resumo,
+                "modalidade_canon": estado.get("modalidade_canon"),
+                "conf_campo_idx": 0,
+                "regenerar_apos_perfil": True,
+                "criado_em": estado.get("criado_em"),
+            }
+            db.add(conversa)
+            db.commit()
+            return "Beleza, vamos ajustar seu perfil dessa modalidade. 👇\n\n" + _conf_pergunta_campo(0, perfil_resumo)
+        return "Responda *1* (substituir), *2* (manter) ou *3* (editar o perfil)."
 
     # --- Fase de nomeação do treino (fase final — grava com nome) ---
     if fase == "nomeando_treino":
@@ -3166,6 +3186,14 @@ async def _handle_coleta_treino(
                 )
             except Exception as _e_pm:
                 logger.error("salvar_perfil_modalidade_erro", extra={"error": str(_e_pm)})
+
+        # Protecao 2: se veio da opcao 3 (editar perfil no gate), REGENERA o treino direto
+        # com os dados novos (o gate de substituicao aparece de novo dentro do gerar).
+        if estado.get("regenerar_apos_perfil"):
+            conversa.estado_pendente = None
+            db.add(conversa)
+            db.commit()
+            return await _gerar_treino_de_dados(dados, user, conversa, db)
 
         etapa_idx = next(
             (i for i, (chave, _) in enumerate(ETAPAS_TREINO) if dados[chave] is None),
@@ -3654,6 +3682,7 @@ async def _gerar_treino_de_dados(
                 "tipo": "criando_treino",
                 "fase": "confirmando_substituicao",
                 "dados": dados,
+                "modalidade_canon": MODALIDADE_CANON.get(dados.get("tipo_treino") or "", dados.get("tipo_treino") or ""),
                 "criado_em": datetime.utcnow().isoformat(),
             }
             db.add(conversa)
@@ -3662,7 +3691,8 @@ async def _gerar_treino_de_dados(
                 f"Você já tem um plano de *{nome_mod}*. Só dá pra ter *1 plano por modalidade* — todos os treinos dessa modalidade ficam juntos num plano só.{aviso_90}\n\n"
                 "Quer criar um novo? Ele vai *substituir* o atual.\n\n"
                 "1️⃣ SIM, substituir\n"
-                "2️⃣ NÃO, manter o atual"
+                "2️⃣ NÃO, manter o atual\n"
+                "3️⃣ Editar o perfil dessa modalidade"
             )
 
     nome_str = f" para {primeiro_nome}" if primeiro_nome else ""
