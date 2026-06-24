@@ -3,6 +3,8 @@ import logging
 import os
 from datetime import date, datetime
 
+import httpx
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.gridspec as gridspec
@@ -262,3 +264,63 @@ def gerar_card_treino(user_nome: str | None, stats: dict, volume_kg: float) -> b
     plt.close(fig)
     buf.seek(0)
     return buf.read()
+
+
+# ── Card de fim de treino "Clássico" (gerado pela rota /api/card do site) ──
+
+_CARD_SITE_URL = os.getenv("CARD_SITE_URL", "https://evolutionfit-site.vercel.app")
+
+
+def _fmt_kg_br(volume_kg: float) -> str:
+    """3250.0 -> '3.250 kg' (separador de milhar BR)."""
+    inteiro = int(round(volume_kg or 0))
+    s = f"{inteiro:,}".replace(",", ".")
+    return f"{s} kg"
+
+
+def get_reps_nome_ultima_sessao(user_id: int, db: Session) -> tuple[int, str]:
+    """Soma de repetições (series*reps) e nome do treino da última sessão."""
+    ultima_sessao = (
+        db.query(func.max(RegistroExercicio.sessao_data))
+        .filter(RegistroExercicio.user_id == user_id)
+        .scalar()
+    )
+    if not ultima_sessao:
+        return 0, ""
+    registros = (
+        db.query(RegistroExercicio)
+        .filter(
+            RegistroExercicio.user_id == user_id,
+            RegistroExercicio.sessao_data == ultima_sessao,
+        )
+        .all()
+    )
+    total_reps = 0
+    nome = ""
+    for r in registros:
+        total_reps += int(r.series or 0) * int(r.repeticoes or 0)
+        if not nome and r.treino_nome:
+            nome = r.treino_nome
+    return total_reps, nome
+
+
+async def gerar_card_treino_classico(
+    user_nome: str | None,
+    stats: dict,
+    volume_kg: float,
+    reps_total: int,
+    treino_nome: str,
+) -> bytes:
+    """Card de fim de treino no estilo Clássico (rota /api/card do site, PNG transparente)."""
+    params = {
+        "modalidade": "musculacao",
+        "tempo": str(stats.get("duracao", "")),
+        "kgLevantados": _fmt_kg_br(volume_kg),
+        "repeticoes": str(reps_total),
+    }
+    if treino_nome:
+        params["nomeTreino"] = treino_nome
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(f"{_CARD_SITE_URL}/api/card", params=params)
+        r.raise_for_status()
+        return r.content

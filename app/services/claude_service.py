@@ -5795,6 +5795,7 @@ async def process_message(
             primeiro_nome = (user.nome or "").split()[0] if user.nome else "você"
             stats = card_service.get_last_session_stats(user.id, db)
             volume = card_service.get_volume_ultima_sessao(user.id, db)
+            reps_total, treino_nome = card_service.get_reps_nome_ultima_sessao(user.id, db)
             conversa.estado_pendente = None
             db.add(conversa)
             db.commit()
@@ -5804,7 +5805,13 @@ async def process_message(
                     "Manda *treinar* e registra seus exercícios primeiro!"
                 )
             try:
-                png_bytes = card_service.gerar_card_treino(user.nome, stats, volume)
+                try:
+                    png_bytes = await card_service.gerar_card_treino_classico(
+                        user.nome, stats, volume, reps_total, treino_nome
+                    )
+                except Exception as e_site:
+                    logger.warning("card_classico_fallback", extra={"user_id": user.id, "error": str(e_site)})
+                    png_bytes = card_service.gerar_card_treino(user.nome, stats, volume)
                 if phone:
                     await ws.send_image(phone, png_bytes)
                 return f"Aqui está o resumo do seu treino, {primeiro_nome}! 🏁"
