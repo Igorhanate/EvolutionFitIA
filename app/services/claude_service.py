@@ -4068,7 +4068,13 @@ async def _handle_menu_item(item: int, user: Usuario, phone: str, db: Session, c
         evolucao = exercicio_service.get_evolucao_sessao(user.id, db)
         stats = card_service.get_last_session_stats(user.id, db)
         try:
-            png_bytes = card_service.gerar_card_evolucao(user.nome, evolucao, stats)
+            try:
+                rm_max = card_service.get_rm_max_ultima_sessao(user.id, db)
+                _, treino_nome = card_service.get_reps_nome_ultima_sessao(user.id, db)
+                png_bytes = await card_service.gerar_card_evolucao_classico(evolucao, rm_max, treino_nome)
+            except Exception as e_site:
+                logger.warning("card_evolucao_fallback", extra={"user_id": user.id, "error": str(e_site)})
+                png_bytes = card_service.gerar_card_evolucao(user.nome, evolucao, stats)
             if phone:
                 await ws.send_image(phone, png_bytes)
             return (
@@ -5779,7 +5785,13 @@ async def process_message(
             db.add(conversa)
             db.commit()
             try:
-                png_bytes = card_service.gerar_card_evolucao(user.nome, evolucao, stats)
+                try:
+                    rm_max = card_service.get_rm_max_ultima_sessao(user.id, db)
+                    _, treino_nome = card_service.get_reps_nome_ultima_sessao(user.id, db)
+                    png_bytes = await card_service.gerar_card_evolucao_classico(evolucao, rm_max, treino_nome)
+                except Exception as e_site:
+                    logger.warning("card_evolucao_fallback", extra={"user_id": user.id, "error": str(e_site)})
+                    png_bytes = card_service.gerar_card_evolucao(user.nome, evolucao, stats)
                 if phone:
                     await ws.send_image(phone, png_bytes)
                 return (

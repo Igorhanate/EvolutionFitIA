@@ -324,3 +324,54 @@ async def gerar_card_treino_classico(
         r = await client.get(f"{_CARD_SITE_URL}/api/card", params=params)
         r.raise_for_status()
         return r.content
+
+
+def get_rm_max_ultima_sessao(user_id: int, db: Session) -> float:
+    """Maior 1RM estimado da última sessão (0.0 se não houver)."""
+    ultima_sessao = (
+        db.query(func.max(RegistroExercicio.sessao_data))
+        .filter(RegistroExercicio.user_id == user_id)
+        .scalar()
+    )
+    if not ultima_sessao:
+        return 0.0
+    rm = (
+        db.query(func.max(RegistroExercicio.rm_estimado))
+        .filter(
+            RegistroExercicio.user_id == user_id,
+            RegistroExercicio.sessao_data == ultima_sessao,
+        )
+        .scalar()
+    )
+    return float(rm or 0)
+
+
+async def gerar_card_evolucao_classico(
+    evolucao: list[dict],
+    rm_max_kg: float,
+    treino_nome: str,
+) -> bytes:
+    """Card de evolução no estilo do studio (template=evolucao da rota /api/card).
+
+    evolucao: lista de {'data','soma_rm'} — usa os últimos 4 pontos (3 anteriores + atual).
+    Lança ValueError se houver menos de 2 pontos (caller decide o fallback).
+    """
+    pontos = [float(e["soma_rm"]) for e in evolucao][-4:]
+    if len(pontos) < 2:
+        raise ValueError("evolucao insuficiente para o grafico (min 2 sessoes)")
+    anterior, atual = pontos[-2], pontos[-1]
+    pct = ((atual - anterior) / anterior * 100) if anterior else 0.0
+    pct_txt = f"{pct:.1f}".replace(".", ",")
+    params = {
+        "template": "evolucao",
+        "pontos": ",".join(f"{p:.0f}" for p in pontos),
+        "percentEvolucao": pct_txt,
+    }
+    if rm_max_kg > 0:
+        params["rm"] = f"{rm_max_kg:.0f} kg"
+    if treino_nome:
+        params["nomeTreino"] = treino_nome
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(f"{_CARD_SITE_URL}/api/card", params=params)
+        r.raise_for_status()
+        return r.content
